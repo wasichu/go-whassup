@@ -40,7 +40,6 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 	if err != nil {
 		return err
 	}
-
 	p, err := paths.Resolve()
 	if err != nil {
 		return err
@@ -53,60 +52,120 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 		// when stored messages can't be unlocked.
 		return resetMessages(p, stdio.In, stdio.Out)
 	}
-	cfg, err := config.Load(p.ConfigFile)
+
+	var cleanup cleanups
+	defer func() { err = errors.Join(err, cleanup.run()) }()
+	e, err := openEnv(ctx, inv, p, stdio, &cleanup)
 	if err != nil {
 		return err
+	}
+	if strings.HasPrefix(inv.cmd, "db ") {
+		return runDB(ctx, e)
+	}
+	return runOnline(ctx, e)
+}
+
+// cleanups runs registered cleanups in reverse order (like defers that
+// outlive the function registering them).
+type cleanups []func() error
+
+func (c *cleanups) add(f func() error) { *c = append(*c, f) }
+
+func (c cleanups) run() error {
+	var errs []error
+	for i := len(c) - 1; i >= 0; i-- {
+		errs = append(errs, c[i]())
+	}
+	return errors.Join(errs...)
+}
+
+// env is what every command needs once the store is open.
+type env struct {
+	inv     invocation
+	p       paths.Paths
+	cfg     config.Config
+	log     *slog.Logger
+	waLog   *slog.Logger // capped at info while encrypted
+	st      *store.Store
+	enc     encryption
+	cache   media.Cache
+	console headless.Console
+}
+
+// openEnv loads config, opens the log and the store, sets up encryption
+// (starting any background re-seal) and the media cache.
+func openEnv(ctx context.Context, inv invocation, p paths.Paths, stdio IO, cleanup *cleanups) (env, error) {
+	e := env{inv: inv, p: p}
+	var err error
+	if e.cfg, err = config.Load(p.ConfigFile); err != nil {
+		return e, err
 	}
 	log, logCloser, err := logging.Open(p.LogFile, inv.debug)
 	if err != nil {
-		return err
+		return e, err
 	}
-	defer closeInto(&err, logCloser)
+	cleanup.add(logCloser.Close)
 	slog.SetDefault(log)
-	log.Info("starting", "cmd", inv.cmd, "data_dir", p.DataDir, "config", fmt.Sprintf("%+v", cfg))
+	log.Info("starting", "cmd", inv.cmd, "data_dir", p.DataDir, "config", fmt.Sprintf("%+v", e.cfg))
+	e.log, e.waLog = log, log
 
-	st, err := store.Open(ctx, p.MessagesDB, nil)
-	if err != nil {
-		return err
+	if e.st, err = store.Open(ctx, p.MessagesDB, nil); err != nil {
+		return e, err
 	}
-	defer closeInto(&err, st)
+	cleanup.add(e.st.Close)
 
 	transitions := !strings.HasPrefix(inv.cmd, "db ")
-	enc, err := setUpEncryption(ctx, cfg, p, st, realKeySources(cfg, p, stdio), transitions, log)
-	if err != nil {
-		return err
+	if e.enc, err = setUpEncryption(ctx, e.cfg, p, e.st, realKeySources(e.cfg, p, stdio), transitions, log); err != nil {
+		return e, err
 	}
 	// Re-sealing runs while the app does; on exit it's cancelled (and
 	// resumes next start) before the store closes.
 	rctx, stopReseal := context.WithCancel(ctx)
-	defer startReseal(rctx, st, enc, log)()
-	defer stopReseal()
+	wait := startReseal(rctx, e.st, e.enc, log)
+	cleanup.add(func() error { stopReseal(); wait(); return nil })
 
-	waLog := log
-	cache := media.Cache{Dir: p.MediaDir}
-	if enc.on {
-		// No message text in the log, and downloads only in a temporary
-		// directory removed on exit (cached files would be plaintext).
-		waLog = logging.AtLeast(log, slog.LevelInfo)
-		tmp, err := os.MkdirTemp("", "go-whassup-media-")
-		if err != nil {
-			return fmt.Errorf("creating temporary media dir: %w", err)
-		}
-		defer func() { err = errors.Join(err, os.RemoveAll(tmp)) }()
-		cache = media.Cache{Dir: tmp}
+	if e.cache, err = mediaCache(p, e.enc, cleanup); err != nil {
+		return e, err
 	}
-	console := headless.Console{In: stdio.In, Out: stdio.Out, Log: log, NoText: enc.on}
+	if e.enc.on {
+		// No message text (or whatsmeow chatter) in the log.
+		e.waLog = logging.AtLeast(log, slog.LevelInfo)
+	}
+	e.console = headless.Console{In: stdio.In, Out: stdio.Out, Log: log, NoText: e.enc.on}
+	return e, nil
+}
 
-	switch inv.cmd {
+// mediaCache is the attachment cache: the data dir normally, or a
+// temporary directory removed on exit while encrypted (cached files would
+// be plaintext).
+func mediaCache(p paths.Paths, enc encryption, cleanup *cleanups) (media.Cache, error) {
+	if !enc.on {
+		return media.Cache{Dir: p.MediaDir}, nil
+	}
+	tmp, err := os.MkdirTemp("", "go-whassup-media-")
+	if err != nil {
+		return media.Cache{}, fmt.Errorf("creating temporary media dir: %w", err)
+	}
+	cleanup.add(func() error { return os.RemoveAll(tmp) })
+	return media.Cache{Dir: tmp}, nil
+}
+
+// runDB runs the offline `db` commands.
+func runDB(ctx context.Context, e env) error {
+	switch e.inv.cmd {
 	case "db chats":
-		return console.Chats(ctx, st)
+		return e.console.Chats(ctx, e.st)
 	case "db messages":
-		return console.Messages(ctx, st, inv.args[0], inv.limit)
-	case "db search":
-		return console.Search(ctx, st, strings.Join(inv.args, " "), inv.limit)
+		return e.console.Messages(ctx, e.st, e.inv.args[0], e.inv.limit)
+	default: // "db search"; parseArgs rejects anything else
+		return e.console.Search(ctx, e.st, strings.Join(e.inv.args, " "), e.inv.limit)
 	}
+}
 
-	client, err := wa.Open(ctx, p.SessionDB, waLog, pairingOptions(cfg))
+// runOnline opens the WhatsApp client, records everything it receives, and
+// runs the TUI, login or listen.
+func runOnline(ctx context.Context, e env) (err error) {
+	client, err := wa.Open(ctx, e.p.SessionDB, e.waLog, pairingOptions(e.cfg))
 	if err != nil {
 		return err
 	}
@@ -116,41 +175,40 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 	// UI reloads from the store when an event arrives, which only works if
 	// the recorder (an earlier handler) has already written it. It is never
 	// lossy.
-	rec := &store.Recorder{
-		Store:     st,
-		Retention: retention(cfg),
-		Log:       log,
-		Media:     cache,
-	}
+	rec := &store.Recorder{Store: e.st, Retention: retention(e.cfg), Log: e.log, Media: e.cache}
 	rec.Prune(ctx)
 	rec.Attach(client)
 
-	switch inv.cmd {
+	switch e.inv.cmd {
 	case "tui":
-		deps := tuiDeps(cfg, p, client, st, rec, cache, log)
-		deps.Notice = encryptionNotice(enc)
+		deps := tuiDeps(e.cfg, e.p, client, e.st, rec, e.cache, e.log)
+		deps.Notice = encryptionNotice(e.enc)
 		return ui.Run(ctx, deps)
 	case "login":
-		var phone string
-		if len(inv.args) > 0 {
-			phone = inv.args[0]
-		}
-		if inv.relink {
-			if err := console.Relink(ctx, client); err != nil {
-				return err
-			}
-		}
-		sub, err := console.Login(ctx, client, phone)
-		if errors.Is(err, wa.ErrAlreadyPaired) {
-			return nil
-		}
-		if err != nil {
+		return runLogin(ctx, e, client)
+	default: // "listen"; parseArgs rejects anything else
+		return e.console.Listen(ctx, client)
+	}
+}
+
+func runLogin(ctx context.Context, e env, client *wa.WhatsApp) error {
+	var phone string
+	if len(e.inv.args) > 0 {
+		phone = e.inv.args[0]
+	}
+	if e.inv.relink {
+		if err := e.console.Relink(ctx, client); err != nil {
 			return err
 		}
-		return console.Follow(ctx, sub)
-	default: // "listen"; parseArgs rejects anything else
-		return console.Listen(ctx, client)
 	}
+	sub, err := e.console.Login(ctx, client, phone)
+	if errors.Is(err, wa.ErrAlreadyPaired) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return e.console.Follow(ctx, sub)
 }
 
 // encryptionNotice tells the user a background re-seal is running.
