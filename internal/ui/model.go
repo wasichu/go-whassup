@@ -94,7 +94,10 @@ func New(ctx context.Context, deps Deps, sub *wa.Subscription) Model {
 	h.Styles.ShortKey, h.Styles.FullKey = statusStyle.Bold(true), senderStyle
 	h.Styles.ShortDesc, h.Styles.ShortSeparator = statusStyle, statusStyle
 	m := Model{ctx: ctx, deps: deps, sub: sub, conv: newConversation(), login: newLogin(), conn: connConnecting, help: h, ownJID: deps.Client.OwnJID(), termFocused: true, downloading: map[string]bool{}}
-	if deps.FocusHint != "" {
+	switch {
+	case deps.Notice != "":
+		m.notice = deps.Notice
+	case deps.FocusHint != "":
 		m.notice = deps.FocusHint
 	}
 	if !deps.Client.IsPaired() {

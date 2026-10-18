@@ -56,6 +56,10 @@ type Deps struct {
 	Media    MediaCache
 	OpenFile func(path string) error
 
+	// Notice, if set, is shown in the status line at startup (e.g. that
+	// stored messages are being encrypted in the background).
+	Notice string
+
 	// FocusHint, if set, explains why focus tracking won't work (tmux);
 	// shown once in the status line.
 	FocusHint string

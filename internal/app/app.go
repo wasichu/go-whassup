@@ -48,6 +48,11 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 	if err := p.Ensure(); err != nil {
 		return err
 	}
+	if inv.cmd == "db reset" {
+		// Before opening (and unlocking) the store: this is the way out
+		// when stored messages can't be unlocked.
+		return resetMessages(p, stdio.In, stdio.Out)
+	}
 	cfg, err := config.Load(p.ConfigFile)
 	if err != nil {
 		return err
@@ -65,7 +70,32 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 		return err
 	}
 	defer closeInto(&err, st)
-	console := headless.Console{In: stdio.In, Out: stdio.Out, Log: log}
+
+	transitions := !strings.HasPrefix(inv.cmd, "db ")
+	enc, err := setUpEncryption(ctx, cfg, p, st, realKeySources(cfg, p, stdio), transitions, log)
+	if err != nil {
+		return err
+	}
+	// Re-sealing runs while the app does; on exit it's cancelled (and
+	// resumes next start) before the store closes.
+	rctx, stopReseal := context.WithCancel(ctx)
+	defer startReseal(rctx, st, enc, log)()
+	defer stopReseal()
+
+	waLog := log
+	cache := media.Cache{Dir: p.MediaDir}
+	if enc.on {
+		// No message text in the log, and downloads only in a temporary
+		// directory removed on exit (cached files would be plaintext).
+		waLog = logging.AtLeast(log, slog.LevelInfo)
+		tmp, err := os.MkdirTemp("", "go-whassup-media-")
+		if err != nil {
+			return fmt.Errorf("creating temporary media dir: %w", err)
+		}
+		defer func() { err = errors.Join(err, os.RemoveAll(tmp)) }()
+		cache = media.Cache{Dir: tmp}
+	}
+	console := headless.Console{In: stdio.In, Out: stdio.Out, Log: log, NoText: enc.on}
 
 	switch inv.cmd {
 	case "db chats":
@@ -76,7 +106,7 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 		return console.Search(ctx, st, strings.Join(inv.args, " "), inv.limit)
 	}
 
-	client, err := wa.Open(ctx, p.SessionDB, log, pairingOptions(cfg))
+	client, err := wa.Open(ctx, p.SessionDB, waLog, pairingOptions(cfg))
 	if err != nil {
 		return err
 	}
@@ -86,7 +116,6 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 	// UI reloads from the store when an event arrives, which only works if
 	// the recorder (an earlier handler) has already written it. It is never
 	// lossy.
-	cache := media.Cache{Dir: p.MediaDir}
 	rec := &store.Recorder{
 		Store:     st,
 		Retention: retention(cfg),
@@ -98,7 +127,9 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 
 	switch inv.cmd {
 	case "tui":
-		return ui.Run(ctx, tuiDeps(cfg, p, client, st, rec, cache, log))
+		deps := tuiDeps(cfg, p, client, st, rec, cache, log)
+		deps.Notice = encryptionNotice(enc)
+		return ui.Run(ctx, deps)
 	case "login":
 		var phone string
 		if len(inv.args) > 0 {
@@ -120,6 +151,14 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 	default: // "listen"; parseArgs rejects anything else
 		return console.Listen(ctx, client)
 	}
+}
+
+// encryptionNotice tells the user a background re-seal is running.
+func encryptionNotice(e encryption) string {
+	if e.finish == nil {
+		return ""
+	}
+	return fmt.Sprintf("Updating encryption of %d stored messages in the background…", e.pending)
 }
 
 // tuiDeps wires the TUI's collaborators. It's a separate function so a test

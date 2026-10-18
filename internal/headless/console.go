@@ -27,6 +27,9 @@ type Console struct {
 	In  io.Reader
 	Out io.Writer
 	Log *slog.Logger
+	// NoText keeps message text out of the log even at debug level (set
+	// while stored messages are encrypted).
+	NoText bool
 	// PairTimeout bounds how long Login waits for the code to be entered.
 	// Zero means the default.
 	PairTimeout time.Duration
@@ -147,13 +150,17 @@ func (c Console) printEvent(evt wa.Event) {
 	switch v := evt.(type) {
 	case wa.Message:
 		c.Log.Info("message", "id", v.ID, "chat", v.Chat, "sender", v.Sender, "from_me", v.FromMe, "group", v.IsGroup)
-		c.Log.Debug("message text", "id", v.ID, "push_name", v.PushName, "text", v.Text)
+		if !c.NoText {
+			c.Log.Debug("message text", "id", v.ID, "push_name", v.PushName, "text", v.Text)
+		}
 		c.printf("%s  %s  %s: %s\n", v.Timestamp.Local().Format("15:04:05"), v.Chat, senderLabel(v), v.Summary())
 	case wa.HistorySync:
 		c.printf("-- history sync: %d chats, %d messages\n", len(v.Chats), len(v.Messages))
 	case wa.MessageEdited:
 		c.Log.Info("message edited", "chat", v.Chat, "id", v.ID)
-		c.Log.Debug("edited text", "id", v.ID, "text", v.Text)
+		if !c.NoText {
+			c.Log.Debug("edited text", "id", v.ID, "text", v.Text)
+		}
 		c.printf("-- %s: a message was edited: %s\n", v.Chat, v.Text)
 	case wa.MessageDeleted:
 		c.Log.Info("message deleted", "chat", v.Chat, "id", v.ID, "for_me", v.ForMe)

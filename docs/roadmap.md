@@ -73,7 +73,12 @@ step lands or the plan changes.
 6. [x] **Message search** (`s`, `wa-tui db search`): local SQLite FTS5, accent-insensitive,
    prefix on the last word, jump-to-message. Unavailable while encryption is on (the
    index is plaintext). *(Live test pending.)*
-7. **Encryption at rest** via the `store.Codec` seam:
+7. [x] **Encryption at rest** (built 2026-10-18; *live test pending*). Follow-ups:
+   - an unlock screen inside the TUI (today the prompt runs before it);
+   - data-key rotation, and rewrapping when `key_source` changes;
+   - optionally removing the keychain entry when turning encryption off.
+
+   Original plan, via the `store.Codec` seam:
    - an `[encryption]` config section (on/off, key source);
    - key sources in order: OS keyring, then a pianobar-style `password_command`, then a
      prompt;

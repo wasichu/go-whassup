@@ -142,6 +142,78 @@ migration (implemented in `internal/store/codec.go`):
   - Unlock screen in the TUI; `listen` and `db` prompt or use `password_command` /
     keyring.
 
+### Encryption as built (2026-10-18)
+
+**Code.**
+- `internal/crypt`: AES-256-GCM with associated data, envelope wrapping, and Argon2id.
+- `internal/keysource`: keyring, command and prompt.
+- `internal/store/keys.go`: the keys table and the re-seal.
+- `internal/app/encryption.go`: the startup sequence.
+
+**What's encrypted.**
+- Message text, **reactions** (they're content: what people thought of a message), and
+  attachment keys.
+- Each value is bound to its message and column, and for reactions to the sender, via
+  GCM associated data, so values can't be swapped between rows.
+- The per-row `codec` columns hold the **key ID** (0 = plaintext), and the algorithm is
+  recorded on the `keys` row.
+
+**What stays readable.**
+- Chat and sender IDs, timestamps, message kinds, push names, contact and group names.
+- `session.db`.
+- WhatsApp's own Signal keys.
+
+**Keys.**
+- A random data key is stored wrapped in `keys`.
+- `keyring`: the key-encryption key is a random 32 bytes in the macOS Keychain (via
+  `/usr/bin/security`, secret on stdin; the Keychain ACL names `security`, so rebuilds
+  don't prompt) or Secret Service (`secret-tool`).
+- `password-command` / `prompt`: Argon2id (3 passes, 64 MiB, 4 threads; parameters stored
+  with the key).
+- `password_command` is refused if the config file or its directory is writable by
+  others.
+
+**Enabling.**
+1. Delete the plaintext media cache.
+2. Store the key; the same transaction empties the search index, so an interrupted
+   enable never leaves a plaintext index.
+3. Switch writes to the key.
+4. Re-seal in batches of 500 in the background, checkpointing the WAL after every batch.
+5. `VACUUM`.
+
+It resumes on the next start if interrupted. A value that can't be opened stops
+re-sealing (`ResealError`) rather than retrying forever.
+
+**Disabling.**
+1. Write plaintext.
+2. Re-seal back.
+3. Rebuild the search index.
+4. Delete the key row and `VACUUM`.
+
+The keychain entry is left in place; remove it in Keychain Access if you like.
+
+**While encrypted (or still decrypting).**
+- Message text is never logged, even with `-debug`, and whatsmeow's logger is capped at
+  info.
+- Downloads go to a temporary directory removed on exit. A viewer that copied a file may
+  keep its own copy.
+
+**Unlock failure.**
+- `wa-tui` refuses to start and explains why: a wrong passphrase or keychain secret, or a
+  missing keychain entry.
+- The way out is `wa-tui db reset` (type `yes`): it deletes `messages.db` and the media
+  cache, keeps the session, and warns that history older than the phone's re-sync is
+  lost.
+
+**Deviation from the decision record (2026-10-18).** The passphrase prompt happens in
+the terminal **before** the TUI starts, not on an unlock screen inside it. That's one
+code path for the TUI, `listen` and `db`, and Bubble Tea doesn't own the terminal yet.
+An in-TUI unlock screen is a roadmap follow-up.
+
+**Not yet.**
+- Rotating the data key.
+- Rewrapping when `key_source` changes (for now: turn it off, then on).
+
 ### Where the key would come from
 
 This is the real complexity; the cipher is easy. Planned sources, in order of preference:

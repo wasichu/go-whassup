@@ -8,6 +8,8 @@ wa-tui listen [-debug]              connect and print incoming messages
 wa-tui db chats                     list stored chats (reads messages.db; no network)
 wa-tui db messages [-n N] <chat>    show a stored chat's newest N messages (default 20, 0 = all)
 wa-tui db search [-n N] <words>     search stored messages, newest matches first
+wa-tui db reset                     delete messages.db and the media cache (type "yes");
+                                    the way out if stored messages can't be unlocked
 ```
 
 - `login` and `listen` also **store** everything they receive, including the history
@@ -66,6 +68,27 @@ handlers (`internal/ui/keys.go`), so they can't drift.
   recent messages loaded per chat says so instead.
 - **Unavailable while encryption is on.** Finding chats and contacts by name (`/`) still
   works.
+
+### Encryption at rest
+
+Turn on `[encryption] enabled` in Settings (`,`). It asks first, because it **encrypts
+message text, reactions and attachment keys only: who you talk to, when, and contact
+names stay readable on disk.**
+- On the next start, stored messages are encrypted in the background; the status line
+  says so. Turning it off decrypts them back the same way.
+- **Key sources** (`key_source`):
+  - `keyring`: your OS keychain; no prompt.
+  - `password-command`: e.g. `pass show whatsapp`.
+  - `prompt`: asks for a passphrase **in the terminal before the TUI starts**, and needs
+    a terminal (so `listen` under a pipe fails clearly).
+- **While encrypted:**
+  - message search is off;
+  - downloads live in a temporary directory deleted on exit;
+  - message text is never logged, and `-debug` doesn't include whatsmeow's protocol
+    chatter.
+- **If it can't unlock** (wrong passphrase, missing keychain entry), `wa-tui` stops and
+  says so. Fix the key source, or run `wa-tui db reset` to start over with an empty
+  message store (history older than your phone's next sync is lost).
 
 ### Groups and mentions
 

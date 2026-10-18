@@ -74,13 +74,13 @@ receipt, so WhatsApp's servers learn *when* you read chats, though not what.
 
 ### `[encryption]`
 
-**Not active yet.** The setting exists and the Settings screen shows its confirmation,
-but encryption itself is being implemented. Until this note is gone, turning it on does
-nothing.
+Changes take effect at the next start of `wa-tui`, `listen` or `login`; `db` commands
+never start or reverse encryption. To change `key_source` while encryption is on, turn
+encryption off, let it finish, then turn it on with the new source.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `enabled` | `false` | Encrypt message text and attachment keys in `messages.db`. **Encrypts message text only: who you talk to, when, and contact names stay readable on disk.** Message search is off while it's on. Turning it on re-encrypts stored messages; turning it off decrypts them back. The Settings toggle asks for confirmation first. |
+| `enabled` | `false` | Encrypt message text, reactions and attachment keys in `messages.db`. **Encrypts message text only: who you talk to, when, and contact names stay readable on disk.** Message search is off while it's on. Turning it on re-encrypts stored messages; turning it off decrypts them back. The Settings toggle asks for confirmation first. |
 | `key_source` | `"keyring"` | `keyring` (OS keychain, no prompt), `password-command` (runs `password_command`; its output is the passphrase), or `prompt` (asks at startup). |
 | `password_command` | `""` | Shell command that prints the passphrase, e.g. `pass show whatsapp`. Required with `password-command`. |
 

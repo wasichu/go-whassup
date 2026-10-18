@@ -88,6 +88,8 @@ internal/sqlite/     the only place that opens SQLite (driver, DSN, 0600)
 internal/store/      OUR messages.db + Recorder. whatsmeow does NOT persist messages.
                      Message text and media keys go through Codec only (seal/open).
 internal/media/      attachment cache (hashed names, 0600) + system opener
+internal/crypt/      AES-256-GCM (with associated data), key wrapping, Argon2id
+internal/keysource/  keyring (security/secret-tool via stdin), password_command, prompt
 internal/ui/         Bubble Tea models + Run. Imports internal/wa, never whatsmeow.
 ```
 
