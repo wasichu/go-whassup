@@ -87,8 +87,13 @@ migration (implemented in `internal/store/codec.go`):
   sorting keep working in SQL. The trade-off is that metadata (who you talk to and
   when) isn't protected.
 - **Turning encryption on re-encrypts existing rows** (decided 2026-10-18). The per-row
-  `codec` column makes this resumable. **Search is unavailable while encryption is
-  on**; the UI says so rather than searching partially.
+  `codec` column makes this resumable. **Message-text search is unavailable while
+  encryption is on**; the UI says so rather than searching partially. Finding chats and
+  contacts by name still works, because names aren't encrypted.
+- **Search is always local.** WhatsApp is end-to-end encrypted, so its servers can't
+  search messages and offer no search API; the official apps search their on-device
+  copies too. Ours covers what's in `messages.db`. Message search would use SQLite FTS5,
+  whose index is itself a plaintext copy of the words, hence the trade-off above.
 - **Crypto:** AES-GCM from the standard library or XChaCha20-Poly1305 from
   `x/crypto` (already in the module graph). No new dependency for the cipher itself.
 

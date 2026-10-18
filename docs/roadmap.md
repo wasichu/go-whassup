@@ -57,7 +57,8 @@ step lands or the plan changes.
 4. **Media:** download images and documents; open them with `open` / `xdg-open`; and
    **send files** (pick a path, send as a document or image).
 5. **Groups:** names from group info, participants, mentions.
-6. **Search.** Unavailable while encryption is on (decided); the UI says so.
+6. **Message search** (local, SQLite FTS5). Unavailable while encryption is on
+   (decided); the UI says so. Chat/contact name search is unaffected.
 7. **Encryption at rest** via the `store.Codec` seam:
    - an `[encryption]` config section (on/off, key source);
    - key sources in order: OS keyring, then a pianobar-style `password_command`, then a
