@@ -109,6 +109,24 @@ CREATE TABLE keys (
 	created_at INTEGER NOT NULL
 ) STRICT;
 `,
+	// 10: reactions are content, so their emoji is sealed like message text:
+	// emoji becomes a BLOB with its own codec (key ID) column.
+	`
+CREATE TABLE reactions_v10 (
+	chat_jid   TEXT NOT NULL,
+	message_id TEXT NOT NULL,
+	sender_jid TEXT NOT NULL,
+	from_me    INTEGER NOT NULL,
+	emoji      BLOB NOT NULL,
+	codec      INTEGER NOT NULL DEFAULT 0,
+	ts         INTEGER NOT NULL,
+	PRIMARY KEY (chat_jid, message_id, sender_jid)
+) STRICT;
+INSERT INTO reactions_v10 (chat_jid, message_id, sender_jid, from_me, emoji, codec, ts)
+	SELECT chat_jid, message_id, sender_jid, from_me, CAST(emoji AS BLOB), 0, ts FROM reactions;
+DROP TABLE reactions;
+ALTER TABLE reactions_v10 RENAME TO reactions;
+`,
 }
 
 // migrate brings the schema up to date inside one transaction.

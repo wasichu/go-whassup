@@ -56,6 +56,10 @@ const (
 	colMedia = "media"
 )
 
+// reactionColumn is the associated-data column for a sender's reaction, so
+// one person's reaction can't be passed off as another's.
+func reactionColumn(sender string) string { return "reaction:" + sender }
+
 // rowAAD binds a sealed value to its message and column.
 func rowAAD(chat, id, column string) []byte {
 	return []byte(chat + "\x00" + id + "\x00" + column)

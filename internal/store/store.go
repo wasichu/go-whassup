@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -481,7 +482,8 @@ func (s *Store) Messages(ctx context.Context, chat string, limit int) ([]wa.Mess
 	return msgs, nil
 }
 
-// attachReactions fills in each message's reaction summary.
+// attachReactions fills in each message's reaction summary. Emoji are
+// sealed, so they're opened and counted here rather than grouped in SQL.
 func (s *Store) attachReactions(ctx context.Context, chat string, msgs []wa.Message) error {
 	if len(msgs) == 0 {
 		return nil
@@ -491,27 +493,76 @@ func (s *Store) attachReactions(ctx context.Context, chat string, msgs []wa.Mess
 		byID[m.ID] = i
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT message_id, emoji, count(*), max(from_me), min(ts) FROM reactions
+		SELECT message_id, sender_jid, emoji, codec, from_me, ts FROM reactions
 		WHERE chat_jid = ? AND message_id IN (SELECT id FROM messages WHERE chat_jid = ? AND ts >= ?)
-		GROUP BY message_id, emoji ORDER BY message_id, count(*) DESC, min(ts)`,
+		ORDER BY ts`,
 		chat, chat, msgs[0].Timestamp.Unix())
 	if err != nil {
 		return fmt.Errorf("loading reactions: %w", err)
 	}
 	defer rows.Close()
+	type agg struct {
+		count int
+		mine  bool
+		order int // first seen, for ties
+	}
+	perMsg := map[string]map[string]*agg{}
+	seen := 0
 	for rows.Next() {
-		var id string
-		var rc wa.ReactionCount
-		var first int64
-		if err := rows.Scan(&id, &rc.Emoji, &rc.Count, &rc.Mine, &first); err != nil {
+		var id, sender string
+		var sealed []byte
+		var codec int
+		var mine bool
+		var ts int64
+		if err := rows.Scan(&id, &sender, &sealed, &codec, &mine, &ts); err != nil {
 			return fmt.Errorf("loading reactions: %w", err)
 		}
-		if i, ok := byID[id]; ok {
-			msgs[i].Reactions = append(msgs[i].Reactions, rc)
+		if _, ok := byID[id]; !ok {
+			continue
 		}
+		emoji, err := s.open(sealed, codec, chat, id, reactionColumn(sender))
+		if err != nil {
+			return err
+		}
+		m := perMsg[id]
+		if m == nil {
+			m = map[string]*agg{}
+			perMsg[id] = m
+		}
+		a := m[string(emoji)]
+		if a == nil {
+			seen++
+			a = &agg{order: seen}
+			m[string(emoji)] = a
+		}
+		a.count++
+		a.mine = a.mine || mine
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("loading reactions: %w", err)
+	}
+	for id, m := range perMsg {
+		var rcs []wa.ReactionCount
+		var order []int
+		for emoji, a := range m {
+			rcs = append(rcs, wa.ReactionCount{Emoji: emoji, Count: a.count, Mine: a.mine})
+			order = append(order, a.order)
+		}
+		idx := make([]int, len(rcs))
+		for i := range idx {
+			idx[i] = i
+		}
+		slices.SortFunc(idx, func(a, b int) int {
+			if rcs[a].Count != rcs[b].Count {
+				return rcs[b].Count - rcs[a].Count
+			}
+			return order[a] - order[b]
+		})
+		sorted := make([]wa.ReactionCount, len(rcs))
+		for i, j := range idx {
+			sorted[i] = rcs[j]
+		}
+		msgs[byID[id]].Reactions = sorted
 	}
 	return nil
 }
@@ -578,12 +629,16 @@ func (s *Store) SaveReactions(ctx context.Context, rs []wa.Reaction) error {
 				}
 				continue
 			}
+			sealed, codec, err := s.seal([]byte(r.Emoji), r.Chat, r.MessageID, reactionColumn(r.Sender))
+			if err != nil {
+				return err
+			}
 			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO reactions (chat_jid, message_id, sender_jid, from_me, emoji, ts) VALUES (?, ?, ?, ?, ?, ?)
+				INSERT INTO reactions (chat_jid, message_id, sender_jid, from_me, emoji, codec, ts) VALUES (?, ?, ?, ?, ?, ?, ?)
 				ON CONFLICT (chat_jid, message_id, sender_jid) DO UPDATE SET
-					emoji = excluded.emoji, ts = excluded.ts, from_me = excluded.from_me
+					emoji = excluded.emoji, codec = excluded.codec, ts = excluded.ts, from_me = excluded.from_me
 				WHERE excluded.ts >= reactions.ts`,
-				r.Chat, r.MessageID, r.Sender, r.FromMe, r.Emoji, r.At.Unix()); err != nil {
+				r.Chat, r.MessageID, r.Sender, r.FromMe, sealed, codec, r.At.Unix()); err != nil {
 				return err
 			}
 		}

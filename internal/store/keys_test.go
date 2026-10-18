@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/wasichu/go-whassup/internal/crypt"
+	"github.com/wasichu/go-whassup/internal/sqlite"
+	"github.com/wasichu/go-whassup/internal/wa"
 )
 
 // enable runs the enable sequence like the app does, returning the codec.
@@ -182,5 +184,107 @@ func TestKeyStoresKDFParams(t *testing.T) {
 	k, err := st.Key(t.Context())
 	if err != nil || k.KDF == nil || *k.KDF != crypt.DefaultKDF || string(k.Salt) != "0123456789abcdef" {
 		t.Errorf("key = %+v, %v", k, err)
+	}
+}
+
+func TestInterruptedEnableLeavesNoPlaintextIndex(t *testing.T) {
+	st := openStore(t, "", nil)
+	ctx := t.Context()
+	mustSave(t, st, msg(ada, "1", t0, "secret words"))
+	if _, err := st.AddKey(ctx, StoredKey{Alg: "aes-256-gcm", Source: "keyring", Wrapped: []byte{1}}); err != nil {
+		t.Fatal(err)
+	}
+	// "Crash" right after the key is stored: no batch has run yet.
+	var n int
+	if err := st.db.QueryRowContext(ctx, `SELECT count(*) FROM messages_fts`).Scan(&n); err != nil || n != 0 {
+		t.Errorf("search index must be emptied with the key, has %d rows (%v)", n, err)
+	}
+}
+
+func TestReactionsAreSealed(t *testing.T) {
+	st := openStore(t, "", nil)
+	ctx := t.Context()
+	mustSave(t, st, msg(group, "1", t0, "party?"))
+	if err := st.SaveReactions(ctx, []wa.Reaction{{Chat: group, MessageID: "1", Sender: ada, Emoji: "🎉", At: t0}}); err != nil {
+		t.Fatal(err)
+	}
+	enable(t, st, 10)
+	if err := st.SaveReactions(ctx, []wa.Reaction{{Chat: group, MessageID: "1", Sender: bob, Emoji: "🎉", At: t0}}); err != nil {
+		t.Fatal(err)
+	}
+	var raw []byte
+	var codec int
+	rows, err := st.db.QueryContext(ctx, `SELECT emoji, codec FROM reactions`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		if err := rows.Scan(&raw, &codec); err != nil {
+			t.Fatal(err)
+		}
+		if codec == 0 || bytes.Contains(raw, []byte("🎉")) {
+			t.Errorf("reaction stored readable: codec=%d %q", codec, raw)
+		}
+	}
+	if m := onlyMessage(t, st, group, "1"); len(m.Reactions) != 1 || m.Reactions[0] != (wa.ReactionCount{Emoji: "🎉", Count: 2}) {
+		t.Errorf("reactions after sealing = %+v", m.Reactions)
+	}
+}
+
+func TestResealStopsOnUndecryptableRow(t *testing.T) {
+	st := openStore(t, "", nil)
+	ctx := t.Context()
+	mustSave(t, st, msg(ada, "1", t0, "a"), msg(ada, "2", t0.Add(time.Minute), "b"))
+	enable(t, st, 10)
+	if _, err := st.db.ExecContext(ctx, `UPDATE messages SET body = x'00112233445566778899aabbccddeeff00112233' WHERE id = '2'`); err != nil {
+		t.Fatal(err)
+	}
+	st.WritePlaintext() // decrypting now has to open row 2
+	_, err := st.ResealBatch(ctx, 10)
+	var rerr *ResealError
+	if !errors.As(err, &rerr) || rerr.ID != "2" || !errors.Is(err, crypt.ErrDecrypt) {
+		t.Fatalf("ResealBatch = %v; want a ResealError naming message 2", err)
+	}
+}
+
+func TestNoIndexingWhileDecrypting(t *testing.T) {
+	st := openStore(t, "", nil)
+	ctx := t.Context()
+	mustSave(t, st, msg(ada, "1", t0, "before"))
+	enable(t, st, 10)
+	st.WritePlaintext()
+	mustSave(t, st, msg(ada, "2", t0.Add(time.Minute), "during"))
+	if _, err := st.Search(ctx, "during", 10); !errors.Is(err, ErrSearchUnavailable) {
+		t.Errorf("search before FinishDecrypting = %v", err)
+	}
+	var n int
+	if err := st.db.QueryRowContext(ctx, `SELECT count(*) FROM messages_fts`).Scan(&n); err != nil || n != 0 {
+		t.Errorf("indexed while a key exists: %d (%v)", n, err)
+	}
+}
+
+func TestMigrateV9ToV10KeepsReactions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "messages.db")
+	db, err := sqlite.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := t.Context()
+	setup := append(slices.Clone(migrations[:9]), "PRAGMA user_version = 9",
+		`INSERT INTO chats (jid) VALUES ('`+ada+`')`,
+		`INSERT INTO messages (chat_jid, id, sender_jid, ts, from_me, kind, body) VALUES ('`+ada+`', '1', '`+ada+`', 1, 0, 'text', x'')`,
+		`INSERT INTO reactions (chat_jid, message_id, sender_jid, from_me, emoji, ts) VALUES ('`+ada+`', '1', '`+bob+`', 0, '👍', 1)`)
+	for _, q := range setup {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatalf("v9 setup %q: %v", q, err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	st := openStore(t, path, nil)
+	if m := onlyMessage(t, st, ada, "1"); len(m.Reactions) != 1 || m.Reactions[0].Emoji != "👍" {
+		t.Errorf("reactions after upgrade = %+v", m.Reactions)
 	}
 }
