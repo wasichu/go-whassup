@@ -34,8 +34,9 @@ func newSettings(cfg config.Config) settings {
 }
 
 type configSavedMsg struct {
-	cfg config.Config
-	err error
+	cfg   config.Config
+	saved bool // the file was written (err may still report an apply failure)
+	err   error
 }
 
 // saveConfig writes cfg and applies it to the running app. Both happen off
@@ -47,10 +48,10 @@ func saveConfig(ctx context.Context, deps Deps, cfg config.Config) tea.Cmd {
 		}
 		if deps.ApplyConfig != nil {
 			if err := deps.ApplyConfig(ctx, cfg); err != nil {
-				return configSavedMsg{cfg: cfg, err: err}
+				return configSavedMsg{cfg: cfg, saved: true, err: err}
 			}
 		}
-		return configSavedMsg{cfg: cfg}
+		return configSavedMsg{cfg: cfg, saved: true}
 	}
 }
 
@@ -126,7 +127,7 @@ func (m Model) commitSetting(next config.Config) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) settingsSaved(msg configSavedMsg) (tea.Model, tea.Cmd) {
-	if msg.err != nil && msg.cfg == (config.Config{}) {
+	if !msg.saved {
 		m.settings.err = "saving: " + msg.err.Error()
 		return m, nil
 	}

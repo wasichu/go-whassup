@@ -491,9 +491,9 @@ func TestSettingsToggleEditValidateSave(t *testing.T) {
 	}
 	h.key("esc") // cancel the edit
 
-	// Toggle request_full_sync: saved and applied.
+	// Toggle request_full_sync with space: saved and applied.
 	h.key("up")
-	h.key("enter")
+	h.send(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
 	if len(h.applied) != 1 || !h.applied[0].History.RequestFullSync {
 		t.Fatalf("toggle not applied: %+v\n%s", h.applied, h.view())
 	}
