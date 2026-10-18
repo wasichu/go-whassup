@@ -346,3 +346,11 @@ func TestMetaMessagesAreNeverMessages(t *testing.T) {
 		}
 	}
 }
+
+func typesSourceAda() types.MessageSource { return types.MessageSource{Chat: pnAda, Sender: pnAda} }
+
+func textEventWith(msg *waE2E.Message) *events.Message {
+	e := textEvent(typesSourceAda(), "")
+	e.Message = msg
+	return e
+}

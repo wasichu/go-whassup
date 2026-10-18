@@ -32,7 +32,7 @@ func messageFromEvent(evt *events.Message, resolve keyResolver) (Message, bool) 
 		return Message{}, false // reactions are Reaction events, not messages
 	}
 	m, _ := messageFromEventBase(evt, resolve)
-	m.Kind, m.Text = kind, text
+	m.Kind, m.Text, m.Media = kind, text, mediaOf(evt.Message)
 	return m, true
 }
 

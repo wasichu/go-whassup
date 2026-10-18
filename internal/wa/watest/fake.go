@@ -4,6 +4,8 @@ package watest
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 	"time"
@@ -27,6 +29,11 @@ type Client struct {
 	// SendErr fails SendText; otherwise sent messages are emitted and recorded.
 	SendErr error
 	Sent    []wa.Message
+	// Files sent with SendFile; DownloadData is what Download writes (or
+	// DownloadErr fails it).
+	Files        []SentFile
+	DownloadData []byte
+	DownloadErr  error
 	// MarkRead calls with a mode other than ReadLocal.
 	Reads []ReadCall
 	// Events emitted synchronously, in order, from a successful Pair,
@@ -139,6 +146,47 @@ func (c *Client) SendText(_ context.Context, chat, text string) error {
 	c.mu.Unlock()
 	c.Emit(m)
 	return nil
+}
+
+// SentFile records one SendFile call.
+type SentFile struct{ Chat, Path, Caption string }
+
+// SendFile records the call and emits a document message, like the real
+// client emits what it sent.
+func (c *Client) SendFile(_ context.Context, chat, path, caption string) (string, error) {
+	if !c.Paired {
+		return "", wa.ErrNotPaired
+	}
+	if c.SendErr != nil {
+		return "", c.SendErr
+	}
+	c.mu.Lock()
+	c.Files = append(c.Files, SentFile{Chat: chat, Path: path, Caption: caption})
+	id := fmt.Sprintf("FILE%d", len(c.Files))
+	c.mu.Unlock()
+	c.Emit(wa.Message{
+		ID: id, Chat: chat, Sender: "me@s.whatsapp.net", FromMe: true,
+		Timestamp: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC), Kind: wa.KindDocument,
+		Text:  filepath.Base(path),
+		Media: &wa.Media{Data: []byte("fake"), Mime: "application/octet-stream", FileName: filepath.Base(path)},
+	})
+	return id, nil
+}
+
+// SentFiles returns what SendFile sent.
+func (c *Client) SentFiles() []SentFile {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.Files)
+}
+
+// Download writes DownloadData to dst, or fails with DownloadErr.
+func (c *Client) Download(_ context.Context, _ wa.Media, dst *os.File) error {
+	if c.DownloadErr != nil {
+		return c.DownloadErr
+	}
+	_, err := dst.Write(c.DownloadData)
+	return err
 }
 
 // ReadCall records one MarkRead call that would send something.

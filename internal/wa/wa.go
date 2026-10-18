@@ -3,6 +3,7 @@ package wa
 import (
 	"context"
 	"errors"
+	"os"
 	"time"
 )
 
@@ -67,6 +68,14 @@ type Client interface {
 	// yourself), or "" before pairing.
 	OwnJID() string
 
+	// SendFile sends a file (images as images, anything else as a
+	// document) and returns its message ID; see WhatsApp.SendFile.
+	SendFile(ctx context.Context, chat, path, caption string) (id string, err error)
+
+	// Download writes a message's attachment to dst. ErrMediaExpired means
+	// WhatsApp no longer has it.
+	Download(ctx context.Context, m Media, dst *os.File) error
+
 	// IsPaired reports whether a session exists in the store.
 	IsPaired() bool
 
@@ -123,6 +132,7 @@ type Message struct {
 	IsGroup   bool
 	Kind      string // "text", "image", "reaction", ... see messageKind
 	Text      string // body or caption; may be empty for media
+	Media     *Media // attachment, if any
 
 	// Filled in by the store when reading; empty on the wire.
 	SenderName string          // best display name for Sender (address book, then push name)
