@@ -44,7 +44,7 @@ func (h *harness) waitPreview() {
 		h.settle()
 		b := h.model().browser
 		e, ok := b.current()
-		if !ok || !canPreview(e.name) || b.shown != "" {
+		if !ok || !canPreview(e.name) || b.preview.shown != "" {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -101,7 +101,7 @@ func TestBrowserPreviewsAndPicks(t *testing.T) {
 	if h.model().screen != screenAttach || a.path.Value() != filepath.Join(dir, "cat.png") || !a.onCaption {
 		t.Fatalf("picking should fill the path and focus the caption: screen=%v path=%q caption=%v", h.model().screen, a.path.Value(), a.onCaption)
 	}
-	if h.model().browser.shown != "" {
+	if h.model().browser.preview.shown != "" {
 		t.Error("the preview should be freed on leaving the browser")
 	}
 

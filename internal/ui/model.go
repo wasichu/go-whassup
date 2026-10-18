@@ -301,7 +301,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key.Matches(msg, keys.ForceQuit) {
 		m.deps.Client.CancelPairing()
 		m, hide, _ := m.hideQRImage()
-		hidePreview := m.browser.hide()
+		hidePreview := tea.Batch(m.browser.preview.hide(), m.picker.preview.hide())
 		return m, tea.Sequence(hide, hidePreview, tea.Quit)
 	}
 	if m.showHelp {

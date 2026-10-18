@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
@@ -37,6 +38,7 @@ type Client struct {
 	Files        []SentFile
 	DownloadData []byte
 	DownloadErr  error
+	downloads    atomic.Int32
 	// MarkRead calls with a mode other than ReadLocal.
 	Reads []ReadCall
 	// Events emitted synchronously, in order, from a successful Pair,
@@ -185,12 +187,16 @@ func (c *Client) SentFiles() []SentFile {
 
 // Download writes DownloadData to dst, or fails with DownloadErr.
 func (c *Client) Download(_ context.Context, _ wa.Media, dst *os.File) error {
+	c.downloads.Add(1)
 	if c.DownloadErr != nil {
 		return c.DownloadErr
 	}
 	_, err := dst.Write(c.DownloadData)
 	return err
 }
+
+// Downloads reports how many downloads were attempted.
+func (c *Client) Downloads() int { return int(c.downloads.Load()) }
 
 // ReadCall records one MarkRead call that would send something.
 type ReadCall struct {
@@ -280,6 +286,23 @@ func SizedDocumentMedia(name string, size uint64) *wa.Media {
 	data, err := proto.Marshal(&waE2E.Message{DocumentMessage: &waE2E.DocumentMessage{
 		FileName: proto.String(name), Mimetype: proto.String("application/octet-stream"),
 		DirectPath: proto.String("/fake"), MediaKey: []byte("fake-key"), FileLength: proto.Uint64(size),
+	}})
+	if err != nil {
+		panic(err) // a fixed, valid message always marshals
+	}
+	m, err := wa.ParseMedia(data)
+	if err != nil {
+		panic(err)
+	}
+	return m
+}
+
+// PhotoMedia is a photo attachment carrying WhatsApp's embedded JPEG
+// thumbnail (thumb), as received.
+func PhotoMedia(thumb []byte) *wa.Media {
+	data, err := proto.Marshal(&waE2E.Message{ImageMessage: &waE2E.ImageMessage{
+		Mimetype: proto.String("image/jpeg"), DirectPath: proto.String("/fake"), MediaKey: []byte("fake-key"),
+		FileLength: proto.Uint64(123456), JPEGThumbnail: thumb,
 	}})
 	if err != nil {
 		panic(err) // a fixed, valid message always marshals

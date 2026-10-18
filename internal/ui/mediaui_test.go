@@ -1,6 +1,9 @@
 package ui
 
 import (
+	"bytes"
+	"image/color"
+	"image/jpeg"
 	"os"
 	"path/filepath"
 	"strings"
@@ -216,5 +219,43 @@ func TestAttachCompletesPaths(t *testing.T) {
 	h.key("enter")
 	if v := ansi.Strip(h.view()); !strings.Contains(v, "That's a folder") {
 		t.Errorf("sending a folder should be refused:\n%s", v)
+	}
+}
+
+func TestAttachmentsPreviewThumbnails(t *testing.T) {
+	var thumb bytes.Buffer
+	if err := jpeg.Encode(&thumb, solid(32, 24, color.RGBA{R: 200, A: 255}), nil); err != nil {
+		t.Fatal(err)
+	}
+	h := newHarness(t, true)
+	h.withGraphics()
+	photo := wa.Message{ID: "p1", Chat: ada, Sender: ada, Timestamp: day.Add(2 * time.Hour), Kind: wa.KindImage, Media: watest.PhotoMedia(thumb.Bytes())}
+	if _, err := h.st.SaveMessages(h.t.Context(), []wa.Message{photo}); err != nil {
+		t.Fatal(err)
+	}
+	h.seedAttachment("doc1", "report.pdf") // older, no thumbnail
+	h.key("enter")                         // into the message box
+	h.key("ctrl+o")
+	time.Sleep(previewDelay + 20*time.Millisecond)
+	for deadline := time.Now().Add(5 * time.Second); h.model().picker.preview.shown == "" && time.Now().Before(deadline); {
+		h.settle()
+		time.Sleep(10 * time.Millisecond)
+	}
+	if h.model().picker.preview.shown != "p1" || !strings.Contains(h.view(), "\U0010EEEE") {
+		t.Fatalf("the photo's thumbnail should preview without downloading (downloads %d):\n%s", h.client.Downloads(), ansi.Strip(h.view()))
+	}
+	if h.client.Downloads() != 0 {
+		t.Error("previewing must not download")
+	}
+	h.key("down") // the document: no preview
+	h.settle()
+	if h.model().picker.preview.shown != "" || strings.Contains(h.view(), "\U0010EEEE") {
+		t.Error("moving to an attachment without a preview should drop the image")
+	}
+	h.raw = nil
+	h.key("up")
+	h.key("esc")
+	if h.model().screen != screenMain {
+		t.Error("esc should close attachments")
 	}
 }

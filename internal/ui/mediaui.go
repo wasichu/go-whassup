@@ -21,6 +21,7 @@ import (
 type picker struct {
 	items    []wa.Message
 	selected int
+	preview  previewer // keyed by message ID
 }
 
 // attach is the "a" screen: a file path and an optional caption.
@@ -50,26 +51,76 @@ func (m Model) openPicker() (Model, tea.Cmd) {
 		m.notice, m.noticeIsErr = "No attachments in this chat.", false
 		return m, nil
 	}
-	m.screen, m.picker = screenPicker, picker{items: items}
-	return m, nil
+	m.screen, m.picker = screenPicker, picker{items: items, preview: previewer{owner: "picker", tmux: m.deps.Graphics.Tmux}}
+	cmd := m.picker.highlightChanged(m.inlineImages()) // evaluate before m is copied into the return
+	return m, cmd
 }
 
 func (p *picker) update(r rootAPI, msg tea.Msg) (bool, tea.Cmd) {
-	k, ok := msg.(tea.KeyPressMsg)
-	if !ok {
-		return false, nil
+	switch msg := msg.(type) {
+	case previewTickMsg:
+		return false, p.startPreview(r, msg)
+	case previewReadyMsg:
+		return false, p.preview.ready(msg)
+	case tea.KeyPressMsg:
+		return p.key(r, msg)
 	}
+	return false, nil
+}
+
+func (p *picker) key(r rootAPI, k tea.KeyPressMsg) (bool, tea.Cmd) {
 	switch {
 	case key.Matches(k, keys.Back):
-		return true, nil
+		return true, p.preview.hide()
 	case key.Matches(k, keys.Up):
-		p.selected = max(p.selected-1, 0)
+		return false, p.move(r, -1)
 	case key.Matches(k, keys.Down):
-		p.selected = min(p.selected+1, len(p.items)-1)
+		return false, p.move(r, 1)
 	case key.Matches(k, keys.Select):
 		return false, r.download(p.items[p.selected])
 	}
 	return false, nil
+}
+
+func (p *picker) move(r rootAPI, delta int) tea.Cmd {
+	next := min(max(p.selected+delta, 0), len(p.items)-1)
+	if next == p.selected {
+		return nil
+	}
+	p.selected = next
+	return p.highlightChanged(r.inlineImages())
+}
+
+// highlightChanged schedules a preview of the highlighted attachment: a
+// photo (from the download, if any) or anything with WhatsApp's thumbnail.
+func (p *picker) highlightChanged(images bool) tea.Cmd {
+	it := p.items[p.selected]
+	return p.preview.moved(images && (it.Media.Thumbnail != nil || it.Kind == wa.KindImage))
+}
+
+func (p *picker) startPreview(r rootAPI, msg previewTickMsg) tea.Cmd {
+	if !p.preview.due(msg) {
+		return nil
+	}
+	it, chat, cache := p.items[p.selected], r.chat().JID, r.deps().Media
+	w, h := r.size()
+	_, cols, rows := browserLayout(w, h-1)
+	return p.preview.load(it.ID, cols, rows, func(cols, rows int) ([]byte, error) {
+		return attachmentPreview(cache, chat, it, cols, rows)
+	})
+}
+
+// attachmentPreview previews a downloaded photo at full quality, else
+// WhatsApp's embedded thumbnail.
+func attachmentPreview(cache MediaCache, chat string, it wa.Message, cols, rows int) ([]byte, error) {
+	if cache != nil {
+		if path, ok := cache.Lookup(chat, it.ID); ok && canPreview(path) {
+			if png, err := previewPNG(path, cols, rows); err == nil {
+				return png, nil
+			}
+		}
+	}
+	return previewBytes(it.Media.Thumbnail, cols, rows)
 }
 
 func (*picker) help() []key.Binding { return menuHelp }
@@ -128,8 +179,24 @@ func mediaLabel(msg wa.Message) string {
 }
 
 func (p *picker) view(r rootAPI, width, height int) string {
-	lines := []string{paneTitleStyle.Render("Attachments in " + chatTitle(r.chat(), r.own())), ""}
-	rows := max(height-len(lines)-1, 1)
+	title := paneTitleStyle.Render("Attachments in " + chatTitle(r.chat(), r.own()))
+	if !r.inlineImages() {
+		return pageStyle(width, height).Render(title + "\n\n" + p.listView(r, width, height-3))
+	}
+	listW, _, _ := browserLayout(width, height)
+	bodyH := max(height-3, 1)
+	list := lipgloss.NewStyle().Width(listW).Height(bodyH).MaxHeight(bodyH).Render(p.listView(r, listW, bodyH))
+	side := ""
+	if it := p.items[p.selected]; p.preview.showing(it.ID) {
+		side = lipgloss.NewStyle().PaddingLeft(2).Render(p.preview.placeholders())
+	}
+	return pageStyle(width, height).Render(title + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, list, side))
+}
+
+// listView lists the attachments, scrolled to keep the selection visible.
+func (p *picker) listView(r rootAPI, width, height int) string {
+	var lines []string
+	rows := max(height, 1)
 	start := 0
 	if p.selected >= rows {
 		start = p.selected - rows + 1
@@ -156,7 +223,7 @@ func (p *picker) view(r rootAPI, width, height int) string {
 		}
 		lines = append(lines, lipgloss.NewStyle().MaxWidth(width-2).Render(line+"  "+faintStyle.Render(meta)))
 	}
-	return pageStyle(width, height).Render(strings.Join(lines, "\n"))
+	return strings.Join(lines, "\n")
 }
 
 func newAttach(width int) attach {

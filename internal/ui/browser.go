@@ -27,11 +27,7 @@ type browser struct {
 	err      string
 	hidden   bool // show dotfiles
 	selected int
-	seq      int    // preview generation; older results are dropped
-	shown    string // path whose preview is in the terminal, "" if none
-	cols     int    // its size in cells
-	rows     int
-	tmux     bool
+	preview  previewer // keyed by path
 }
 
 type browseEntry struct {
@@ -41,21 +37,11 @@ type browseEntry struct {
 	mod  time.Time
 }
 
-type (
-	browseListedMsg struct {
-		dir     string
-		entries []browseEntry
-		err     error
-	}
-	previewTickMsg  struct{ seq int }
-	previewReadyMsg struct {
-		seq        int
-		path       string
-		png        []byte
-		cols, rows int
-		err        error
-	}
-)
+type browseListedMsg struct {
+	dir     string
+	entries []browseEntry
+	err     error
+}
 
 // openBrowser shows the file browser in dir (the last one used, else home).
 func (m Model) openBrowser() (Model, tea.Cmd) {
@@ -67,7 +53,7 @@ func (m Model) openBrowser() (Model, tea.Cmd) {
 		}
 		dir = home
 	}
-	m.screen, m.browser = screenBrowse, browser{dir: dir, tmux: m.deps.Graphics.Tmux}
+	m.screen, m.browser = screenBrowse, browser{dir: dir, preview: previewer{owner: "browser", tmux: m.deps.Graphics.Tmux}}
 	return m, listBrowse(dir)
 }
 
@@ -94,13 +80,6 @@ func listBrowse(dir string) tea.Cmd {
 			return cmp.Compare(strings.ToLower(a.name), strings.ToLower(b.name))
 		})
 		return msg
-	}
-}
-
-func loadPreview(seq int, path string, cols, rows int) tea.Cmd {
-	return func() tea.Msg {
-		png, err := previewPNG(path, cols, rows)
-		return previewReadyMsg{seq: seq, path: path, png: png, cols: cols, rows: rows, err: err}
 	}
 }
 
@@ -134,7 +113,7 @@ func (b *browser) update(r rootAPI, msg tea.Msg) (bool, tea.Cmd) {
 	case previewTickMsg:
 		return false, b.startPreview(r, msg)
 	case previewReadyMsg:
-		return false, b.previewReady(msg)
+		return false, b.preview.ready(msg)
 	case tea.KeyPressMsg:
 		return b.key(r, msg)
 	}
@@ -144,7 +123,7 @@ func (b *browser) update(r rootAPI, msg tea.Msg) (bool, tea.Cmd) {
 func (b *browser) key(r rootAPI, msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
-		return true, b.hide()
+		return true, b.preview.hide()
 	case "up", "k":
 		return false, b.move(r, -1)
 	case "down", "j":
@@ -158,14 +137,14 @@ func (b *browser) key(r rootAPI, msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return false, b.cd(filepath.Join(b.dir, e.name))
 		}
 		path := filepath.Join(b.dir, e.name)
-		return false, tea.Batch(b.hide(), r.attachPath(path, true))
+		return false, tea.Batch(b.preview.hide(), r.attachPath(path, true))
 	case "left", "h", "backspace":
 		return false, b.cd(filepath.Dir(b.dir))
 	case ".":
 		b.hidden, b.selected = !b.hidden, 0
 		return false, b.highlightChanged(r)
 	case "/", "tab":
-		return false, tea.Batch(b.hide(), r.attachPath(b.dir+string(filepath.Separator), false))
+		return false, tea.Batch(b.preview.hide(), r.attachPath(b.dir+string(filepath.Separator), false))
 	}
 	return false, nil
 }
@@ -184,47 +163,25 @@ func (b *browser) cd(dir string) tea.Cmd {
 		return nil
 	}
 	b.dir, b.loaded, b.entries, b.selected = dir, false, nil, 0
-	b.seq++
-	return tea.Batch(b.hide(), listBrowse(dir))
+	return tea.Batch(b.preview.moved(false), listBrowse(dir))
 }
 
-// highlightChanged schedules a preview of the newly highlighted file, and
-// drops the old one.
+// highlightChanged drops the old preview and schedules one for the newly
+// highlighted image.
 func (b *browser) highlightChanged(r rootAPI) tea.Cmd {
-	b.seq++
-	hide := b.hide()
-	if e, ok := b.current(); !ok || e.dir || !canPreview(e.name) || !r.inlineImages() {
-		return hide
-	}
-	seq := b.seq
-	return tea.Batch(hide, tea.Tick(previewDelay, func(time.Time) tea.Msg { return previewTickMsg{seq: seq} }))
+	e, ok := b.current()
+	return b.preview.moved(ok && !e.dir && canPreview(e.name) && r.inlineImages())
 }
 
 func (b *browser) startPreview(r rootAPI, msg previewTickMsg) tea.Cmd {
 	e, ok := b.current()
-	if msg.seq != b.seq || !ok {
+	if !b.preview.due(msg) || !ok {
 		return nil
 	}
 	w, h := r.size()
 	_, cols, rows := browserLayout(w, h-1)
-	return loadPreview(b.seq, filepath.Join(b.dir, e.name), cols, rows)
-}
-
-func (b *browser) previewReady(msg previewReadyMsg) tea.Cmd {
-	if msg.seq != b.seq || msg.err != nil {
-		return nil // superseded, or not previewable after all
-	}
-	b.shown, b.cols, b.rows = msg.path, msg.cols, msg.rows
-	return tea.Raw(kittyTransmit(previewImageID, msg.png, msg.cols, msg.rows, b.tmux))
-}
-
-// hide frees the preview image, if one is in the terminal.
-func (b *browser) hide() tea.Cmd {
-	if b.shown == "" {
-		return nil
-	}
-	b.shown = ""
-	return tea.Raw(kittyDelete(previewImageID, b.tmux))
+	path := filepath.Join(b.dir, e.name)
+	return b.preview.load(path, cols, rows, func(cols, rows int) ([]byte, error) { return previewPNG(path, cols, rows) })
 }
 
 func (*browser) help() []key.Binding { return browserHelp }
@@ -286,8 +243,8 @@ func (b *browser) sideView(width int) string {
 		return ""
 	}
 	path := filepath.Join(b.dir, e.name)
-	if b.shown == path {
-		return kittyPlaceholders(previewImageID, b.cols, b.rows) + "\n" + faintStyle.Render(e.name+" · "+humanSize(e.size))
+	if b.preview.showing(path) {
+		return b.preview.placeholders() + "\n" + faintStyle.Render(e.name+" · "+humanSize(e.size))
 	}
 	if e.dir {
 		return faintStyle.Render("Folder · enter opens it")

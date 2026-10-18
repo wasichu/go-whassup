@@ -9,9 +9,13 @@ import (
 	_ "image/gif" // registers the decoder
 	_ "image/jpeg"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 // File previews in the send-file browser are shown like the login QR: as a
@@ -57,16 +61,29 @@ func previewPNG(path string, cols, rows int) ([]byte, error) {
 	if fi, err := f.Stat(); err != nil || fi.Size() > maxPreviewFile {
 		return nil, errNoPreview
 	}
-	cfg, _, err := image.DecodeConfig(f)
+	return previewFrom(f, cols, rows)
+}
+
+// previewBytes is previewPNG for an image held in memory (WhatsApp's
+// embedded thumbnails).
+func previewBytes(data []byte, cols, rows int) ([]byte, error) {
+	if len(data) == 0 || cols < 1 || rows < 1 {
+		return nil, errNoPreview
+	}
+	return previewFrom(bytes.NewReader(data), cols, rows)
+}
+
+func previewFrom(r io.ReadSeeker, cols, rows int) ([]byte, error) {
+	cfg, _, err := image.DecodeConfig(r)
 	if err != nil || cfg.Width*cfg.Height > maxPreviewPixels || cfg.Width < 1 || cfg.Height < 1 {
 		return nil, errNoPreview
 	}
-	if _, err := f.Seek(0, 0); err != nil {
+	if _, err := r.Seek(0, io.SeekStart); err != nil {
 		return nil, err
 	}
-	src, _, err := image.Decode(f)
+	src, _, err := image.Decode(r)
 	if err != nil {
-		return nil, fmt.Errorf("decoding %s: %w", filepath.Base(path), err)
+		return nil, fmt.Errorf("decoding image: %w", err)
 	}
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, letterbox(src, cols*cellW, rows*cellH)); err != nil {
@@ -98,3 +115,79 @@ func letterbox(src image.Image, w, h int) *image.NRGBA {
 	}
 	return dst
 }
+
+// previewer shows one preview image beside a list (the file browser, the
+// attachments view): it waits for the cursor to rest on an entry, has the
+// page decode it off the UI goroutine, shows the result unless the cursor
+// has moved on, and frees the image when it's no longer shown.
+type previewer struct {
+	owner string // tags its messages, so a closed page's results are dropped
+	seq   int    // generation; results for older ones are dropped
+	shown string // key of the preview in the terminal, "" if none
+	cols  int    // its size in cells
+	rows  int
+	tmux  bool
+}
+
+type (
+	previewTickMsg struct {
+		owner string
+		seq   int
+	}
+	previewReadyMsg struct {
+		owner      string
+		seq        int
+		key        string
+		png        []byte
+		cols, rows int
+		err        error
+	}
+)
+
+// moved is called when the highlighted entry changes: it drops the shown
+// preview and, if want, waits previewDelay before asking for a new one.
+func (p *previewer) moved(want bool) tea.Cmd {
+	p.seq++
+	hide := p.hide()
+	if !want {
+		return hide
+	}
+	owner, seq := p.owner, p.seq
+	return tea.Batch(hide, tea.Tick(previewDelay, func(time.Time) tea.Msg { return previewTickMsg{owner: owner, seq: seq} }))
+}
+
+// due reports whether a tick is for the current highlight.
+func (p *previewer) due(msg previewTickMsg) bool { return msg.owner == p.owner && msg.seq == p.seq }
+
+// load decodes a preview of key off the UI goroutine with decode.
+func (p *previewer) load(key string, cols, rows int, decode func(cols, rows int) ([]byte, error)) tea.Cmd {
+	owner, seq := p.owner, p.seq
+	return func() tea.Msg {
+		png, err := decode(cols, rows)
+		return previewReadyMsg{owner: owner, seq: seq, key: key, png: png, cols: cols, rows: rows, err: err}
+	}
+}
+
+// ready shows a decoded preview, unless it's stale or failed.
+func (p *previewer) ready(msg previewReadyMsg) tea.Cmd {
+	if msg.owner != p.owner || msg.seq != p.seq || msg.err != nil {
+		return nil
+	}
+	p.shown, p.cols, p.rows = msg.key, msg.cols, msg.rows
+	return tea.Raw(kittyTransmit(previewImageID, msg.png, msg.cols, msg.rows, p.tmux))
+}
+
+// hide frees the preview image, if one is in the terminal.
+func (p *previewer) hide() tea.Cmd {
+	if p.shown == "" {
+		return nil
+	}
+	p.shown = ""
+	return tea.Raw(kittyDelete(previewImageID, p.tmux))
+}
+
+// showing reports whether key's preview is in the terminal.
+func (p *previewer) showing(key string) bool { return key != "" && p.shown == key }
+
+// placeholders draws the shown preview.
+func (p *previewer) placeholders() string { return kittyPlaceholders(previewImageID, p.cols, p.rows) }
