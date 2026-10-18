@@ -25,12 +25,15 @@ type Client struct {
 	// SendErr fails SendText; otherwise sent messages are emitted and recorded.
 	SendErr error
 	Sent    []wa.Message
-	// Events emitted synchronously, in order, from a successful Pair or Connect.
+	// Events emitted synchronously, in order, from a successful Pair,
+	// PairQR or Connect.
 	PairEvents    []wa.Event
+	QREvents      []wa.Event
 	ConnectEvents []wa.Event
 
 	mu        sync.Mutex
 	pairPhone string
+	cancelled int
 	connected bool
 	closed    bool
 }
@@ -51,6 +54,32 @@ func (c *Client) Pair(_ context.Context, phone string) (string, error) {
 		c.Emit(evt)
 	}
 	return c.PairCode, nil
+}
+
+func (c *Client) PairQR(context.Context) error {
+	if c.Paired {
+		return wa.ErrAlreadyPaired
+	}
+	if c.PairErr != nil {
+		return c.PairErr
+	}
+	for _, evt := range c.QREvents {
+		c.Emit(evt)
+	}
+	return nil
+}
+
+func (c *Client) CancelPairing() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cancelled++
+}
+
+// Cancelled reports how many times CancelPairing was called.
+func (c *Client) Cancelled() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cancelled
 }
 
 func (c *Client) Connect(context.Context) error {

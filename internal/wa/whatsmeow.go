@@ -36,8 +36,10 @@ type WhatsApp struct {
 	container *sqlstore.Container
 	log       *slog.Logger
 
-	mu  sync.RWMutex
-	cli *whatsmeow.Client // replaced by Logout; read via client()
+	mu         sync.RWMutex
+	cli        *whatsmeow.Client // replaced by Logout; read via client()
+	opts       Options
+	cancelPair context.CancelFunc // set while a pairing is in progress
 }
 
 var _ Client = (*WhatsApp)(nil)
@@ -55,15 +57,6 @@ type Options struct {
 // Open loads (or creates) the session store at dbPath and prepares a client.
 // It does not connect.
 func Open(ctx context.Context, dbPath string, log *slog.Logger, opts Options) (*WhatsApp, error) {
-	// DeviceProps is whatsmeow's process-wide device description; it is sent
-	// to the phone when pairing.
-	store.SetOSInfo(deviceName, [3]uint32{0, 1, 0})
-	store.DeviceProps.RequireFullSync = proto.Bool(opts.RequestFullSync)
-	store.DeviceProps.HistorySyncConfig.FullSyncDaysLimit = nil
-	if opts.RequestFullSync && opts.FullSyncDays > 0 {
-		store.DeviceProps.HistorySyncConfig.FullSyncDaysLimit = proto.Uint32(uint32(opts.FullSyncDays))
-	}
-
 	db, err := sqlite.Open(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("opening session db: %w", err)
@@ -77,9 +70,31 @@ func Open(ctx context.Context, dbPath string, log *slog.Logger, opts Options) (*
 		return nil, errors.Join(fmt.Errorf("loading device: %w", err), db.Close())
 	}
 
-	w := &WhatsApp{db: db, container: container, log: log}
+	w := &WhatsApp{db: db, container: container, log: log, opts: opts}
 	w.setDevice(device)
 	return w, nil
+}
+
+// SetOptions replaces the pairing-time options; they take effect at the
+// next Pair or PairQR.
+func (w *WhatsApp) SetOptions(opts Options) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.opts = opts
+}
+
+// applyDeviceProps writes our identity and history request into
+// whatsmeow's process-wide DeviceProps, which are sent when pairing.
+func (w *WhatsApp) applyDeviceProps() {
+	w.mu.RLock()
+	opts := w.opts
+	w.mu.RUnlock()
+	store.SetOSInfo(deviceName, [3]uint32{0, 1, 0})
+	store.DeviceProps.RequireFullSync = proto.Bool(opts.RequestFullSync)
+	store.DeviceProps.HistorySyncConfig.FullSyncDaysLimit = nil
+	if opts.RequestFullSync && opts.FullSyncDays > 0 {
+		store.DeviceProps.HistorySyncConfig.FullSyncDaysLimit = proto.Uint32(uint32(opts.FullSyncDays))
+	}
 }
 
 // setDevice builds a whatsmeow client for device and makes it current.
@@ -155,55 +170,106 @@ func (w *WhatsApp) Connect(ctx context.Context) error {
 }
 
 func (w *WhatsApp) Pair(ctx context.Context, phone string) (string, error) {
-	if w.IsPaired() {
-		return "", ErrAlreadyPaired
-	}
 	digits, err := NormalizePhone(phone)
 	if err != nil {
 		return "", err
 	}
-
-	// Order matters: the QR channel must exist before connecting, and
-	// PairPhone only works once the first QR item shows the login socket is up.
-	qrCh, err := w.client().GetQRChannel(ctx)
+	qrCh, err := w.startPairing(ctx)
 	if err != nil {
-		return "", fmt.Errorf("opening pairing channel: %w", err)
-	}
-	if err := w.client().ConnectContext(ctx); err != nil {
-		return "", fmt.Errorf("connecting for pairing: %w", err)
+		return "", err
 	}
 
+	// PairPhone only works once the first QR item shows the login socket is up.
 	select {
 	case item, ok := <-qrCh:
 		if !ok {
-			return "", errors.New("pairing channel closed before it was ready")
+			return "", errors.New("pairing cancelled")
 		}
 		if item.Event != whatsmeow.QRChannelEventCode {
-			w.client().Disconnect()
+			w.CancelPairing()
 			return "", fmt.Errorf("pairing not ready: %s", qrFailureReason(item))
 		}
 	case <-ctx.Done():
-		w.client().Disconnect()
+		w.CancelPairing()
 		return "", ctx.Err()
 	}
 
 	code, err := w.client().PairPhone(ctx, digits, true, whatsmeow.PairClientChrome, pairDisplayName)
 	if err != nil {
-		w.client().Disconnect()
+		w.CancelPairing()
 		return "", fmt.Errorf("requesting pairing code: %w", err)
 	}
-
-	go w.watchPairing(qrCh)
+	go w.watchPairing(qrCh, false)
 	return code, nil
 }
 
+func (w *WhatsApp) PairQR(ctx context.Context) error {
+	qrCh, err := w.startPairing(ctx)
+	if err != nil {
+		return err
+	}
+	go w.watchPairing(qrCh, true)
+	return nil
+}
+
+// startPairing opens the QR channel and connects. The channel gets its own
+// cancellable context so CancelPairing can stop it the way whatsmeow
+// intends (close channel, remove handler, disconnect), while ctx keeps
+// bounding the connection a successful pairing leaves behind.
+func (w *WhatsApp) startPairing(ctx context.Context) (<-chan whatsmeow.QRChannelItem, error) {
+	if w.IsPaired() {
+		return nil, ErrAlreadyPaired
+	}
+	w.CancelPairing() // at most one pairing at a time
+	w.applyDeviceProps()
+
+	pairCtx, cancel := context.WithCancel(ctx)
+	cli := w.client()
+	qrCh, err := cli.GetQRChannel(pairCtx)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("opening pairing channel: %w", err)
+	}
+	w.mu.Lock()
+	w.cancelPair = cancel
+	w.mu.Unlock()
+	if err := cli.ConnectContext(ctx); err != nil {
+		w.CancelPairing()
+		return nil, fmt.Errorf("connecting for pairing: %w", err)
+	}
+	return qrCh, nil
+}
+
+// CancelPairing stops an in-progress Pair or PairQR. After a pairing has
+// succeeded the channel is already closed, so this can't drop the
+// resulting connection.
+func (w *WhatsApp) CancelPairing() {
+	w.mu.Lock()
+	cancel := w.cancelPair
+	w.cancelPair = nil
+	w.mu.Unlock()
+	if cancel != nil {
+		cancel()
+		// If cancelled before the first QR event, whatsmeow's emitter never
+		// started and won't disconnect for us.
+		if w.client().Store.ID == nil {
+			w.client().Disconnect()
+		}
+	}
+}
+
 // watchPairing drains the QR channel until pairing resolves. Success is
-// reported by the PairSuccess event handler; this only reports failures.
-func (w *WhatsApp) watchPairing(qrCh <-chan whatsmeow.QRChannelItem) {
+// reported by the PairSuccess event handler; this reports failures and,
+// for QR pairing, each new code. A user cancel closes the channel without
+// a terminal item, so it emits nothing.
+func (w *WhatsApp) watchPairing(qrCh <-chan whatsmeow.QRChannelItem, forwardCodes bool) {
 	for item := range qrCh {
 		switch item.Event {
-		case whatsmeow.QRChannelEventCode, whatsmeow.QRChannelSuccess.Event:
-			// Rotating QR codes are irrelevant to phone-code pairing.
+		case whatsmeow.QRChannelEventCode:
+			if forwardCodes {
+				w.emit(PairQRCode{Code: item.Code})
+			}
+		case whatsmeow.QRChannelSuccess.Event:
 		default:
 			w.emit(PairFailed{Reason: qrFailureReason(item)})
 		}
@@ -267,6 +333,7 @@ func (w *WhatsApp) announceName() {
 func (w *WhatsApp) Disconnect() { w.client().Disconnect() }
 
 func (w *WhatsApp) Close() error {
+	w.CancelPairing()
 	w.client().Disconnect()
 	if err := w.db.Close(); err != nil {
 		return fmt.Errorf("closing session db: %w", err)

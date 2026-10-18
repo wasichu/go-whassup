@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
@@ -145,5 +146,33 @@ func TestSendTextUnpaired(t *testing.T) {
 	})
 	if err := w.SendText(t.Context(), "15551234567@s.whatsapp.net", "hi"); !errors.Is(err, ErrNotPaired) {
 		t.Errorf("SendText unpaired = %v, want ErrNotPaired", err)
+	}
+}
+
+func TestPairingOptionsAppliedAtPairTime(t *testing.T) {
+	w, err := Open(t.Context(), filepath.Join(t.TempDir(), "session.db"), slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := w.Close(); err != nil {
+			t.Errorf("Close: %v", err)
+		}
+	})
+	w.CancelPairing() // nothing in progress: must be a no-op
+
+	w.SetOptions(Options{RequestFullSync: true, FullSyncDays: 400})
+	w.applyDeviceProps()
+	if !store.DeviceProps.GetRequireFullSync() || store.DeviceProps.GetHistorySyncConfig().GetFullSyncDaysLimit() != 400 {
+		t.Errorf("full sync props = %v / %d", store.DeviceProps.GetRequireFullSync(), store.DeviceProps.GetHistorySyncConfig().GetFullSyncDaysLimit())
+	}
+	if got := store.DeviceProps.GetOs(); got != deviceName {
+		t.Errorf("Os = %q, want %q", got, deviceName)
+	}
+
+	w.SetOptions(Options{})
+	w.applyDeviceProps()
+	if store.DeviceProps.GetRequireFullSync() || store.DeviceProps.GetHistorySyncConfig().FullSyncDaysLimit != nil {
+		t.Error("full sync props not reset")
 	}
 }

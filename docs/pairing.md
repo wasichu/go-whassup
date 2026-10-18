@@ -26,6 +26,28 @@ whatsmeow's automatic reconnects, not just the dial. Don't pass a short timeout
 context; use a separate timer for "how long to wait for the user". The login
 websocket gives up after about 160 s of unanswered pairing, and our wait is 3 min.
 
+## QR pairing (`PairQR`) and cancelling
+
+- `PairQR` runs the same start sequence (`startPairing`: QR channel, then connect) and
+  emits a `PairQRCode{Code}` event for each code, through the normal event path. Codes
+  rotate about every 20 s; the first lasts about 60 s. QR pairing has no display-name
+  validation, and the phone still lists us as "go-whassup" via `DeviceProps`.
+- **Two contexts.** The QR channel gets a child context that we can cancel ourselves;
+  `ConnectContext` gets the caller's long-lived context.
+  - `CancelPairing()` cancels the child context. That is whatsmeow's designed cancel
+    path: it closes the channel, removes its handler and disconnects. It emits no
+    `PairFailed`.
+  - After success the channel is already closed, so a late cancel can't drop the new
+    connection.
+  - Plain `Disconnect()` is *not* a cancel: the QR emitter would keep running.
+- Retrying after a cancel is allowed. `GetQRChannel` only refuses when already
+  connected or when a session exists.
+- **History-request options** (`request_full_sync`, `full_sync_days`) are written into
+  whatsmeow's process-wide `DeviceProps` at the start of each pairing, from
+  `WhatsApp.SetOptions`. So Settings changes apply to the next link without a restart.
+- **Not supported:** WhatsApp's newer *passkey* pairing prompt (whatsmeow emits
+  `passkey-request` items). If it appears, pairing reports it as a failure.
+
 ## Server-side restrictions on how we identify
 
 There are two separate identities, and they have different rules:
@@ -67,15 +89,6 @@ history sync. The TUI's login screen will offer the same option (see `roadmap.md
 `+1 (555) 123-4567` → `15551234567`. Quote numbers containing spaces on the
 command line.
 
-## Adding QR pairing later
-
-The QR channel is already opened during code pairing (step 1). To add QR pairing:
-- add a `PairQR(ctx) (<-chan string, error)` method to `wa.Client` that forwards
-  `QRChannelEventCode` items;
-- render the QR in the UI. That needs a QR encoder dependency, which we've
-  deliberately avoided so far.
-
-Event handling doesn't change: success and failure still arrive as `PairSuccess` / `PairFailed`.
 
 ## What a successful pairing looks like (log, info level)
 

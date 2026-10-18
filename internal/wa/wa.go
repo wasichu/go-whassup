@@ -30,6 +30,16 @@ type Client interface {
 	// it aborts pairing and stops reconnects.
 	Pair(ctx context.Context, phone string) (code string, err error)
 
+	// PairQR links this device by QR code: it connects and emits a
+	// PairQRCode event for each code to display (they rotate every ~20s).
+	// The outcome arrives as PairSuccess (then Connected) or PairFailed.
+	// ctx bounds the resulting connection, as for Pair.
+	PairQR(ctx context.Context) error
+
+	// CancelPairing stops an in-progress Pair or PairQR without emitting
+	// PairFailed. It is a no-op once pairing has succeeded.
+	CancelPairing()
+
 	// Connect connects an already-paired device. It returns ErrNotPaired if
 	// the device has never been linked. ctx bounds the connection's lifetime
 	// (including automatic reconnects), not just the dial.
@@ -80,6 +90,10 @@ type PairSuccess struct{ JID string }
 // PairFailed is emitted when pairing times out or is rejected.
 type PairFailed struct{ Reason string }
 
+// PairQRCode carries a QR code to display during PairQR. Each replaces the
+// previous one.
+type PairQRCode struct{ Code string }
+
 // Message is a chat message received live, echoed from another of the
 // user's devices, or delivered by history sync.
 type Message struct {
@@ -125,5 +139,6 @@ func (Disconnected) isEvent() {}
 func (LoggedOut) isEvent()    {}
 func (PairSuccess) isEvent()  {}
 func (PairFailed) isEvent()   {}
+func (PairQRCode) isEvent()   {}
 func (Message) isEvent()      {}
 func (HistorySync) isEvent()  {}
