@@ -581,3 +581,179 @@ func TestRecorderReadState(t *testing.T) {
 		t.Errorf("replying should mark the chat read, got %d", got)
 	}
 }
+
+func onlyMessage(t *testing.T, st *Store, chat, id string) wa.Message {
+	t.Helper()
+	msgs, err := st.Messages(t.Context(), chat, 0)
+	if err != nil {
+		t.Fatalf("Messages: %v", err)
+	}
+	for _, m := range msgs {
+		if m.ID == id {
+			return m
+		}
+	}
+	t.Fatalf("message %s not found in %v", id, ids(msgs))
+	return wa.Message{}
+}
+
+func TestEditMessage(t *testing.T) {
+	st := openStore(t, "", nil)
+	ctx := t.Context()
+	mustSave(t, st, msg(ada, "1", t0, "helo"))
+	found, err := st.EditMessage(ctx, wa.MessageEdited{Chat: ada, ID: "1", Kind: wa.KindText, Text: "hello", At: t0.Add(time.Minute)})
+	if err != nil || !found {
+		t.Fatalf("EditMessage = %v, %v", found, err)
+	}
+	// An older edit arriving late doesn't win.
+	if _, err := st.EditMessage(ctx, wa.MessageEdited{Chat: ada, ID: "1", Kind: wa.KindText, Text: "hel", At: t0.Add(30 * time.Second)}); err != nil {
+		t.Fatalf("EditMessage: %v", err)
+	}
+	if m := onlyMessage(t, st, ada, "1"); m.Text != "hello" || !m.Edited {
+		t.Errorf("after edits: %q edited=%v", m.Text, m.Edited)
+	}
+	if found, _ := st.EditMessage(ctx, wa.MessageEdited{Chat: ada, ID: "missing", Text: "x", At: t0}); found {
+		t.Error("edit of an unknown message reported found")
+	}
+}
+
+func TestEditGoesThroughCodec(t *testing.T) {
+	st := openStore(t, "", reverseCodec{})
+	mustSave(t, st, msg(ada, "1", t0, "secret"))
+	if _, err := st.EditMessage(t.Context(), wa.MessageEdited{Chat: ada, ID: "1", Kind: wa.KindText, Text: "new secret", At: t0.Add(time.Minute)}); err != nil {
+		t.Fatalf("EditMessage: %v", err)
+	}
+	var raw []byte
+	if err := st.db.QueryRowContext(t.Context(), `SELECT body FROM messages WHERE id = '1'`).Scan(&raw); err != nil {
+		t.Fatalf("raw: %v", err)
+	}
+	if string(raw) != "terces wen" {
+		t.Errorf("edited body stored as %q; edits must be sealed like any write", raw)
+	}
+}
+
+func TestDeleteMessage(t *testing.T) {
+	st := openStore(t, "", nil)
+	ctx := t.Context()
+	mustSave(t, st, msg(ada, "1", t0, "oops"), msg(ada, "2", t0.Add(time.Minute), "private"))
+	if err := st.SaveReactions(ctx, []wa.Reaction{{Chat: ada, MessageID: "1", Sender: bob, Emoji: "😂", At: t0}}); err != nil {
+		t.Fatalf("SaveReactions: %v", err)
+	}
+	if got := unreadOf(t, st, ada); got != 2 {
+		t.Fatalf("setup unread = %d", got)
+	}
+
+	if err := st.DeleteMessage(ctx, wa.MessageDeleted{Chat: ada, ID: "1", At: t0.Add(time.Hour)}); err != nil {
+		t.Fatalf("DeleteMessage: %v", err)
+	}
+	m := onlyMessage(t, st, ada, "1")
+	if !m.Deleted || m.Text != "" || len(m.Reactions) != 0 {
+		t.Errorf("deleted for everyone = %+v", m)
+	}
+	var raw []byte
+	if err := st.db.QueryRowContext(ctx, `SELECT body FROM messages WHERE id = '1'`).Scan(&raw); err != nil || len(raw) != 0 {
+		t.Errorf("deleted text must be wiped from disk, body = %q (%v)", raw, err)
+	}
+	if got := unreadOf(t, st, ada); got != 1 {
+		t.Errorf("deleted messages shouldn't count as unread, got %d", got)
+	}
+
+	if err := st.DeleteMessage(ctx, wa.MessageDeleted{Chat: ada, ID: "2", ForMe: true}); err != nil {
+		t.Fatalf("DeleteMessage for me: %v", err)
+	}
+	msgs, err := st.Messages(ctx, ada, 0)
+	if err != nil || !slices.Equal(ids(msgs), []string{"1"}) {
+		t.Errorf("delete for me should remove the row: %v, %v", ids(msgs), err)
+	}
+}
+
+func TestReactions(t *testing.T) {
+	st := openStore(t, "", nil)
+	ctx := t.Context()
+	mustSave(t, st, msg(group, "1", t0, "party?"))
+	save := func(rs ...wa.Reaction) {
+		t.Helper()
+		if err := st.SaveReactions(ctx, rs); err != nil {
+			t.Fatalf("SaveReactions: %v", err)
+		}
+	}
+	save(
+		wa.Reaction{Chat: group, MessageID: "1", Sender: ada, Emoji: "🎉", At: t0},
+		wa.Reaction{Chat: group, MessageID: "1", Sender: bob, Emoji: "🎉", At: t0.Add(time.Second)},
+		wa.Reaction{Chat: group, MessageID: "1", Sender: "me", FromMe: true, Emoji: "👍", At: t0.Add(2 * time.Second)},
+	)
+	got := onlyMessage(t, st, group, "1").Reactions
+	want := []wa.ReactionCount{{Emoji: "🎉", Count: 2}, {Emoji: "👍", Count: 1, Mine: true}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("reactions = %+v, want %+v", got, want)
+	}
+
+	// Changing a reaction replaces it; a stale change doesn't; empty removes.
+	save(wa.Reaction{Chat: group, MessageID: "1", Sender: ada, Emoji: "❤️", At: t0.Add(time.Minute)})
+	save(wa.Reaction{Chat: group, MessageID: "1", Sender: ada, Emoji: "😐", At: t0.Add(30 * time.Second)})
+	save(wa.Reaction{Chat: group, MessageID: "1", Sender: "me", FromMe: true, Emoji: "", At: t0.Add(time.Hour)})
+	got = onlyMessage(t, st, group, "1").Reactions
+	want = []wa.ReactionCount{{Emoji: "🎉", Count: 1}, {Emoji: "❤️", Count: 1}}
+	if !slices.Equal(got, want) {
+		t.Errorf("after changes = %+v, want %+v", got, want)
+	}
+}
+
+func TestPruneRemovesOrphanedReactions(t *testing.T) {
+	st := openStore(t, "", nil)
+	ctx := t.Context()
+	mustSave(t, st, msg(ada, "old", t0, "x"), msg(ada, "new", t0.AddDate(0, 0, 10), "y"))
+	if err := st.SaveReactions(ctx, []wa.Reaction{{Chat: ada, MessageID: "old", Sender: bob, Emoji: "👍", At: t0}}); err != nil {
+		t.Fatalf("SaveReactions: %v", err)
+	}
+	if _, err := st.Prune(ctx, Retention{KeepDays: 5}, t0.AddDate(0, 0, 10)); err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+	var n int
+	if err := st.db.QueryRowContext(ctx, `SELECT count(*) FROM reactions`).Scan(&n); err != nil || n != 0 {
+		t.Errorf("orphaned reactions left: %d (%v)", n, err)
+	}
+}
+
+func TestMigrateV3ToV4(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "messages.db")
+	db, err := sqlite.Open(path)
+	if err != nil {
+		t.Fatalf("sqlite.Open: %v", err)
+	}
+	ctx := t.Context()
+	for _, q := range []string{migrations[0], migrations[1], migrations[2], "PRAGMA user_version = 3",
+		`INSERT INTO chats (jid, last_message_at) VALUES ('` + ada + `', 1759320000)`,
+		`INSERT INTO messages (chat_jid, id, sender_jid, ts, from_me, kind, body) VALUES ('` + ada + `', '1', '` + ada + `', 1759320000, 0, 'text', CAST('kept' AS BLOB))`,
+	} {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatalf("v3 setup %q: %v", q, err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	st := openStore(t, path, nil)
+	if m := onlyMessage(t, st, ada, "1"); m.Text != "kept" || m.Edited || m.Deleted {
+		t.Errorf("after upgrade = %+v", m)
+	}
+}
+
+func TestRecorderAppliesEditsDeletesReactions(t *testing.T) {
+	st := openStore(t, "", nil)
+	client := &watest.Client{}
+	(&Recorder{Store: st, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}).Attach(client)
+	client.Emit(msg(ada, "1", t0, "first"))
+	client.Emit(msg(ada, "2", t0.Add(time.Minute), "second"))
+	client.Emit(wa.MessageEdited{Chat: ada, ID: "1", Kind: wa.KindText, Text: "first!", At: t0.Add(2 * time.Minute)})
+	client.Emit(wa.MessageDeleted{Chat: ada, ID: "2", At: t0.Add(3 * time.Minute)})
+	client.Emit(wa.Reaction{Chat: ada, MessageID: "1", Sender: ada, Emoji: "👍", At: t0.Add(4 * time.Minute)})
+	client.Emit(wa.HistorySync{Reactions: []wa.Reaction{{Chat: ada, MessageID: "1", Sender: bob, Emoji: "👍", At: t0}}})
+
+	if m := onlyMessage(t, st, ada, "1"); m.Text != "first!" || !m.Edited || len(m.Reactions) != 1 || m.Reactions[0].Count != 2 {
+		t.Errorf("message 1 = %+v", m)
+	}
+	if m := onlyMessage(t, st, ada, "2"); !m.Deleted {
+		t.Errorf("message 2 = %+v", m)
+	}
+}

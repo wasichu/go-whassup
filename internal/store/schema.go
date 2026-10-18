@@ -48,6 +48,20 @@ ALTER TABLE contacts ADD COLUMN business_name TEXT NOT NULL DEFAULT '';
 ALTER TABLE chats ADD COLUMN last_read_at INTEGER NOT NULL DEFAULT 0; -- unix seconds
 UPDATE chats SET last_read_at = last_message_at;
 `,
+	// 4: edits, deletes ("for everyone" keeps a placeholder) and reactions.
+	`
+ALTER TABLE messages ADD COLUMN edited_at INTEGER NOT NULL DEFAULT 0; -- unix seconds; 0 = never
+ALTER TABLE messages ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0;   -- 1 = deleted for everyone
+CREATE TABLE reactions (
+	chat_jid   TEXT NOT NULL,
+	message_id TEXT NOT NULL,
+	sender_jid TEXT NOT NULL,
+	from_me    INTEGER NOT NULL,
+	emoji      TEXT NOT NULL,
+	ts         INTEGER NOT NULL, -- unix seconds
+	PRIMARY KEY (chat_jid, message_id, sender_jid)
+) STRICT;
+`,
 }
 
 // migrate brings the schema up to date inside one transaction.

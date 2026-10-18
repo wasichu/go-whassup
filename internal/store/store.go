@@ -173,7 +173,7 @@ const titleSQL = `CASE WHEN c.is_group THEN c.name ELSE COALESCE(
 const chatSummaryQuery = `
 	SELECT c.jid, ` + titleSQL + `, c.is_group, c.last_message_at, c.last_read_at,
 	       (SELECT count(*) FROM messages m WHERE m.chat_jid = c.jid),
-	       (SELECT count(*) FROM messages m WHERE m.chat_jid = c.jid AND m.from_me = 0 AND m.ts > c.last_read_at)
+	       (SELECT count(*) FROM messages m WHERE m.chat_jid = c.jid AND m.from_me = 0 AND m.deleted = 0 AND m.ts > c.last_read_at)
 	FROM chats c LEFT JOIN contacts ct ON ct.jid = c.jid`
 
 // Chats lists chats, most recently active first.
@@ -278,7 +278,7 @@ func (s *Store) Messages(ctx context.Context, chat string, limit int) ([]wa.Mess
 		limit = -1 // SQLite: no limit
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, sender_jid, push_name, ts, from_me, kind, body, codec, is_group, sender_name FROM (
+		SELECT id, sender_jid, push_name, ts, from_me, kind, body, codec, is_group, sender_name, edited_at, deleted FROM (
 			SELECT m.*, c.is_group,
 			       COALESCE(NULLIF(ct.name, ''), NULLIF(ct.push_name, ''), NULLIF(m.push_name, ''), ct.business_name, '') AS sender_name
 			FROM messages m
@@ -296,19 +296,123 @@ func (s *Store) Messages(ctx context.Context, chat string, limit int) ([]wa.Mess
 		var ts int64
 		var body []byte
 		var codecID int
-		if err := rows.Scan(&m.ID, &m.Sender, &m.PushName, &ts, &m.FromMe, &m.Kind, &body, &codecID, &m.IsGroup, &m.SenderName); err != nil {
+		var editedAt int64
+		if err := rows.Scan(&m.ID, &m.Sender, &m.PushName, &ts, &m.FromMe, &m.Kind, &body, &codecID, &m.IsGroup, &m.SenderName, &editedAt, &m.Deleted); err != nil {
 			return nil, fmt.Errorf("loading messages: %w", err)
 		}
-		m.Timestamp = time.Unix(ts, 0)
-		if m.Text, err = s.openBody(body, codecID); err != nil {
-			return nil, err
+		m.Timestamp, m.Edited = time.Unix(ts, 0), editedAt > 0
+		if !m.Deleted {
+			if m.Text, err = s.openBody(body, codecID); err != nil {
+				return nil, err
+			}
 		}
 		msgs = append(msgs, m)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("loading messages: %w", err)
 	}
+	if err := s.attachReactions(ctx, chat, msgs); err != nil {
+		return nil, err
+	}
 	return msgs, nil
+}
+
+// attachReactions fills in each message's reaction summary.
+func (s *Store) attachReactions(ctx context.Context, chat string, msgs []wa.Message) error {
+	if len(msgs) == 0 {
+		return nil
+	}
+	byID := make(map[string]int, len(msgs))
+	for i, m := range msgs {
+		byID[m.ID] = i
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT message_id, emoji, count(*), max(from_me), min(ts) FROM reactions
+		WHERE chat_jid = ? AND message_id IN (SELECT id FROM messages WHERE chat_jid = ? AND ts >= ?)
+		GROUP BY message_id, emoji ORDER BY message_id, count(*) DESC, min(ts)`,
+		chat, chat, msgs[0].Timestamp.Unix())
+	if err != nil {
+		return fmt.Errorf("loading reactions: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var rc wa.ReactionCount
+		var first int64
+		if err := rows.Scan(&id, &rc.Emoji, &rc.Count, &rc.Mine, &first); err != nil {
+			return fmt.Errorf("loading reactions: %w", err)
+		}
+		if i, ok := byID[id]; ok {
+			msgs[i].Reactions = append(msgs[i].Reactions, rc)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("loading reactions: %w", err)
+	}
+	return nil
+}
+
+// EditMessage replaces a message's text with a newer edit. It reports
+// whether the message was found (an edit can arrive before its original).
+// Text goes through sealBody like every other write.
+func (s *Store) EditMessage(ctx context.Context, e wa.MessageEdited) (bool, error) {
+	body, codecID, err := s.sealBody(e.Text)
+	if err != nil {
+		return false, err
+	}
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE messages SET body = ?, codec = ?, kind = ?, edited_at = ?
+		WHERE chat_jid = ? AND id = ? AND deleted = 0 AND edited_at <= ?`,
+		body, codecID, e.Kind, e.At.Unix(), e.Chat, e.ID, e.At.Unix())
+	if err != nil {
+		return false, fmt.Errorf("editing message %s: %w", e.ID, err)
+	}
+	return rowsAffected(res) > 0, nil
+}
+
+// DeleteMessage applies a deletion. "For everyone" wipes the text (and
+// reactions) but keeps a placeholder row, as WhatsApp shows "This message
+// was deleted"; "for me" removes the message entirely.
+func (s *Store) DeleteMessage(ctx context.Context, d wa.MessageDeleted) error {
+	return s.inTx(ctx, "deleting message", func(tx *sql.Tx) error {
+		if d.ForMe {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM messages WHERE chat_jid = ? AND id = ?`, d.Chat, d.ID); err != nil {
+				return err
+			}
+		} else if _, err := tx.ExecContext(ctx, `
+			UPDATE messages SET body = x'', codec = 0, deleted = 1 WHERE chat_jid = ? AND id = ?`,
+			d.Chat, d.ID); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `DELETE FROM reactions WHERE chat_jid = ? AND message_id = ?`, d.Chat, d.ID)
+		return err
+	})
+}
+
+// SaveReactions applies reactions in order; an empty emoji removes the
+// sender's reaction. An older reaction never replaces a newer one.
+func (s *Store) SaveReactions(ctx context.Context, rs []wa.Reaction) error {
+	return s.inTx(ctx, "saving reactions", func(tx *sql.Tx) error {
+		for _, r := range rs {
+			if r.Emoji == "" {
+				if _, err := tx.ExecContext(ctx, `
+					DELETE FROM reactions WHERE chat_jid = ? AND message_id = ? AND sender_jid = ? AND ts <= ?`,
+					r.Chat, r.MessageID, r.Sender, r.At.Unix()); err != nil {
+					return err
+				}
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO reactions (chat_jid, message_id, sender_jid, from_me, emoji, ts) VALUES (?, ?, ?, ?, ?, ?)
+				ON CONFLICT (chat_jid, message_id, sender_jid) DO UPDATE SET
+					emoji = excluded.emoji, ts = excluded.ts, from_me = excluded.from_me
+				WHERE excluded.ts >= reactions.ts`,
+				r.Chat, r.MessageID, r.Sender, r.FromMe, r.Emoji, r.At.Unix()); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 // MarkRead records that chat was read up to at. Read state only moves
@@ -326,7 +430,7 @@ func (s *Store) MarkRead(ctx context.Context, chat string, at time.Time) error {
 func (s *Store) UnreadMessages(ctx context.Context, chat string) ([]wa.Message, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT m.id, m.sender_jid, m.ts, c.is_group FROM messages m JOIN chats c ON c.jid = m.chat_jid
-		WHERE m.chat_jid = ? AND m.from_me = 0 AND m.ts > c.last_read_at
+		WHERE m.chat_jid = ? AND m.from_me = 0 AND m.deleted = 0 AND m.ts > c.last_read_at
 		ORDER BY m.ts, m.id`, chat)
 	if err != nil {
 		return nil, fmt.Errorf("loading unread: %w", err)
@@ -402,7 +506,13 @@ func (s *Store) Prune(ctx context.Context, r Retention, now time.Time) (int64, e
 			}
 			total += rowsAffected(res)
 		}
-		return nil
+		if total == 0 {
+			return nil
+		}
+		// Reactions to pruned messages go with them.
+		_, err := tx.ExecContext(ctx, `DELETE FROM reactions WHERE NOT EXISTS (
+			SELECT 1 FROM messages m WHERE m.chat_jid = reactions.chat_jid AND m.id = reactions.message_id)`)
+		return err
 	})
 	return total, err
 }

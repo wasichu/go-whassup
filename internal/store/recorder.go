@@ -48,6 +48,21 @@ func (r *Recorder) Handle(evt wa.Event) {
 		}
 	case wa.ChatRead:
 		r.markRead(ctx, v.Chat, v.At)
+	case wa.MessageEdited:
+		found, err := r.Store.EditMessage(ctx, v)
+		if err != nil {
+			r.Log.Error("recording edit", "id", v.ID, "err", err)
+		} else if !found {
+			r.Log.Debug("edit for a message we don't have", "id", v.ID)
+		}
+	case wa.MessageDeleted:
+		if err := r.Store.DeleteMessage(ctx, v); err != nil {
+			r.Log.Error("recording delete", "id", v.ID, "err", err)
+		}
+	case wa.Reaction:
+		if err := r.Store.SaveReactions(ctx, []wa.Reaction{v}); err != nil {
+			r.Log.Error("recording reaction", "id", v.MessageID, "err", err)
+		}
 	case wa.Contacts:
 		if err := r.Store.SaveContacts(ctx, v.List); err != nil {
 			r.Log.Error("recording contacts", "count", len(v.List), "err", err)
@@ -60,6 +75,9 @@ func (r *Recorder) Handle(evt wa.Event) {
 			r.Log.Error("recording push names", "err", err)
 		}
 		r.saveMessages(ctx, v.Messages)
+		if err := r.Store.SaveReactions(ctx, v.Reactions); err != nil {
+			r.Log.Error("recording history reactions", "err", err)
+		}
 		for _, c := range v.Chats {
 			if err := r.Store.SetUnreadFromPhone(ctx, c.JID, c.UnreadCount); err != nil {
 				r.Log.Error("recording unread count", "chat", c.JID, "err", err)
@@ -101,8 +119,7 @@ func (r *Recorder) saveMessages(ctx context.Context, msgs []wa.Message) {
 	keep := make([]wa.Message, 0, len(msgs))
 	names := map[string]string{}
 	for _, m := range msgs {
-		// Reactions would otherwise show up as messages and bump chat
-		// activity; they'll be attached to their targets in a later step.
+		// Reactions arrive as wa.Reaction events; never store one as a message.
 		if m.Kind == wa.KindReaction {
 			continue
 		}
