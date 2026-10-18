@@ -59,6 +59,10 @@ type Client interface {
 	// ErrNotPaired before pairing, and an error while disconnected.
 	SendText(ctx context.Context, chat, text string) error
 
+	// MarkRead reports msgs (incoming messages in chat) as read according
+	// to mode. ReadLocal sends nothing and returns nil.
+	MarkRead(ctx context.Context, chat string, msgs []Message, mode ReadMode) error
+
 	// OwnJID is the linked account's chat key (e.g. for the chat with
 	// yourself), or "" before pairing.
 	OwnJID() string
@@ -72,6 +76,15 @@ type Client interface {
 	// Close disconnects and releases the session store.
 	Close() error
 }
+
+// ReadMode says who learns that the user read messages.
+type ReadMode string
+
+const (
+	ReadLocal    ReadMode = "local"    // nobody: nothing is sent
+	ReadDevices  ReadMode = "devices"  // the user's other devices ("read-self")
+	ReadEveryone ReadMode = "everyone" // also the senders (blue ticks)
+)
 
 // Event is any value delivered to handlers registered with AddEventHandler.
 type Event interface{ isEvent() }
@@ -129,9 +142,16 @@ func (m Message) Summary() string {
 
 // Chat describes a conversation, as delivered by history sync.
 type Chat struct {
-	JID     string // stable chat key
-	Name    string // group subject or contact name; may be empty
-	IsGroup bool
+	JID         string // stable chat key
+	Name        string // group subject or contact name; may be empty
+	IsGroup     bool
+	UnreadCount int // unread messages per the phone at sync time
+}
+
+// ChatRead reports that the user read a chat on another device, up to At.
+type ChatRead struct {
+	Chat string
+	At   time.Time
 }
 
 // Contact is a person's names as known to WhatsApp. Empty fields are
@@ -168,3 +188,4 @@ func (PairQRCode) isEvent()   {}
 func (Message) isEvent()      {}
 func (HistorySync) isEvent()  {}
 func (Contacts) isEvent()     {}
+func (ChatRead) isEvent()     {}

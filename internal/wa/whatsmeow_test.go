@@ -176,3 +176,34 @@ func TestPairingOptionsAppliedAtPairTime(t *testing.T) {
 		t.Error("full sync props not reset")
 	}
 }
+
+func TestMarkReadLocalSendsNothing(t *testing.T) {
+	w, err := Open(t.Context(), filepath.Join(t.TempDir(), "session.db"), slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := w.Close(); err != nil {
+			t.Errorf("Close: %v", err)
+		}
+	})
+	msgs := []Message{{ID: "1", Chat: "15551234567@s.whatsapp.net"}}
+	if err := w.MarkRead(t.Context(), "15551234567@s.whatsapp.net", msgs, ReadLocal); err != nil {
+		t.Errorf("local mode should be a no-op, got %v", err)
+	}
+	if err := w.MarkRead(t.Context(), "15551234567@s.whatsapp.net", msgs, ReadDevices); !errors.Is(err, ErrNotPaired) {
+		t.Errorf("unpaired devices mode = %v, want ErrNotPaired", err)
+	}
+}
+
+func TestHandleEventChatRead(t *testing.T) {
+	w, got := newTestWhatsApp(t)
+	at := time.Unix(1700000000, 0)
+	chat := types.NewJID("15551234567", types.DefaultUserServer)
+	w.handleEvent(&events.Receipt{MessageSource: types.MessageSource{Chat: chat, IsFromMe: true}, Type: types.ReceiptTypeReadSelf, Timestamp: at})
+	w.handleEvent(&events.Receipt{MessageSource: types.MessageSource{Chat: chat}, Type: types.ReceiptTypeRead, Timestamp: at}) // someone read OUR message: not a ChatRead
+	want := ChatRead{Chat: chat.String(), At: at}
+	if len(*got) != 1 || (*got)[0] != want {
+		t.Errorf("events = %#v, want [%#v]", *got, want)
+	}
+}

@@ -339,6 +339,55 @@ func (w *WhatsApp) SendText(ctx context.Context, chat, text string) error {
 	return nil
 }
 
+func (w *WhatsApp) MarkRead(ctx context.Context, chat string, msgs []Message, mode ReadMode) error {
+	if mode == ReadLocal || len(msgs) == 0 {
+		return nil
+	}
+	cli := w.client()
+	if cli.Store.ID == nil {
+		return ErrNotPaired
+	}
+	chatJID, err := types.ParseJID(chat)
+	if err != nil {
+		return fmt.Errorf("bad chat %q: %w", chat, err)
+	}
+	receipt := types.ReceiptTypeRead
+	if mode == ReadDevices {
+		receipt = types.ReceiptTypeReadSelf
+	}
+	// One receipt per sender: whatsmeow requires that, and needs the sender
+	// in groups (it's implied in DMs).
+	bySender := map[string][]types.MessageID{}
+	var order []string
+	for _, m := range msgs {
+		if m.FromMe {
+			continue
+		}
+		sender := ""
+		if chatJID.Server == types.GroupServer {
+			sender = m.Sender
+		}
+		if _, ok := bySender[sender]; !ok {
+			order = append(order, sender)
+		}
+		bySender[sender] = append(bySender[sender], m.ID)
+	}
+	var errs []error
+	for _, sender := range order {
+		var senderJID types.JID
+		if sender != "" {
+			if senderJID, err = types.ParseJID(sender); err != nil {
+				errs = append(errs, fmt.Errorf("bad sender %q: %w", sender, err))
+				continue
+			}
+		}
+		if err := cli.MarkRead(ctx, bySender[sender], time.Now(), chatJID, senderJID, receipt); err != nil {
+			errs = append(errs, fmt.Errorf("marking read in %s: %w", chat, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
 // announceName tells the server our push name so recipients don't see "-"
 // as the sender. It uses "unavailable" so this doesn't mark the user online
 // or switch on active read receipts.
@@ -425,6 +474,15 @@ func (w *WhatsApp) handleEvent(evt any) {
 			pn = p
 		}
 		w.emit(Contacts{List: []Contact{{JID: w.resolveKey(v.JID, pn), Name: name}}})
+	case *events.MarkChatAsRead:
+		if v.Action.GetRead() {
+			w.emit(ChatRead{Chat: w.resolveKey(v.JID, types.EmptyJID), At: v.Timestamp})
+		}
+	case *events.Receipt:
+		// Our own other device read an incoming message.
+		if v.IsFromMe && (v.Type == types.ReceiptTypeRead || v.Type == types.ReceiptTypeReadSelf) {
+			w.emit(ChatRead{Chat: w.resolveKey(v.Chat, types.EmptyJID), At: v.Timestamp})
+		}
 	case *events.PushName:
 		w.emit(Contacts{List: []Contact{{JID: w.resolveKey(v.JID, v.JIDAlt), PushName: v.NewPushName}}})
 	case *events.BusinessName:

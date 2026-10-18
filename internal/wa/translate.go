@@ -89,7 +89,10 @@ func historyFromProto(data *waHistorySync.HistorySync, parse webMessageParser, r
 		if name == "" {
 			name = conv.GetDisplayName()
 		}
-		h.Chats = append(h.Chats, Chat{JID: chatKey, Name: name, IsGroup: chatJID.Server == types.GroupServer})
+		h.Chats = append(h.Chats, Chat{
+			JID: chatKey, Name: name, IsGroup: chatJID.Server == types.GroupServer,
+			UnreadCount: int(conv.GetUnreadCount()),
+		})
 
 		for _, hm := range conv.GetMessages() {
 			evt, err := parse(chatJID, hm.GetMessage())

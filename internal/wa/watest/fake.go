@@ -27,6 +27,8 @@ type Client struct {
 	// SendErr fails SendText; otherwise sent messages are emitted and recorded.
 	SendErr error
 	Sent    []wa.Message
+	// MarkRead calls with a mode other than ReadLocal.
+	Reads []ReadCall
 	// Events emitted synchronously, in order, from a successful Pair,
 	// PairQR or Connect.
 	PairEvents    []wa.Event
@@ -137,6 +139,34 @@ func (c *Client) SendText(_ context.Context, chat, text string) error {
 	c.mu.Unlock()
 	c.Emit(m)
 	return nil
+}
+
+// ReadCall records one MarkRead call that would send something.
+type ReadCall struct {
+	Chat string
+	IDs  []string
+	Mode wa.ReadMode
+}
+
+func (c *Client) MarkRead(_ context.Context, chat string, msgs []wa.Message, mode wa.ReadMode) error {
+	if mode == wa.ReadLocal || len(msgs) == 0 {
+		return nil
+	}
+	call := ReadCall{Chat: chat, Mode: mode}
+	for _, m := range msgs {
+		call.IDs = append(call.IDs, m.ID)
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.Reads = append(c.Reads, call)
+	return nil
+}
+
+// ReadCalls returns MarkRead calls that would have sent receipts.
+func (c *Client) ReadCalls() []ReadCall {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.Reads)
 }
 
 // SentMessages returns what SendText sent, safely for concurrent use.
