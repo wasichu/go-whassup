@@ -1,7 +1,8 @@
 # Homebrew (plan)
 
-Goal: `brew install` for macOS (and Linux) users. Not started; needs the repo to be
-public and a tagged release first.
+Goal: `brew install wasichu/tap/go-whassup` for macOS (and Linux) users, from our own
+tap. Decided 2026-10-18: **our tap only**; homebrew-core is not planned (see below). Not
+started; it needs the repo to be public and a tagged release first.
 
 Checked against Homebrew's docs on 2026-10-18:
 [Acceptable Formulae](https://docs.brew.sh/Acceptable-Formulae) and
@@ -55,7 +56,9 @@ terminal (`go-whassup demo` is interactive).
   bottles for that PR.
 - Until then, the bump is one manual `brew bump-formula-pr` per release.
 
-## 3. homebrew-core (maybe, later)
+## 3. homebrew-core: not planned
+
+Kept for the record, in case it's ever revisited.
 
 What core requires, and where we stand:
 
@@ -80,4 +83,3 @@ settle it, and the tap works regardless.
    `audit`.
 3. Add the tap's install line to the README.
 4. Automate the bump on release.
-5. Revisit homebrew-core once the project is established.

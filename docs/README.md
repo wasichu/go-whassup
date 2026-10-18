@@ -11,4 +11,4 @@ change to behavior described here updates the doc **in the same commit**.
 | [usage.md](usage.md) | Commands and flags |
 | [config.md](config.md) | Config file, design, and every setting |
 | [roadmap.md](roadmap.md) | Where we are and what's next |
-| [homebrew.md](homebrew.md) | Plan for `brew install`: our tap first, maybe homebrew-core later |
+| [homebrew.md](homebrew.md) | Plan for `brew install` from our own tap |
