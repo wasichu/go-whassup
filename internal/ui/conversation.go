@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -16,8 +17,10 @@ import (
 // conversation is the right pane: header, message history and input.
 type conversation struct {
 	chat     store.ChatSummary
-	cached   map[string]bool // attachments already on disk, by message ID
-	newFrom  time.Time       // messages after this get a "new" divider (set on opening)
+	cached   map[string]bool   // attachments already on disk, by message ID
+	mentions map[string]string // phone digits -> display name, for @mentions
+	own      string            // the user's own JID, to highlight mentions of them
+	newFrom  time.Time         // messages after this get a "new" divider (set on opening)
 	msgs     []wa.Message
 	viewport viewport.Model
 	input    textinput.Model
@@ -75,7 +78,7 @@ func (c *conversation) setMessages(msgs []wa.Message) {
 }
 
 func (c *conversation) render(follow bool) {
-	content := renderMessages(c.msgs, c.chat, c.width, c.newFrom, c.cached)
+	content := renderMessages(c.msgs, c.chat, c.width, renderOpts{newFrom: c.newFrom, cached: c.cached, mentions: c.mentions, own: c.own})
 	// Like chat apps, anchor short conversations to the bottom, by the input.
 	if gap := c.viewport.Height() - lipgloss.Height(content); gap > 0 {
 		content = strings.Repeat("\n", gap) + content
@@ -101,8 +104,14 @@ func (c *conversation) view(width, height int, own string) string {
 		return lipgloss.NewStyle().Width(width).Height(height).Render(faintStyle.Render("Select a chat"))
 	}
 	header := paneTitleStyle.Render(chatTitle(c.chat, own))
-	if c.chat.Name != "" {
-		header += "  " + faintStyle.Render(c.chat.JID)
+	switch {
+	case c.chat.IsGroup && c.chat.MemberCount > 0:
+		header += "  " + faintStyle.Render(fmt.Sprintf("%d members · i for info", c.chat.MemberCount))
+	case c.chat.IsGroup:
+		header += "  " + faintStyle.Render("group · i for info")
+	case c.chat.Name != "":
+		user, _, _ := strings.Cut(c.chat.JID, "@")
+		header += "  " + faintStyle.Render("+"+user)
 	}
 	parts := []string{
 		lipgloss.NewStyle().MaxWidth(width).Render(header),
@@ -113,9 +122,18 @@ func (c *conversation) view(width, height int, own string) string {
 	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Render(strings.Join(parts, "\n"))
 }
 
+// renderOpts carries what renderMessages needs besides the messages.
+type renderOpts struct {
+	newFrom  time.Time         // "N new" divider before the first incoming message after this
+	cached   map[string]bool   // message IDs whose attachment is on disk
+	mentions map[string]string // phone digits -> display name
+	own      string            // user's JID: mentions of them are highlighted
+}
+
 // renderMessages formats msgs as wrapped lines with day separators, and a
-// "N new" divider before the first incoming message after newFrom (if set).
-func renderMessages(msgs []wa.Message, chat store.ChatSummary, width int, newFrom time.Time, cached map[string]bool) string {
+// "N new" divider before the first incoming message after opts.newFrom.
+func renderMessages(msgs []wa.Message, chat store.ChatSummary, width int, opts renderOpts) string {
+	newFrom, cached := opts.newFrom, opts.cached
 	if width <= 0 {
 		return ""
 	}
@@ -152,7 +170,7 @@ func renderMessages(msgs []wa.Message, chat store.ChatSummary, width int, newFro
 		if m.FromMe {
 			name = fromMeStyle.Render("me")
 		}
-		body := m.Summary()
+		body := renderMentions(m.Summary(), opts.mentions, opts.own)
 		switch {
 		case m.Deleted:
 			body = deletedStyle.Render("This message was deleted")
@@ -225,4 +243,37 @@ func humanSize(n int64) string {
 		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
 	}
 	return fmt.Sprintf("%.1f GB", float64(n)/(1<<30))
+}
+
+var mentionRE = regexp.MustCompile(`@(\d{5,15})\b`)
+
+// renderMentions shows "@15551234567" as "@Ada" (styled), highlighting
+// mentions of the user. Unknown numbers stay as they are.
+func renderMentions(text string, names map[string]string, own string) string {
+	ownUser, _, _ := strings.Cut(own, "@")
+	return mentionRE.ReplaceAllStringFunc(text, func(tok string) string {
+		digits := tok[1:]
+		if digits == ownUser && ownUser != "" {
+			return myMentionStyle.Render("@you")
+		}
+		if name, ok := names[digits]; ok {
+			return mentionStyle.Render("@" + name)
+		}
+		return tok
+	})
+}
+
+// mentionedDigits lists the phone numbers mentioned in msgs.
+func mentionedDigits(msgs []wa.Message) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, m := range msgs {
+		for _, match := range mentionRE.FindAllStringSubmatch(m.Text, -1) {
+			if !seen[match[1]] {
+				seen[match[1]] = true
+				out = append(out, match[1])
+			}
+		}
+	}
+	return out
 }

@@ -67,7 +67,9 @@ step lands or the plan changes.
    - a policy for the media cache under encryption;
    - on macOS, setting the quarantine attribute on downloads;
    - inline image previews via Kitty graphics.
-5. **Groups:** names from group info, participants, mentions.
+5. [x] **Groups:** names and topics from group info, participants with admins (`i`),
+   member counts, `@mentions` shown as names (and `@you`). *(Live test pending.)*
+   Follow-up: typing mentions when sending (autocomplete).
 6. **Message search** (local, SQLite FTS5). Unavailable while encryption is on
    (decided); the UI says so. Chat/contact name search is unaffected.
 7. **Encryption at rest** via the `store.Codec` seam:

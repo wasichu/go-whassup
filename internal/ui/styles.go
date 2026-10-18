@@ -23,5 +23,7 @@ var (
 	deletedStyle     = lipgloss.NewStyle().Foreground(muted).Italic(true)
 	reactionStyle    = lipgloss.NewStyle().Foreground(muted)
 	myReactionStyle  = lipgloss.NewStyle().Foreground(accent).Bold(true)
+	mentionStyle     = lipgloss.NewStyle().Foreground(accent)
+	myMentionStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(accent).Bold(true)
 	codeStyle        = lipgloss.NewStyle().Bold(true).Foreground(accent).Padding(0, 2)
 )

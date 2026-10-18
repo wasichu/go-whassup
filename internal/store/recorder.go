@@ -76,6 +76,10 @@ func (r *Recorder) Handle(evt wa.Event) {
 		if err := r.Store.SaveReactions(ctx, []wa.Reaction{v}); err != nil {
 			r.Log.Error("recording reaction", "id", v.MessageID, "err", err)
 		}
+	case wa.Groups:
+		if err := r.Store.SaveGroups(ctx, v.List); err != nil {
+			r.Log.Error("recording groups", "count", len(v.List), "err", err)
+		}
 	case wa.Contacts:
 		if err := r.Store.SaveContacts(ctx, v.List); err != nil {
 			r.Log.Error("recording contacts", "count", len(v.List), "err", err)

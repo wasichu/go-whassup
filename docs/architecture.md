@@ -105,6 +105,11 @@ There are two kinds of consumers:
   (`local-only` / `read-receipts-off` / `read-receipts-on`), mapped by `ui.readMode`. The UI
   decides *when* (after a dwell timer while the terminal is focused, via
   `tea.FocusMsg`/`BlurMsg`), and the store records it.
+- **Groups.** `wa.Groups` is a snapshot from `GetJoinedGroups` (one request after
+  `Connected`, at most hourly), plus single groups on `JoinedGroup` and re-fetched on
+  `GroupInfo` changes. Participants are keyed by phone number where known. Mentions of
+  privacy IDs in text are rewritten to phone digits on arrival (`normalizeMentions`), so
+  the UI resolves them like any contact.
 - **History sync** arrives as `wa.HistorySync{Chats, Messages, PushNames}`, parsed with
   whatsmeow's `ParseWebMessage`. Empty batches aren't emitted. App-state sync,
   receipts and presence are still only logged at debug level.

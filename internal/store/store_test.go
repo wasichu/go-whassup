@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -867,5 +868,55 @@ func TestUndecodableMediaKeepsMessage(t *testing.T) {
 	got := onlyMessage(t, st, ada, "1")
 	if got.Media != nil || got.Text != "cat" {
 		t.Errorf("message = %+v; want it shown, without media", got)
+	}
+}
+
+func TestGroupsDetailsAndNames(t *testing.T) {
+	st := openStore(t, "", nil)
+	ctx := t.Context()
+	carol := "15550000002@s.whatsapp.net"
+	if err := st.SaveContacts(ctx, []wa.Contact{{JID: ada, Name: "Ada"}, {JID: bob, PushName: "bobby"}}); err != nil {
+		t.Fatalf("SaveContacts: %v", err)
+	}
+	if err := st.SaveGroups(ctx, []wa.Group{{
+		JID: group, Name: "Book club", Topic: "chapter 3",
+		Participants: []wa.Participant{{JID: bob}, {JID: ada, Admin: true}, {JID: carol}},
+	}}); err != nil {
+		t.Fatalf("SaveGroups: %v", err)
+	}
+	d, err := st.Details(ctx, group)
+	if err != nil {
+		t.Fatalf("Details: %v", err)
+	}
+	if d.Title() != "Book club" || d.Topic != "chapter 3" || !d.IsGroup || d.MemberCount != 3 {
+		t.Errorf("details = %+v", d)
+	}
+	var names []string
+	for _, m := range d.Members {
+		names = append(names, fmt.Sprintf("%s/%v", m.Name, m.Admin))
+	}
+	// Admins first, then named members alphabetically, unnamed last.
+	if want := []string{"Ada/true", "bobby/false", "/false"}; !slices.Equal(names, want) {
+		t.Errorf("members = %v, want %v", names, want)
+	}
+
+	// A later update without participants keeps the list; a rename sticks.
+	if err := st.SaveGroups(ctx, []wa.Group{{JID: group, Name: "Book club 2"}}); err != nil {
+		t.Fatalf("SaveGroups: %v", err)
+	}
+	if d, err := st.Details(ctx, group); err != nil || d.Title() != "Book club 2" || len(d.Members) != 3 {
+		t.Errorf("after rename = %+v, %v", d, err)
+	}
+	// Membership is replaced as a whole.
+	if err := st.SaveGroups(ctx, []wa.Group{{JID: group, Participants: []wa.Participant{{JID: ada}}}}); err != nil {
+		t.Fatalf("SaveGroups: %v", err)
+	}
+	if d, err := st.Details(ctx, group); err != nil || len(d.Members) != 1 || d.Title() != "Book club 2" {
+		t.Errorf("after membership change = %+v, %v", d, err)
+	}
+
+	got, err := st.Names(ctx, []string{ada, bob, carol})
+	if err != nil || got[ada] != "Ada" || got[bob] != "bobby" || got[carol] != "" {
+		t.Errorf("Names = %v, %v", got, err)
 	}
 }

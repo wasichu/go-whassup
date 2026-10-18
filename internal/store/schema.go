@@ -75,6 +75,16 @@ DELETE FROM messages WHERE kind IN (
 ALTER TABLE messages ADD COLUMN media BLOB;
 ALTER TABLE messages ADD COLUMN media_codec INTEGER NOT NULL DEFAULT 0;
 `,
+	// 7: group metadata.
+	`
+ALTER TABLE chats ADD COLUMN topic TEXT NOT NULL DEFAULT '';
+CREATE TABLE group_participants (
+	group_jid TEXT NOT NULL,
+	user_jid  TEXT NOT NULL,
+	is_admin  INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (group_jid, user_jid)
+) STRICT;
+`,
 }
 
 // migrate brings the schema up to date inside one transaction.

@@ -2,7 +2,9 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -21,6 +23,8 @@ type Store interface {
 	Messages(ctx context.Context, chat string, limit int) ([]wa.Message, error)
 	Directory(ctx context.Context) ([]store.ChatSummary, error)
 	UnreadMessages(ctx context.Context, chat string) ([]wa.Message, error)
+	Details(ctx context.Context, chat string) (store.ChatDetails, error)
+	Names(ctx context.Context, jids []string) (map[string]string, error)
 	MarkRead(ctx context.Context, chat string, at time.Time) error
 }
 
@@ -68,10 +72,11 @@ type (
 		err   error
 	}
 	messagesLoadedMsg struct {
-		chat   string
-		msgs   []wa.Message
-		cached map[string]bool // message IDs whose attachment is on disk
-		err    error
+		chat     string
+		msgs     []wa.Message
+		cached   map[string]bool   // message IDs whose attachment is on disk
+		mentions map[string]string // phone digits -> name, for @mentions
+		err      error
 	}
 	connectResultMsg struct{ err error }
 	sendResultMsg    struct{ err error }
@@ -112,7 +117,22 @@ func loadMessages(ctx context.Context, deps Deps, chat string) tea.Cmd {
 				}
 			}
 		}
-		return messagesLoadedMsg{chat: chat, msgs: msgs, cached: cached, err: err}
+		mentions := map[string]string{}
+		if digits := mentionedDigits(msgs); len(digits) > 0 {
+			jids := make([]string, len(digits))
+			for i, d := range digits {
+				jids[i] = d + "@s.whatsapp.net"
+			}
+			names, nerr := deps.Store.Names(ctx, jids)
+			if nerr != nil {
+				err = errors.Join(err, nerr)
+			}
+			for jid, name := range names {
+				user, _, _ := strings.Cut(jid, "@")
+				mentions[user] = name
+			}
+		}
+		return messagesLoadedMsg{chat: chat, msgs: msgs, cached: cached, mentions: mentions, err: err}
 	}
 }
 

@@ -44,15 +44,26 @@ the status line. If the device isn't linked, it opens the **login screen** inste
 | `/` | find a chat or contact (new chats too) | (typed) |
 | `o` | this chat's attachments: open (downloads if needed) | (typed) |
 | `a` | send a file to this chat | (typed) |
+| `i` | chat info: number, or a group's topic and members | (typed) |
 | `L` | login screen: link, or re-link | (typed) |
 | `,` | settings | (typed) |
 | `?` | key help (any key closes) | (typed) |
 | `q` | quit | (typed) |
 | `ctrl+c` | quit | quit |
 
-Shortcuts only act from the chat list. In the message box `q`, `/`, `o`, `a`, `L`, `,` and `?` are just
+Shortcuts only act from the chat list. In the message box `q`, `/`, `o`, `a`, `i`, `L`, `,` and `?` are just
 characters. Hints in the status line are generated from the same keymap as the
 handlers (`internal/ui/keys.go`), so they can't drift.
+
+### Groups and mentions
+
+- Group names, topics and member lists come from WhatsApp: one request for all your
+  groups after connecting (at most hourly), and a refresh of a single group when it
+  changes. Group headers show the member count.
+- **`i`** shows a group's topic and members (admins first), or a person's number and
+  the name they chose for themselves.
+- **Mentions** like `@15551234567` show as **@Ada** when the number is a known contact,
+  and as a highlighted **@you** when it's you.
 
 ### Attachments
 
