@@ -8,7 +8,17 @@ linters:
     - errorlint  # %w wrapping, errors.Is/As
     - forbidigo  # Bubble Tea owns the terminal
     - misspell
+    - funlen    # function length
+    - gocognit  # cognitive complexity
+    - nestif    # deeply nested ifs
   settings:
+    funlen:
+      lines: 80
+      statements: 50
+    gocognit:
+      min-complexity: 20
+    nestif:
+      min-complexity: 4
     errcheck:
       # AGENTS.md: no `_ =` error discards.
       check-blank: true
@@ -45,6 +55,26 @@ linters:
       # deferred Close on read paths / log files is fine to ignore
       - linters: [errcheck]
         source: "^\\s*defer .*\\.Close\\(\\)"
+      # Table-driven tests are long by nature.
+      - path: _test\.go
+        linters: [funlen, gocognit]
+      # Known offenders, being refactored (code-quality pass, 2026-10-18).
+      # Each refactor commit deletes the entries it fixes; don't add new ones.
+      - {path: internal/app/app\.go, linters: [gocognit, funlen], text: "`Run`|'Run'"}
+      - {path: internal/app/encryption\.go, linters: [gocognit], text: "func `setUpEncryption`"}
+      - {path: internal/app/encryption\.go, linters: [nestif], text: "source == config.KeySourceKeyring"}
+      - {path: internal/store/keys\.go, linters: [gocognit], text: "resealMessages|resealReactions"}
+      - {path: internal/store/recorder\.go, linters: [gocognit], text: "Handle"}
+      - {path: internal/store/store\.go, linters: [gocognit, funlen], text: "Messages|attachReactions|Prune"}
+      - {path: internal/store/store\.go, linters: [nestif], text: "m.Deleted"}
+      - {path: internal/ui/cmds\.go, linters: [gocognit], text: "loadMessages"}
+      - {path: internal/ui/conversation\.go, linters: [gocognit], text: "renderMessages"}
+      - {path: internal/ui/info\.go, linters: [gocognit, nestif], text: "infoView|d.IsGroup"}
+      - {path: internal/ui/login\.go, linters: [gocognit, funlen], text: "loginKey|loginView"}
+      - {path: internal/ui/model\.go, linters: [gocognit, funlen], text: "Update|handleKey"}
+      - {path: internal/ui/settings\.go, linters: [gocognit, funlen], text: "settingsKey"}
+      - {path: internal/wa/translate\.go, linters: [gocognit, nestif], text: "historyFromProto|classifyMessage|sem != nil"}
+      - {path: internal/wa/whatsmeow\.go, linters: [funlen], text: "handleEvent"}
 
 formatters:
   enable:

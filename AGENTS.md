@@ -21,7 +21,7 @@ nothing else to install or run.
 | `just build` | Builds `bin/wa-tui` |
 | `just run [args]` | Builds and runs: no args = TUI (needs a real terminal); `login [phone]` = pair via phone code; `listen` = headless, prints incoming messages. Flags work before or after the subcommand. Full usage: `docs/usage.md`. |
 | `just test [flags]` | `go test ./...` with extra flags, e.g. `just test -run TestX -v` |
-| `just lint [flags]` | golangci-lint. `.golangci.yml` enforces import boundaries, bans cgo sqlite and Bubble Tea v1, and forbids printing to the terminal and discarding errors. Fix the code; don't weaken the config. |
+| `just lint [flags]` | golangci-lint. `.golangci.yml` enforces import boundaries, bans cgo sqlite and Bubble Tea v1, forbids printing to the terminal and discarding errors, and limits function size/complexity (`funlen` 80 lines/50 statements, `gocognit` 20, `nestif` 4; tests exempt from the first two). Fix the code; don't weaken the config or add exclusions. |
 | `just fmt` / `just tidy` | gofmt / `go mod tidy` |
 | `just logs` | Tails the app log |
 | `just index` | Rebuilds the graft context graph |
