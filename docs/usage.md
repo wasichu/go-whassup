@@ -7,6 +7,7 @@ wa-tui login [-relink] [phone]      link this device with a phone-number code;
 wa-tui listen [-debug]              connect and print incoming messages
 wa-tui db chats                     list stored chats (reads messages.db; no network)
 wa-tui db messages [-n N] <chat>    show a stored chat's newest N messages (default 20, 0 = all)
+wa-tui db search [-n N] <words>     search stored messages, newest matches first
 ```
 
 - `login` and `listen` also **store** everything they receive, including the history
@@ -42,6 +43,7 @@ the status line. If the device isn't linked, it opens the **login screen** inste
 | `esc` | | back to chat list |
 | `pgup`/`pgdn` | scroll messages | scroll messages |
 | `/` | find a chat or contact (new chats too) | (typed) |
+| `s` | search message text | (typed) |
 | `o` | this chat's attachments: open (downloads if needed) | (typed) |
 | `a` | send a file to this chat | (typed) |
 | `i` | chat info: number, or a group's topic and members | (typed) |
@@ -51,9 +53,19 @@ the status line. If the device isn't linked, it opens the **login screen** inste
 | `q` | quit | (typed) |
 | `ctrl+c` | quit | quit |
 
-Shortcuts only act from the chat list. In the message box `q`, `/`, `o`, `a`, `i`, `L`, `,` and `?` are just
+Shortcuts only act from the chat list. In the message box `q`, `/`, `s`, `o`, `a`, `i`, `L`, `,` and `?` are just
 characters. Hints in the status line are generated from the same keymap as the
 handlers (`internal/ui/keys.go`), so they can't drift.
+
+### Search (`s`)
+
+- Searches the text of messages stored on this computer (WhatsApp's servers can't
+  search; see `storage.md`). All words must match, the last may be a prefix, and
+  accents are ignored (`cafe` finds *Café*). Newest matches first, up to 200.
+- `enter` opens the chat at that message, highlighted. A hit older than the 500 most
+  recent messages loaded per chat says so instead.
+- **Unavailable while encryption is on.** Finding chats and contacts by name (`/`) still
+  works.
 
 ### Groups and mentions
 

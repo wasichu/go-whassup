@@ -23,6 +23,7 @@ const usage = `Usage:
   wa-tui db chats                     list stored chats (reads messages.db; no network)
   wa-tui db messages [-n N] <chat>    show a stored chat's newest N messages;
                                       <chat> is a name, phone number or JID
+  wa-tui db search [-n N] <words>     search stored messages (newest N matches)
 
 Flags may come before or after the subcommand.
 `
@@ -34,6 +35,7 @@ var commands = map[string]struct{ min, max int }{
 	"listen":      {0, 0},
 	"db chats":    {0, 0},
 	"db messages": {1, 1},
+	"db search":   {1, 64}, // words may be passed unquoted
 }
 
 // parseArgs accepts flags before and/or after the subcommand, so
@@ -62,7 +64,7 @@ func parseArgs(args []string, errOut io.Writer) (invocation, error) {
 	}
 	if inv.cmd == "db" {
 		if fs.NArg() == 0 {
-			return inv, fmt.Errorf("db: want a subcommand: chats or messages")
+			return inv, fmt.Errorf("db: want a subcommand: chats, messages or search")
 		}
 		inv.cmd = "db " + fs.Arg(0)
 		if err := fs.Parse(fs.Args()[1:]); err != nil {

@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/wasichu/go-whassup/internal/config"
 	"github.com/wasichu/go-whassup/internal/headless"
@@ -71,6 +72,8 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 		return console.Chats(ctx, st)
 	case "db messages":
 		return console.Messages(ctx, st, inv.args[0], inv.limit)
+	case "db search":
+		return console.Search(ctx, st, strings.Join(inv.args, " "), inv.limit)
 	}
 
 	client, err := wa.Open(ctx, p.SessionDB, log, pairingOptions(cfg))

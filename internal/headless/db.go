@@ -3,6 +3,7 @@ package headless
 import (
 	"context"
 	"fmt"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/wasichu/go-whassup/internal/store"
@@ -51,6 +52,30 @@ func (c Console) Messages(ctx context.Context, st *store.Store, query string, li
 	c.printf("%s (%s), %d of %d messages\n\n", chat.Title(), chat.JID, len(msgs), chat.Messages)
 	for _, m := range msgs {
 		c.printf("%s  %s: %s\n", m.Timestamp.Local().Format("2006-01-02 15:04:05"), senderLabel(m), m.Summary())
+	}
+	return nil
+}
+
+// Search prints stored messages matching query, newest first.
+func (c Console) Search(ctx context.Context, st *store.Store, query string, limit int) error {
+	if limit <= 0 {
+		limit = 1000
+	}
+	hits, err := st.Search(ctx, query, limit)
+	if err != nil {
+		return err
+	}
+	if len(hits) == 0 {
+		c.printf("No messages match %q.\n", query)
+		return nil
+	}
+	for _, h := range hits {
+		who := "me"
+		if !h.Message.FromMe {
+			who = senderLabel(h.Message)
+		}
+		snippet := strings.NewReplacer(store.MatchStart, "[", store.MatchEnd, "]").Replace(h.Snippet)
+		c.printf("%s  %s  %s: %s\n", h.Message.Timestamp.Local().Format("2006-01-02 15:04"), h.Chat.Title(), who, snippet)
 	}
 	return nil
 }

@@ -60,6 +60,14 @@ func TestDBCommands(t *testing.T) {
 		}
 	}
 
+	out.Reset()
+	if err := c.Search(t.Context(), st, "hi", 0); err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if !strings.Contains(out.String(), "Ada: [hi]") {
+		t.Errorf("search output:\n%s", out.String())
+	}
+
 	if err := c.Messages(t.Context(), st, "nobody", 10); err == nil {
 		t.Error("expected error for unknown chat")
 	}

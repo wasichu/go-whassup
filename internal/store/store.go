@@ -76,15 +76,20 @@ func (s *Store) SaveMessages(ctx context.Context, msgs []wa.Message) (int, error
 				return 0, err
 			}
 		}
-		res, err := tx.ExecContext(ctx, `
+		var rowid int64
+		err = tx.QueryRowContext(ctx, `
 			INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, push_name, ts, from_me, kind, body, codec, media, media_codec)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			m.Chat, m.ID, m.Sender, m.PushName, m.Timestamp.Unix(), m.FromMe, m.Kind, body, codecID, media, mediaCodec)
-		if err != nil {
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING rowid`,
+			m.Chat, m.ID, m.Sender, m.PushName, m.Timestamp.Unix(), m.FromMe, m.Kind, body, codecID, media, mediaCodec).Scan(&rowid)
+		switch {
+		case errors.Is(err, sql.ErrNoRows): // already stored
+		case err != nil:
 			return 0, fmt.Errorf("saving message %s: %w", m.ID, err)
-		}
-		if n, err := res.RowsAffected(); err == nil && n > 0 {
+		default:
 			inserted++
+			if err := s.index(ctx, tx, rowid, m.Chat, m.ID, m.Text); err != nil {
+				return 0, err
+			}
 		}
 		if _, err := tx.ExecContext(ctx, `
 			INSERT INTO chats (jid, is_group, last_message_at) VALUES (?, ?, ?)
@@ -502,14 +507,23 @@ func (s *Store) EditMessage(ctx context.Context, e wa.MessageEdited) (bool, erro
 	if err != nil {
 		return false, err
 	}
-	res, err := s.db.ExecContext(ctx, `
-		UPDATE messages SET body = ?, codec = ?, kind = ?, edited_at = ?
-		WHERE chat_jid = ? AND id = ? AND deleted = 0 AND edited_at <= ?`,
-		body, codecID, e.Kind, e.At.Unix(), e.Chat, e.ID, e.At.Unix())
-	if err != nil {
-		return false, fmt.Errorf("editing message %s: %w", e.ID, err)
-	}
-	return rowsAffected(res) > 0, nil
+	found := false
+	err = s.inTx(ctx, "editing message", func(tx *sql.Tx) error {
+		var rowid int64
+		err := tx.QueryRowContext(ctx, `
+			UPDATE messages SET body = ?, codec = ?, kind = ?, edited_at = ?
+			WHERE chat_jid = ? AND id = ? AND deleted = 0 AND edited_at <= ? RETURNING rowid`,
+			body, codecID, e.Kind, e.At.Unix(), e.Chat, e.ID, e.At.Unix()).Scan(&rowid)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		found = true
+		return s.index(ctx, tx, rowid, e.Chat, e.ID, e.Text)
+	})
+	return found, err
 }
 
 // DeleteMessage applies a deletion. "For everyone" wipes the text (and
@@ -517,6 +531,9 @@ func (s *Store) EditMessage(ctx context.Context, e wa.MessageEdited) (bool, erro
 // was deleted"; "for me" removes the message entirely.
 func (s *Store) DeleteMessage(ctx context.Context, d wa.MessageDeleted) error {
 	return s.inTx(ctx, "deleting message", func(tx *sql.Tx) error {
+		if err := unindex(ctx, tx, d.Chat, d.ID); err != nil {
+			return err
+		}
 		if d.ForMe {
 			if _, err := tx.ExecContext(ctx, `DELETE FROM messages WHERE chat_jid = ? AND id = ?`, d.Chat, d.ID); err != nil {
 				return err
@@ -667,7 +684,10 @@ func (s *Store) Prune(ctx context.Context, r Retention, now time.Time) ([]Messag
 		if len(removed) == 0 {
 			return nil
 		}
-		// Reactions to pruned messages go with them.
+		// Reactions and index entries of pruned messages go with them.
+		if _, err := tx.ExecContext(ctx, `DELETE FROM messages_fts WHERE rowid NOT IN (SELECT rowid FROM messages)`); err != nil {
+			return err
+		}
 		_, err := tx.ExecContext(ctx, `DELETE FROM reactions WHERE NOT EXISTS (
 			SELECT 1 FROM messages m WHERE m.chat_jid = reactions.chat_jid AND m.id = reactions.message_id)`)
 		return err
@@ -676,15 +696,6 @@ func (s *Store) Prune(ctx context.Context, r Retention, now time.Time) ([]Messag
 		return nil, err
 	}
 	return removed, nil
-}
-
-func rowsAffected(res sql.Result) int64 {
-	// modernc's driver always supports RowsAffected.
-	n, err := res.RowsAffected()
-	if err != nil {
-		return 0
-	}
-	return n
 }
 
 func (s *Store) inTx(ctx context.Context, what string, fn func(*sql.Tx) error) error {

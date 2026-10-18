@@ -25,5 +25,7 @@ var (
 	myReactionStyle  = lipgloss.NewStyle().Foreground(accent).Bold(true)
 	mentionStyle     = lipgloss.NewStyle().Foreground(accent)
 	myMentionStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(accent).Bold(true)
+	highlightStyle   = lipgloss.NewStyle().Reverse(true)
+	matchStyle       = lipgloss.NewStyle().Bold(true).Underline(true)
 	codeStyle        = lipgloss.NewStyle().Bold(true).Foreground(accent).Padding(0, 2)
 )

@@ -30,6 +30,7 @@ func TestParseArgs(t *testing.T) {
 		{args: []string{"-n", "5", "db", "messages", "Book club"}, want: invocation{cmd: "db messages", limit: 5, args: []string{"Book club"}}},
 		{args: []string{"db"}, wantErr: "want a subcommand"},
 		{args: []string{"db", "frob"}, wantErr: `unknown command "db frob"`},
+		{args: []string{"db", "search", "lunch", "plans"}, want: invocation{cmd: "db search", args: []string{"lunch", "plans"}}},
 		{args: []string{"db", "messages"}, wantErr: "missing argument"},
 		{args: []string{"db", "messages", "-n", "-1", "x"}, wantErr: "-n must be"},
 		{args: []string{"listen", "extra"}, wantErr: "unexpected arguments"},

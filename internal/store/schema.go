@@ -85,6 +85,17 @@ CREATE TABLE group_participants (
 	PRIMARY KEY (group_jid, user_jid)
 ) STRICT;
 `,
+	// 8: full-text search over plaintext message text (see search.go). Only
+	// rows stored in plaintext (codec 0) are indexed.
+	`
+CREATE VIRTUAL TABLE messages_fts USING fts5(
+	text, chat_jid UNINDEXED, msg_id UNINDEXED,
+	tokenize = 'unicode61 remove_diacritics 2'
+);
+INSERT INTO messages_fts (rowid, text, chat_jid, msg_id)
+	SELECT rowid, CAST(body AS TEXT), chat_jid, id FROM messages
+	WHERE codec = 0 AND deleted = 0 AND length(body) > 0;
+`,
 }
 
 // migrate brings the schema up to date inside one transaction.

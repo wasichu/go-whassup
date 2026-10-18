@@ -16,15 +16,17 @@ import (
 
 // conversation is the right pane: header, message history and input.
 type conversation struct {
-	chat     store.ChatSummary
-	cached   map[string]bool   // attachments already on disk, by message ID
-	mentions map[string]string // phone digits -> display name, for @mentions
-	own      string            // the user's own JID, to highlight mentions of them
-	newFrom  time.Time         // messages after this get a "new" divider (set on opening)
-	msgs     []wa.Message
-	viewport viewport.Model
-	input    textinput.Model
-	width    int
+	chat      store.ChatSummary
+	cached    map[string]bool   // attachments already on disk, by message ID
+	mentions  map[string]string // phone digits -> display name, for @mentions
+	own       string            // the user's own JID, to highlight mentions of them
+	highlight string            // message to highlight and show (a search hit)
+	lineOf    map[string]int    // each rendered message's first line in the viewport
+	newFrom   time.Time         // messages after this get a "new" divider (set on opening)
+	msgs      []wa.Message
+	viewport  viewport.Model
+	input     textinput.Model
+	width     int
 }
 
 func newConversation() conversation {
@@ -53,6 +55,7 @@ func (c *conversation) setChat(chat store.ChatSummary) {
 	if switched {
 		c.msgs = nil
 		c.newFrom = time.Time{}
+		c.highlight = ""
 		if chat.Unread > 0 {
 			c.newFrom = chat.LastReadAt // keep the divider while the chat stays open
 		}
@@ -67,7 +70,11 @@ func (c *conversation) setMessages(msgs []wa.Message) {
 	first := len(c.msgs) == 0
 	follow := c.viewport.AtBottom() || first
 	c.msgs = msgs
-	c.render(follow)
+	c.render(follow && c.highlight == "")
+	if c.highlight != "" {
+		c.showMessage(c.highlight)
+		return
+	}
 	// Opening a chat with unread messages: start at the "new" divider, as
 	// the phone does, unless everything new already fits on screen.
 	if first && len(msgs) > 0 && !c.newFrom.IsZero() {
@@ -78,10 +85,18 @@ func (c *conversation) setMessages(msgs []wa.Message) {
 }
 
 func (c *conversation) render(follow bool) {
-	content := renderMessages(c.msgs, c.chat, c.width, renderOpts{newFrom: c.newFrom, cached: c.cached, mentions: c.mentions, own: c.own})
+	c.lineOf = map[string]int{}
+	content := renderMessages(c.msgs, c.chat, c.width, renderOpts{
+		newFrom: c.newFrom, cached: c.cached, mentions: c.mentions, own: c.own,
+		highlight: c.highlight, lineOf: c.lineOf,
+	})
 	// Like chat apps, anchor short conversations to the bottom, by the input.
-	if gap := c.viewport.Height() - lipgloss.Height(content); gap > 0 {
+	gap := max(c.viewport.Height()-lipgloss.Height(content), 0)
+	if gap > 0 {
 		content = strings.Repeat("\n", gap) + content
+	}
+	for id := range c.lineOf {
+		c.lineOf[id] += gap
 	}
 	c.viewport.SetContent(content)
 	if follow {
@@ -124,10 +139,12 @@ func (c *conversation) view(width, height int, own string) string {
 
 // renderOpts carries what renderMessages needs besides the messages.
 type renderOpts struct {
-	newFrom  time.Time         // "N new" divider before the first incoming message after this
-	cached   map[string]bool   // message IDs whose attachment is on disk
-	mentions map[string]string // phone digits -> display name
-	own      string            // user's JID: mentions of them are highlighted
+	newFrom   time.Time         // "N new" divider before the first incoming message after this
+	cached    map[string]bool   // message IDs whose attachment is on disk
+	mentions  map[string]string // phone digits -> display name
+	own       string            // user's JID: mentions of them are highlighted
+	highlight string            // message ID to highlight (a search hit)
+	lineOf    map[string]int    // if set, filled with each message's first line
 }
 
 // renderMessages formats msgs as wrapped lines with day separators, and a
@@ -187,7 +204,14 @@ func renderMessages(msgs []wa.Message, chat store.ChatSummary, width int, opts r
 			}
 		}
 		line := faintStyle.Render(local.Format("15:04")) + " " + name + ": " + body
-		b.WriteString(wrap.Render(line) + "\n")
+		if opts.lineOf != nil {
+			opts.lineOf[m.ID] = strings.Count(b.String(), "\n")
+		}
+		if m.ID == opts.highlight {
+			b.WriteString(highlightStyle.Width(width).Render(line) + "\n")
+		} else {
+			b.WriteString(wrap.Render(line) + "\n")
+		}
 		if r := renderReactions(m.Reactions); r != "" {
 			b.WriteString(wrap.Render("      "+r) + "\n")
 		}
@@ -276,4 +300,14 @@ func mentionedDigits(msgs []wa.Message) []string {
 		}
 	}
 	return out
+}
+
+// showMessage scrolls so message id is visible near the top, reporting
+// whether it is among the loaded messages.
+func (c *conversation) showMessage(id string) bool {
+	line, ok := c.lineOf[id]
+	if ok {
+		c.viewport.SetYOffset(max(line-2, 0))
+	}
+	return ok
 }

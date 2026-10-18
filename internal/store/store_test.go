@@ -920,3 +920,106 @@ func TestGroupsDetailsAndNames(t *testing.T) {
 		t.Errorf("Names = %v, %v", got, err)
 	}
 }
+
+func searchIDs(t *testing.T, st *Store, q string) []string {
+	t.Helper()
+	hits, err := st.Search(t.Context(), q, 50)
+	if err != nil {
+		t.Fatalf("Search(%q): %v", q, err)
+	}
+	var out []string
+	for _, h := range hits {
+		out = append(out, h.Message.ID)
+	}
+	return out
+}
+
+func TestSearch(t *testing.T) {
+	st := openStore(t, "", nil)
+	ctx := t.Context()
+	mustSave(t, st,
+		msg(ada, "1", t0, "Café meeting tomorrow at noon"),
+		msg(ada, "2", t0.Add(time.Minute), "the meeting moved"),
+		msg(bob, "3", t0.Add(2*time.Minute), "Meetings are boring"),
+		msg(bob, "4", t0.Add(3*time.Minute), `quote "this" (and) that: AND OR NOT *`))
+
+	if got := searchIDs(t, st, "meet"); !slices.Equal(got, []string{"3", "2", "1"}) {
+		t.Errorf("prefix search, newest first = %v", got)
+	}
+	if got := searchIDs(t, st, "cafe noon"); !slices.Equal(got, []string{"1"}) {
+		t.Errorf("all words, accent-insensitive = %v", got)
+	}
+	if got := searchIDs(t, st, `"this" (and`); !slices.Equal(got, []string{"4"}) {
+		t.Errorf("punctuation must not break the query = %v", got)
+	}
+	if got := searchIDs(t, st, "   "); len(got) != 0 {
+		t.Errorf("blank query = %v", got)
+	}
+
+	hits, err := st.Search(ctx, "noon", 10)
+	if err != nil || len(hits) != 1 {
+		t.Fatalf("hits = %+v, %v", hits, err)
+	}
+	if h := hits[0]; !strings.Contains(h.Snippet, MatchStart+"noon"+MatchEnd) || h.Chat.JID != ada {
+		t.Errorf("hit = %+v", h)
+	}
+
+	// The index follows edits, deletes and pruning.
+	if _, err := st.EditMessage(ctx, wa.MessageEdited{Chat: ada, ID: "2", Kind: wa.KindText, Text: "the lunch moved", At: t0.Add(time.Hour)}); err != nil {
+		t.Fatalf("EditMessage: %v", err)
+	}
+	if got := searchIDs(t, st, "lunch"); !slices.Equal(got, []string{"2"}) {
+		t.Errorf("after edit, new text = %v", got)
+	}
+	if got := searchIDs(t, st, "meeting"); slices.Contains(got, "2") {
+		t.Errorf("after edit, old text still found: %v", got)
+	}
+	if err := st.DeleteMessage(ctx, wa.MessageDeleted{Chat: bob, ID: "3"}); err != nil {
+		t.Fatalf("DeleteMessage: %v", err)
+	}
+	if got := searchIDs(t, st, "boring"); len(got) != 0 {
+		t.Errorf("deleted message still found: %v", got)
+	}
+	if _, err := st.Prune(ctx, Retention{MaxPerChat: 1}, t0); err != nil {
+		t.Fatalf("Prune: %v", err)
+	}
+	if got := searchIDs(t, st, "cafe"); len(got) != 0 {
+		t.Errorf("pruned message still found: %v", got)
+	}
+}
+
+func TestSearchUnavailableWhenSealed(t *testing.T) {
+	st := openStore(t, "", reverseCodec{})
+	mustSave(t, st, msg(ada, "1", t0, "secret plans"))
+	if _, err := st.Search(t.Context(), "secret", 10); !errors.Is(err, ErrSearchUnavailable) {
+		t.Errorf("Search under a codec = %v, want ErrSearchUnavailable", err)
+	}
+	var n int
+	if err := st.db.QueryRowContext(t.Context(), `SELECT count(*) FROM messages_fts`).Scan(&n); err != nil || n != 0 {
+		t.Errorf("sealed text must never reach the index: %d rows (%v)", n, err)
+	}
+}
+
+func TestMigrateV7ToV8IndexesExisting(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "messages.db")
+	db, err := sqlite.Open(path)
+	if err != nil {
+		t.Fatalf("sqlite.Open: %v", err)
+	}
+	ctx := t.Context()
+	setup := append(slices.Clone(migrations[:7]), "PRAGMA user_version = 7",
+		`INSERT INTO chats (jid) VALUES ('`+ada+`')`,
+		`INSERT INTO messages (chat_jid, id, sender_jid, ts, from_me, kind, body) VALUES ('`+ada+`', '1', '`+ada+`', 1, 0, 'text', CAST('old pancakes' AS BLOB))`)
+	for _, q := range setup {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatalf("v7 setup %q: %v", q, err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	st := openStore(t, path, nil)
+	if got := searchIDs(t, st, "pancake"); !slices.Equal(got, []string{"1"}) {
+		t.Errorf("existing messages should be indexed on upgrade: %v", got)
+	}
+}

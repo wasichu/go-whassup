@@ -62,6 +62,13 @@ whatsmeow does **not** persist message content, so we do.
     reads the chat), and for `ChatRead` events from other devices.
   - History sync's per-chat unread count is applied with `SetUnreadFromPhone`, which
     may move backwards, because the phone is authoritative at link time.
+- **Search index** (`search.go`). It's maintained in Go, in the same transaction as each
+  message write, edit, delete and prune, because triggers can't see through the codec.
+  - It's only written while the codec is plaintext, and `Search` returns
+    `ErrSearchUnavailable` otherwise.
+  - **Turning encryption on must empty `messages_fts` and `VACUUM`**, because the index
+    is a plaintext copy of the words.
+  - Migration 8 indexed the existing plaintext rows.
 - **Directory** (`Store.Directory`): all chats, then contacts you've never chatted with
   (by name). The TUI's finder searches this.
 - **Ordering.** By `(ts, id)`, so messages in the same second stay stable.

@@ -31,6 +31,7 @@ const (
 	screenPicker
 	screenAttach
 	screenInfo
+	screenSearch
 )
 
 type focus int
@@ -73,6 +74,7 @@ type Model struct {
 	picker   picker
 	attach   attach
 	info     info
+	search   search
 	draft    string // JID of an open chat that has no messages yet
 	ownJID   string // the linked account, for labelling the chat with yourself
 
@@ -146,6 +148,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.finderLoaded(msg)
 	case mediaOpenedMsg:
 		return m.mediaOpened(msg)
+	case searchResultsMsg:
+		return m.searchResults(msg)
 	case detailsLoadedMsg:
 		if msg.err != nil {
 			m.setError("loading chat info", msg.err)
@@ -199,6 +203,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.chat == m.conv.chat.JID {
 			m.conv.cached, m.conv.mentions, m.conv.own = msg.cached, msg.mentions, m.ownJID
 			m.conv.setMessages(msg.msgs)
+			if h := m.conv.highlight; h != "" {
+				if _, ok := m.conv.lineOf[h]; !ok {
+					m.notice, m.noticeIsErr = fmt.Sprintf("That message is older than the %d loaded here.", messagesPerChat), false
+					m.conv.highlight = ""
+				}
+			}
 		}
 		return m, nil
 	case connectResultMsg:
@@ -226,6 +236,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.settings.input, cmd = m.settings.input.Update(msg)
 	case m.screen == screenFinder:
 		m.finder.input, cmd = m.finder.input.Update(msg)
+	case m.screen == screenSearch:
+		m.search.input, cmd = m.search.input.Update(msg)
 	case m.screen == screenAttach && m.attach.onCaption:
 		m.attach.caption, cmd = m.attach.caption.Update(msg)
 	case m.screen == screenAttach:
@@ -260,6 +272,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.attachKey(msg)
 	case screenInfo:
 		return m.infoKey(msg)
+	case screenSearch:
+		return m.searchKey(msg)
 	}
 
 	switch {
@@ -309,6 +323,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.openAttach()
 	case key.Matches(msg, keys.Info):
 		return m.openInfo()
+	case key.Matches(msg, keys.Search):
+		return m.openSearch()
 	case key.Matches(msg, keys.Up):
 		return m.selectChat(-1)
 	case key.Matches(msg, keys.Down):
@@ -433,6 +449,8 @@ func (m Model) render() string {
 		body = m.attachView(m.width, bodyH)
 	case m.screen == screenInfo:
 		body = m.infoView(m.width, bodyH)
+	case m.screen == screenSearch:
+		body = m.searchView(m.width, bodyH)
 	default:
 		left := m.chats.view(m.listWidth(), bodyH, m.focus == focusList, m.ownJID)
 		sep := separatorStyle.Render(strings.TrimSuffix(strings.Repeat("│\n", bodyH), "\n"))
@@ -444,7 +462,7 @@ func (m Model) render() string {
 
 func (m Model) helpView(height int) string {
 	content := paneTitleStyle.Render("Keys") + "\n\n" + m.help.FullHelpView(fullMainHelp) +
-		"\n\n" + faintStyle.Render("q / o a i , ? and L only act from the chat list; in the message box they're typed. Press any key to close.")
+		"\n\n" + faintStyle.Render("q / s o a i , ? and L only act from the chat list; in the message box they're typed. Press any key to close.")
 	return lipgloss.NewStyle().Width(m.width).Height(height).MaxHeight(height).Padding(0, 1).Render(content)
 }
 
@@ -505,6 +523,8 @@ func (m Model) contextHelp() []key.Binding {
 		return attachHelp
 	case m.screen == screenInfo:
 		return []key.Binding{keys.Up, keys.Down, keys.Back}
+	case m.screen == screenSearch:
+		return finderHelp
 	case m.screen == screenSettings:
 		if m.settings.editing {
 			return formHelp
