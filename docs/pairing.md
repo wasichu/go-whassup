@@ -60,3 +60,32 @@ The QR channel is already opened during code pairing (step 1). To add QR pairing
   deliberately avoided so far.
 
 Event handling doesn't change: success and failure still arrive as `PairSuccess` / `PairFailed`.
+
+## What a successful pairing looks like (log, info level)
+
+```
+Successfully paired 1555…:4@s.whatsapp.net   # PairSuccess (":4" = our device number)
+Got 515 code, reconnecting...                 # forced reconnect, expected
+Successfully authenticated                    # Connected
+Uploading 812 new prekeys to server
+Updating contact store with N push names from history sync
+Stored N message secret keys from history sync
+```
+
+`Error sending close to websocket ... EOF` warnings around reconnects are harmless.
+
+## Troubleshooting
+
+**Phone says "check that your phone number is correct" and the log shows**
+`Failed to handle code pair notification: missing <link_code_pairing_wrapped_primary_ephemeral_pub>`
+
+The phone answered our pairing request (the pairing ref matched) but sent a
+rejection instead of its half of the handshake. Seen once in practice (2026-10-18).
+An immediate retry with a fresh code succeeded, so the cause wasn't confirmed. Likely
+causes: the code was entered in an app registered to a different number (e.g. WhatsApp
+Business), a mistyped or stale code, or a transient server issue. Retry with a new code,
+spaced a few minutes apart, because pairing requests are rate-limited (`ErrIQRateOverLimit`).
+
+**Known gap:** whatsmeow only *logs* this failure and emits no event, so `login`
+keeps waiting until the server closes the login socket (~160 s) or our 3-minute
+timer fires. Surfacing it right away would need a whatsmeow hook or patch.
