@@ -31,6 +31,9 @@ func Open(path string) (*sql.DB, error) {
 	q.Add("_pragma", "foreign_keys(1)")
 	q.Add("_pragma", "journal_mode(WAL)")
 	q.Add("_pragma", "busy_timeout(5000)")
+	// Zero deleted content instead of leaving it in free pages: matters for
+	// deleted messages and for encryption's re-seal.
+	q.Add("_pragma", "secure_delete(1)")
 	q.Set("_txlock", "immediate")
 	db, err := sql.Open(Driver, "file:"+path+"?"+q.Encode())
 	if err != nil {

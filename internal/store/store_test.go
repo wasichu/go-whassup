@@ -205,12 +205,12 @@ func TestPrune(t *testing.T) {
 type reverseCodec struct{}
 
 func (reverseCodec) ID() int { return 7 }
-func (reverseCodec) Seal(p []byte) ([]byte, error) {
+func (reverseCodec) Seal(p, _ []byte) ([]byte, error) {
 	out := bytes.Clone(p)
 	slices.Reverse(out)
 	return out, nil
 }
-func (c reverseCodec) Open(s []byte) ([]byte, error) { return c.Seal(s) }
+func (c reverseCodec) Open(s, aad []byte) ([]byte, error) { return c.Seal(s, aad) }
 
 func TestCodecSeamAndPerRowMarker(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "messages.db")

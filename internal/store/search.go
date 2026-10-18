@@ -33,7 +33,13 @@ type SearchHit struct {
 	Snippet string     // excerpt with matches wrapped in MatchStart/MatchEnd
 }
 
-func (s *Store) indexing() bool { return s.codec.ID() == (Plaintext{}).ID() }
+// indexing reports whether the search index is kept: only with plaintext
+// storage and no key (during enable/disable it's stale or must not grow).
+func (s *Store) indexing() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.codec.ID() == (Plaintext{}).ID() && !s.keyed
+}
 
 // execer is satisfied by *sql.DB and *sql.Tx.
 type execer interface {

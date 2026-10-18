@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wasichu/go-whassup/internal/sqlite"
@@ -17,9 +18,19 @@ import (
 
 // Store is the message database.
 type Store struct {
-	db     *sql.DB
-	codec  Codec         // seals new bodies
-	codecs map[int]Codec // opens stored bodies, by Codec.ID
+	db *sql.DB
+
+	mu     sync.RWMutex  // guards the fields below (codecs change at unlock/enable)
+	codec  Codec         // seals new values
+	codecs map[int]Codec // opens stored values, by Codec.ID
+	keyed  bool          // a key exists: the search index may be stale or must not grow
+}
+
+// current returns the codec that seals new values.
+func (s *Store) current() Codec {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.codec
 }
 
 // Open opens (creating and migrating if needed) the database at path. A nil
@@ -35,11 +46,17 @@ func Open(ctx context.Context, path string, codec Codec) (*Store, error) {
 	if err := migrate(ctx, db); err != nil {
 		return nil, errors.Join(err, db.Close())
 	}
-	return &Store{
+	st := &Store{
 		db:     db,
 		codec:  codec,
 		codecs: map[int]Codec{Plaintext{}.ID(): Plaintext{}, codec.ID(): codec},
-	}, nil
+	}
+	var keys int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM keys`).Scan(&keys); err != nil {
+		return nil, errors.Join(fmt.Errorf("reading keys: %w", err), db.Close())
+	}
+	st.keyed = keys > 0
+	return st, nil
 }
 
 // Close closes the database.
@@ -65,14 +82,14 @@ func (s *Store) SaveMessages(ctx context.Context, msgs []wa.Message) (int, error
 
 	inserted := 0
 	for _, m := range msgs {
-		body, codecID, err := s.seal([]byte(m.Text))
+		body, codecID, err := s.seal([]byte(m.Text), m.Chat, m.ID, colBody)
 		if err != nil {
 			return 0, err
 		}
 		var media []byte
 		mediaCodec := 0
 		if m.Media != nil {
-			if media, mediaCodec, err = s.seal(m.Media.Data); err != nil {
+			if media, mediaCodec, err = s.seal(m.Media.Data, m.Chat, m.ID, colMedia); err != nil {
 				return 0, err
 			}
 		}
@@ -435,13 +452,13 @@ func (s *Store) Messages(ctx context.Context, chat string, limit int) ([]wa.Mess
 		}
 		m.Timestamp, m.Edited = time.Unix(ts, 0), editedAt > 0
 		if !m.Deleted {
-			text, err := s.open(body, codecID)
+			text, err := s.open(body, codecID, chat, m.ID, colBody)
 			if err != nil {
 				return nil, err
 			}
 			m.Text = string(text)
 			if media != nil {
-				data, err := s.open(media, mediaCodec)
+				data, err := s.open(media, mediaCodec, chat, m.ID, colMedia)
 				if err != nil {
 					return nil, err
 				}
@@ -503,7 +520,7 @@ func (s *Store) attachReactions(ctx context.Context, chat string, msgs []wa.Mess
 // whether the message was found (an edit can arrive before its original).
 // Text goes through seal like every other write.
 func (s *Store) EditMessage(ctx context.Context, e wa.MessageEdited) (bool, error) {
-	body, codecID, err := s.seal([]byte(e.Text))
+	body, codecID, err := s.seal([]byte(e.Text), e.Chat, e.ID, colBody)
 	if err != nil {
 		return false, err
 	}

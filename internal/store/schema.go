@@ -96,6 +96,19 @@ INSERT INTO messages_fts (rowid, text, chat_jid, msg_id)
 	SELECT rowid, CAST(body AS TEXT), chat_jid, id FROM messages
 	WHERE codec = 0 AND deleted = 0 AND length(body) > 0;
 `,
+	// 9: encryption keys. The messages.codec / media_codec columns hold the
+	// ID of the key that sealed each value (0 = plaintext).
+	`
+CREATE TABLE keys (
+	id         INTEGER PRIMARY KEY,
+	alg        TEXT NOT NULL,       -- "aes-256-gcm"
+	source     TEXT NOT NULL,       -- config key_source when created
+	salt       BLOB,                -- passphrase sources only
+	kdf        TEXT NOT NULL DEFAULT '', -- JSON crypt.KDFParams, passphrase sources only
+	wrapped    BLOB NOT NULL,       -- data key sealed under the key-encryption key
+	created_at INTEGER NOT NULL
+) STRICT;
+`,
 }
 
 // migrate brings the schema up to date inside one transaction.
