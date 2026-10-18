@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -262,7 +263,7 @@ func TestClassifyMessage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := classifyMessage(protoEvent(dm, tt.msg), stubResolver)
+			got, ok := classifyMessage(protoEvent(dm, tt.msg), stubResolver, noDecrypt)
 			if !ok {
 				t.Fatal("not classified")
 			}
@@ -271,7 +272,7 @@ func TestClassifyMessage(t *testing.T) {
 			}
 		})
 	}
-	if _, ok := classifyMessage(protoEvent(dm, &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{Type: waE2E.ProtocolMessage_EPHEMERAL_SETTING.Enum()}}), stubResolver); ok {
+	if _, ok := classifyMessage(protoEvent(dm, &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{Type: waE2E.ProtocolMessage_EPHEMERAL_SETTING.Enum()}}), stubResolver, noDecrypt); ok {
 		t.Error("other protocol messages should be skipped")
 	}
 }
@@ -291,5 +292,57 @@ func TestHistoryReactions(t *testing.T) {
 	}
 	if r := h.Reactions[0]; r.MessageID != "H1" || r.Emoji != "🎉" || !r.FromMe || r.Chat != pnAda.String() {
 		t.Errorf("reaction = %+v", r)
+	}
+}
+
+func noDecrypt(*events.Message) (*waE2E.Message, error) { return nil, errors.New("no secret") }
+
+func TestClassifySecretEncryptedEdit(t *testing.T) {
+	dm := types.MessageSource{Chat: pnAda, Sender: pnMe, IsFromMe: true, RecipientAlt: pnAda}
+	sem := func(typ waE2E.SecretEncryptedMessage_SecretEncType) *waE2E.Message {
+		return &waE2E.Message{SecretEncryptedMessage: &waE2E.SecretEncryptedMessage{
+			TargetMessageKey: &waCommon.MessageKey{ID: proto.String("T1")},
+			SecretEncType:    typ.Enum(),
+		}}
+	}
+	decryptTo := func(m *waE2E.Message) secretDecrypter {
+		return func(*events.Message) (*waE2E.Message, error) { return m, nil }
+	}
+
+	// The decrypted payload may be the new content itself...
+	got, ok := classifyMessage(protoEvent(dm, sem(waE2E.SecretEncryptedMessage_MESSAGE_EDIT)), stubResolver,
+		decryptTo(&waE2E.Message{Conversation: proto.String("fixed typo")}))
+	want := MessageEdited{Chat: pnAda.String(), ID: "T1", Kind: KindText, Text: "fixed typo", At: time.Unix(1700000100, 0)}
+	if !ok || !reflect.DeepEqual(got, want) {
+		t.Errorf("edit = %#v, %v; want %#v", got, ok, want)
+	}
+	// ...or a protocol edit wrapping it.
+	got, ok = classifyMessage(protoEvent(dm, sem(waE2E.SecretEncryptedMessage_MESSAGE_EDIT)), stubResolver,
+		decryptTo(&waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{
+			Type: waE2E.ProtocolMessage_MESSAGE_EDIT.Enum(), EditedMessage: &waE2E.Message{Conversation: proto.String("wrapped")},
+		}}))
+	if e, isEdit := got.(MessageEdited); !ok || !isEdit || e.Text != "wrapped" {
+		t.Errorf("wrapped edit = %#v, %v", got, ok)
+	}
+	// Undecryptable edits and other secret types are dropped, never stored.
+	if _, ok := classifyMessage(protoEvent(dm, sem(waE2E.SecretEncryptedMessage_MESSAGE_EDIT)), stubResolver, noDecrypt); ok {
+		t.Error("undecryptable edit was not dropped")
+	}
+	if _, ok := classifyMessage(protoEvent(dm, sem(waE2E.SecretEncryptedMessage_POLL_EDIT)), stubResolver, decryptTo(&waE2E.Message{})); ok {
+		t.Error("poll edit was not dropped")
+	}
+}
+
+func TestMetaMessagesAreNeverMessages(t *testing.T) {
+	for name, m := range map[string]*waE2E.Message{
+		"secret encrypted": {SecretEncryptedMessage: &waE2E.SecretEncryptedMessage{}},
+		"poll vote":        {PollUpdateMessage: &waE2E.PollUpdateMessage{}},
+		"enc reaction":     {EncReactionMessage: &waE2E.EncReactionMessage{}},
+		"pin":              {PinInChatMessage: &waE2E.PinInChatMessage{}},
+		"keep in chat":     {KeepInChatMessage: &waE2E.KeepInChatMessage{}},
+	} {
+		if _, _, ok := messageContent(m); ok {
+			t.Errorf("%s would be stored as a message", name)
+		}
 	}
 }

@@ -400,6 +400,18 @@ func (w *WhatsApp) announceName() {
 	}
 }
 
+// decryptSecret decrypts a secret-encrypted message (e.g. an edit) with the
+// stored secret of the message it targets. Failures are logged; the caller
+// drops the message rather than storing it undecrypted.
+func (w *WhatsApp) decryptSecret(evt *events.Message) (*waE2E.Message, error) {
+	msg, err := w.client().DecryptSecretEncryptedMessage(context.Background(), evt)
+	if err != nil {
+		w.log.Warn("couldn't decrypt secret-encrypted message", "id", evt.Info.ID,
+			"target", evt.Message.GetSecretEncryptedMessage().GetTargetMessageKey().GetID(), "err", err)
+	}
+	return msg, err
+}
+
 // emitContactSnapshot emits every known contact. It reads whatsmeow's local
 // store, so it is cheap and works whenever a session exists.
 func (w *WhatsApp) emitContactSnapshot() {
@@ -500,7 +512,7 @@ func (w *WhatsApp) handleEvent(evt any) {
 	case *events.PairSuccess:
 		w.emit(PairSuccess{JID: v.ID.ToNonAD().String()})
 	case *events.Message:
-		if e, ok := classifyMessage(v, w.resolveKey); ok {
+		if e, ok := classifyMessage(v, w.resolveKey, w.decryptSecret); ok {
 			w.emit(e)
 		}
 	case *events.DeleteForMe:

@@ -757,3 +757,34 @@ func TestRecorderAppliesEditsDeletesReactions(t *testing.T) {
 		t.Errorf("message 2 = %+v", m)
 	}
 }
+
+func TestMigrateV4ToV5RemovesMetaMessages(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "messages.db")
+	db, err := sqlite.Open(path)
+	if err != nil {
+		t.Fatalf("sqlite.Open: %v", err)
+	}
+	ctx := t.Context()
+	insert := func(id, kind string) string {
+		return `INSERT INTO messages (chat_jid, id, sender_jid, ts, from_me, kind, body) VALUES ('` + ada + `', '` + id + `', '` + ada + `', 1759320000, 1, '` + kind + `', x'')`
+	}
+	for _, q := range []string{migrations[0], migrations[1], migrations[2], migrations[3], "PRAGMA user_version = 4",
+		`INSERT INTO chats (jid, last_message_at) VALUES ('` + ada + `', 1759320000)`,
+		insert("keep", "text"), insert("junk1", "secret encrypted"), insert("junk2", "poll update"), insert("img", "image"),
+	} {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatalf("v4 setup %q: %v", q, err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	st := openStore(t, path, nil)
+	msgs, err := st.Messages(ctx, ada, 0)
+	if err != nil {
+		t.Fatalf("Messages: %v", err)
+	}
+	if got := ids(msgs); !slices.Equal(got, []string{"img", "keep"}) {
+		t.Errorf("after cleanup = %v, want [img keep]", got)
+	}
+}

@@ -36,13 +36,38 @@ func messageFromEvent(evt *events.Message, resolve keyResolver) (Message, bool) 
 	return m, true
 }
 
+// secretDecrypter decrypts a SecretEncryptedMessage; it is
+// Client.DecryptSecretEncryptedMessage.
+type secretDecrypter func(*events.Message) (*waE2E.Message, error)
+
 // classifyMessage turns a whatsmeow message into the event it represents:
 // a Message, or an edit, revoke or reaction referring to an earlier one.
-func classifyMessage(evt *events.Message, resolve keyResolver) (Event, bool) {
+func classifyMessage(evt *events.Message, resolve keyResolver, decrypt secretDecrypter) (Event, bool) {
 	if evt.Info.Chat == types.StatusBroadcastJID {
 		return nil, false
 	}
 	base, _ := messageFromEventBase(evt, resolve)
+	if sem := evt.Message.GetSecretEncryptedMessage(); sem != nil {
+		// Newer clients send edits encrypted with the original message's
+		// secret. Anything else secret-encrypted (poll/event edits) isn't
+		// shown, and is never a message in its own right.
+		if sem.GetSecretEncType() != waE2E.SecretEncryptedMessage_MESSAGE_EDIT || sem.GetTargetMessageKey().GetID() == "" {
+			return nil, false
+		}
+		plain, err := decrypt(evt)
+		if err != nil {
+			return nil, false
+		}
+		edited := plain
+		if p := plain.GetProtocolMessage(); p.GetEditedMessage() != nil {
+			edited = p.GetEditedMessage()
+		}
+		kind, text, ok := messageContent(edited)
+		if !ok {
+			return nil, false
+		}
+		return MessageEdited{Chat: base.Chat, ID: sem.GetTargetMessageKey().GetID(), Kind: kind, Text: text, At: base.Timestamp}, true
+	}
 	if r := evt.Message.GetReactionMessage(); r != nil && r.GetKey().GetID() != "" {
 		at := base.Timestamp
 		if ms := r.GetSenderTimestampMS(); ms > 0 {

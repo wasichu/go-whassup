@@ -73,6 +73,13 @@ There are two kinds of consumers:
 - **Kinds.** `Message.Kind` is `text`, `image`, `video`, `document`, `reaction`, or a
   name derived from the protobuf field (e.g. `sticker`). `Message.Text` is the body or
   caption only. `Summary()` renders `[kind] text` for display.
+- **Encrypted edits.** Newer clients send edits as `SecretEncryptedMessage` (`MESSAGE_EDIT`),
+  encrypted with the target message's secret. We decrypt them with whatsmeow's
+  `DecryptSecretEncryptedMessage` into a `MessageEdited`. Undecryptable ones are logged
+  and dropped.
+- **Meta messages are never messages** (`isMetaMessage`): poll votes, encrypted
+  reactions and comments, pins, keep-in-chat and placeholders. Older builds stored some
+  under field-derived kinds like "secret encrypted"; migration 5 removes them.
 - **Skipped:** protocol messages (revokes, edits, key distribution), status updates
   (`status@broadcast`, i.e. stories), and the `INITIAL_STATUS_V3` history blob.
   **Edits and deletes are not applied yet.**

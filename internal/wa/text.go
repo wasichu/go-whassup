@@ -68,6 +68,8 @@ func messageContent(msg *waE2E.Message) (kind, text string, ok bool) {
 		return KindReaction, msg.GetReactionMessage().GetText(), true
 	case msg.ProtocolMessage != nil, msg.SenderKeyDistributionMessage != nil:
 		return "", "", false
+	case isMetaMessage(msg):
+		return "", "", false
 	}
 	if kind := firstSetField(msg); kind != "" {
 		return kind, "", true
@@ -107,4 +109,19 @@ func humanizeKind(field string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+// isMetaMessage reports messages that act on other messages or chats (edits,
+// poll votes, encrypted reactions, pins, ...) rather than being something
+// to show in the conversation. They must never be stored as messages; the
+// ones we understand are translated into their own events instead.
+func isMetaMessage(msg *waE2E.Message) bool {
+	return msg.SecretEncryptedMessage != nil ||
+		msg.PollUpdateMessage != nil ||
+		msg.EncReactionMessage != nil ||
+		msg.EncEventResponseMessage != nil ||
+		msg.EncCommentMessage != nil ||
+		msg.KeepInChatMessage != nil ||
+		msg.PinInChatMessage != nil ||
+		msg.PlaceholderMessage != nil
 }

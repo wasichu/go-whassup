@@ -62,6 +62,13 @@ CREATE TABLE reactions (
 	PRIMARY KEY (chat_jid, message_id, sender_jid)
 ) STRICT;
 `,
+	// 5: remove meta messages (edits, poll votes, pins, ...) that older builds
+	// stored as chat messages under kinds derived from their field names.
+	`
+DELETE FROM messages WHERE kind IN (
+	'secret encrypted', 'poll update', 'enc reaction', 'enc event response',
+	'enc comment', 'keep in chat', 'pin in chat', 'placeholder');
+`,
 }
 
 // migrate brings the schema up to date inside one transaction.
