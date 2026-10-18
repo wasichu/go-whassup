@@ -42,15 +42,36 @@ the status line. If the device isn't linked, it opens the **login screen** inste
 | `esc` | | back to chat list |
 | `pgup`/`pgdn` | scroll messages | scroll messages |
 | `/` | find a chat or contact (new chats too) | (typed) |
+| `o` | this chat's attachments: open (downloads if needed) | (typed) |
+| `a` | send a file to this chat | (typed) |
 | `L` | login screen: link, or re-link | (typed) |
 | `,` | settings | (typed) |
 | `?` | key help (any key closes) | (typed) |
 | `q` | quit | (typed) |
 | `ctrl+c` | quit | quit |
 
-Shortcuts only act from the chat list. In the message box `q`, `/`, `L`, `,` and `?` are just
+Shortcuts only act from the chat list. In the message box `q`, `/`, `o`, `a`, `L`, `,` and `?` are just
 characters. Hints in the status line are generated from the same keymap as the
 handlers (`internal/ui/keys.go`), so they can't drift.
+
+### Attachments
+
+- Messages with an attachment show its size, and a ✓ once it's downloaded.
+- **`o`** lists the open chat's attachments, newest first. `enter` downloads one if
+  needed (into `~/.local/share/go-whassup/media/`) and opens it with your system's
+  default app.
+  - **Only ordinary document and media types are opened** (images, video, audio, PDF,
+    office files, text, zip, …). The sender chooses the file name, so anything else,
+    such as `.command`, `.desktop`, `.html` or scripts, is saved as `.bin` and **not
+    opened**; the status line says where it was saved.
+  - Media older than WhatsApp keeps on its servers can't be downloaded; you'll be told
+    to ask the sender to resend it.
+- **`a`** sends a file: type a path (`~` works), `tab` to add an optional caption,
+  `enter` to send.
+  - JPEG, PNG and WebP go as photos; everything else, including video, audio and HEIC,
+    goes as a document. The limit is 100 MB.
+  - Your own sent files are cached, so they open without a download.
+- Downloaded files are **not encrypted on disk** (see `storage.md`).
 
 ### Edits, deletes and reactions
 

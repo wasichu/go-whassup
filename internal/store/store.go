@@ -321,8 +321,11 @@ func (s *Store) Messages(ctx context.Context, chat string, limit int) ([]wa.Mess
 				if err != nil {
 					return nil, err
 				}
-				if m.Media, err = wa.ParseMedia(data); err != nil {
-					return nil, fmt.Errorf("message %s: %w", m.ID, err)
+				// An attachment we can't decode (e.g. after a protocol
+				// change) loses its download link but must not hide the
+				// message, let alone the chat.
+				if parsed, perr := wa.ParseMedia(data); perr == nil {
+					m.Media = parsed
 				}
 			}
 		}

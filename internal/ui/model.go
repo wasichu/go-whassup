@@ -28,6 +28,8 @@ const (
 	screenLogin
 	screenSettings
 	screenFinder
+	screenPicker
+	screenAttach
 )
 
 type focus int
@@ -67,8 +69,12 @@ type Model struct {
 	login    login
 	settings settings
 	finder   finder
+	picker   picker
+	attach   attach
 	draft    string // JID of an open chat that has no messages yet
 	ownJID   string // the linked account, for labelling the chat with yourself
+
+	downloading map[string]bool // attachment downloads in flight, by message ID
 
 	termFocused bool // terminal window has focus; reads only count while it does
 	interacted  bool // a key was pressed; nothing is read on launch alone
@@ -83,7 +89,7 @@ func New(ctx context.Context, deps Deps, sub *wa.Subscription) Model {
 	h := help.New()
 	h.Styles.ShortKey, h.Styles.FullKey = statusStyle.Bold(true), senderStyle
 	h.Styles.ShortDesc, h.Styles.ShortSeparator = statusStyle, statusStyle
-	m := Model{ctx: ctx, deps: deps, sub: sub, conv: newConversation(), login: newLogin(), conn: connConnecting, help: h, ownJID: deps.Client.OwnJID(), termFocused: true}
+	m := Model{ctx: ctx, deps: deps, sub: sub, conv: newConversation(), login: newLogin(), conn: connConnecting, help: h, ownJID: deps.Client.OwnJID(), termFocused: true, downloading: map[string]bool{}}
 	if deps.FocusHint != "" {
 		m.notice = deps.FocusHint
 	}
@@ -136,6 +142,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.settingsSaved(msg)
 	case directoryLoadedMsg:
 		return m.finderLoaded(msg)
+	case mediaOpenedMsg:
+		return m.mediaOpened(msg)
+	case fileSentMsg:
+		if msg.err != nil {
+			m.setError("sending file", msg.err)
+		} else {
+			m.notice = ""
+		}
+		return m, nil
 	case chatsLoadedMsg:
 		if msg.err != nil {
 			m.setError("loading chats", msg.err)
@@ -151,13 +166,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.draft = ""
 			c, _ := m.chats.selectedChat()
 			m.conv.setChat(c)
-			cmd := tea.Batch(loadMessages(m.ctx, m.deps.Store, c.JID), m.scheduleRead()) // evaluate before m is copied into the return
+			cmd := tea.Batch(loadMessages(m.ctx, m.deps, c.JID), m.scheduleRead()) // evaluate before m is copied into the return
 			return m, cmd
 		}
 		if c, ok := m.chats.selectedChat(); ok {
 			m.conv.setChat(c)
 			if c.JID != before || len(m.conv.msgs) == 0 {
-				cmd := tea.Batch(loadMessages(m.ctx, m.deps.Store, c.JID), m.scheduleRead()) // evaluate before m is copied into the return
+				cmd := tea.Batch(loadMessages(m.ctx, m.deps, c.JID), m.scheduleRead()) // evaluate before m is copied into the return
 				return m, cmd
 			}
 			if c.Unread > 0 {
@@ -172,6 +187,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.chat == m.conv.chat.JID {
+			m.conv.cached = msg.cached
 			m.conv.setMessages(msg.msgs)
 		}
 		return m, nil
@@ -200,6 +216,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.settings.input, cmd = m.settings.input.Update(msg)
 	case m.screen == screenFinder:
 		m.finder.input, cmd = m.finder.input.Update(msg)
+	case m.screen == screenAttach && m.attach.onCaption:
+		m.attach.caption, cmd = m.attach.caption.Update(msg)
+	case m.screen == screenAttach:
+		m.attach.path, cmd = m.attach.path.Update(msg)
 	case m.screen == screenMain && m.focus == focusInput:
 		m.conv.input, cmd = m.conv.input.Update(msg)
 	}
@@ -224,6 +244,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.settingsKey(msg)
 	case screenFinder:
 		return m.finderKey(msg)
+	case screenPicker:
+		return m.pickerKey(msg)
+	case screenAttach:
+		return m.attachKey(msg)
 	}
 
 	switch {
@@ -267,6 +291,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.openSettings(), nil
 	case key.Matches(msg, keys.Find):
 		return m.openFinder()
+	case key.Matches(msg, keys.Media):
+		return m.openPicker()
+	case key.Matches(msg, keys.Attach):
+		return m.openAttach()
 	case key.Matches(msg, keys.Up):
 		return m.selectChat(-1)
 	case key.Matches(msg, keys.Down):
@@ -289,14 +317,14 @@ func (m Model) selectChat(delta int) (tea.Model, tea.Cmd) {
 		c, _ := m.chats.selectedChat()
 		m.conv.setChat(c)
 		if !m.chats.move(delta) {
-			return m, loadMessages(m.ctx, m.deps.Store, c.JID)
+			return m, loadMessages(m.ctx, m.deps, c.JID)
 		}
 	} else if !m.chats.move(delta) {
 		return m, nil
 	}
 	c, _ := m.chats.selectedChat()
 	m.conv.setChat(c)
-	cmd := tea.Batch(loadMessages(m.ctx, m.deps.Store, c.JID), m.scheduleRead()) // evaluate before m is copied into the return
+	cmd := tea.Batch(loadMessages(m.ctx, m.deps, c.JID), m.scheduleRead()) // evaluate before m is copied into the return
 	return m, cmd
 }
 
@@ -325,20 +353,20 @@ func (m Model) handleEvent(evt wa.Event) (tea.Model, tea.Cmd) {
 		// The recorder stored it before this event reached us; reload.
 		cmds := []tea.Cmd{next, loadChats(m.ctx, m.deps.Store)}
 		if v.Chat == m.conv.chat.JID {
-			cmds = append(cmds, loadMessages(m.ctx, m.deps.Store, v.Chat))
+			cmds = append(cmds, loadMessages(m.ctx, m.deps, v.Chat))
 		}
 		return m, tea.Batch(cmds...)
 	case wa.MessageEdited, wa.MessageDeleted, wa.Reaction:
 		cmds := []tea.Cmd{next, loadChats(m.ctx, m.deps.Store)} // deletes change unread counts
 		if chatOf(evt) == m.conv.chat.JID {
-			cmds = append(cmds, loadMessages(m.ctx, m.deps.Store, m.conv.chat.JID))
+			cmds = append(cmds, loadMessages(m.ctx, m.deps, m.conv.chat.JID))
 		}
 		return m, tea.Batch(cmds...)
 	case wa.HistorySync, wa.Contacts:
 		// New names or history: refresh titles and the open chat's senders.
 		cmds := []tea.Cmd{next, loadChats(m.ctx, m.deps.Store)}
 		if m.conv.chat.JID != "" {
-			cmds = append(cmds, loadMessages(m.ctx, m.deps.Store, m.conv.chat.JID))
+			cmds = append(cmds, loadMessages(m.ctx, m.deps, m.conv.chat.JID))
 		}
 		return m, tea.Batch(cmds...)
 	}
@@ -385,6 +413,10 @@ func (m Model) render() string {
 		body = m.settingsView(m.width, bodyH)
 	case m.screen == screenFinder:
 		body = m.finderView(m.width, bodyH)
+	case m.screen == screenPicker:
+		body = m.pickerView(m.width, bodyH)
+	case m.screen == screenAttach:
+		body = m.attachView(m.width, bodyH)
 	default:
 		left := m.chats.view(m.listWidth(), bodyH, m.focus == focusList, m.ownJID)
 		sep := separatorStyle.Render(strings.TrimSuffix(strings.Repeat("│\n", bodyH), "\n"))
@@ -396,7 +428,7 @@ func (m Model) render() string {
 
 func (m Model) helpView(height int) string {
 	content := paneTitleStyle.Render("Keys") + "\n\n" + m.help.FullHelpView(fullMainHelp) +
-		"\n\n" + faintStyle.Render("q / , ? and L only act from the chat list; in the message box they're typed. Press any key to close.")
+		"\n\n" + faintStyle.Render("q / o a , ? and L only act from the chat list; in the message box they're typed. Press any key to close.")
 	return lipgloss.NewStyle().Width(m.width).Height(height).MaxHeight(height).Padding(0, 1).Render(content)
 }
 
@@ -451,6 +483,10 @@ func (m Model) contextHelp() []key.Binding {
 		return menuHelp
 	case m.screen == screenFinder:
 		return finderHelp
+	case m.screen == screenPicker:
+		return menuHelp
+	case m.screen == screenAttach:
+		return attachHelp
 	case m.screen == screenSettings:
 		if m.settings.editing {
 			return formHelp

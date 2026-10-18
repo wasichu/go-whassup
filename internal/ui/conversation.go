@@ -16,7 +16,8 @@ import (
 // conversation is the right pane: header, message history and input.
 type conversation struct {
 	chat     store.ChatSummary
-	newFrom  time.Time // messages after this get a "new" divider (set on opening)
+	cached   map[string]bool // attachments already on disk, by message ID
+	newFrom  time.Time       // messages after this get a "new" divider (set on opening)
 	msgs     []wa.Message
 	viewport viewport.Model
 	input    textinput.Model
@@ -74,7 +75,7 @@ func (c *conversation) setMessages(msgs []wa.Message) {
 }
 
 func (c *conversation) render(follow bool) {
-	content := renderMessages(c.msgs, c.chat, c.width, c.newFrom)
+	content := renderMessages(c.msgs, c.chat, c.width, c.newFrom, c.cached)
 	// Like chat apps, anchor short conversations to the bottom, by the input.
 	if gap := c.viewport.Height() - lipgloss.Height(content); gap > 0 {
 		content = strings.Repeat("\n", gap) + content
@@ -114,7 +115,7 @@ func (c *conversation) view(width, height int, own string) string {
 
 // renderMessages formats msgs as wrapped lines with day separators, and a
 // "N new" divider before the first incoming message after newFrom (if set).
-func renderMessages(msgs []wa.Message, chat store.ChatSummary, width int, newFrom time.Time) string {
+func renderMessages(msgs []wa.Message, chat store.ChatSummary, width int, newFrom time.Time, cached map[string]bool) string {
 	if width <= 0 {
 		return ""
 	}
@@ -158,6 +159,15 @@ func renderMessages(msgs []wa.Message, chat store.ChatSummary, width int, newFro
 		case m.Edited:
 			body += " " + faintStyle.Render("(edited)")
 		}
+		if m.Media != nil && !m.Deleted {
+			info := humanSize(m.Media.Size)
+			if cached[m.ID] {
+				info += " ✓"
+			}
+			if info != "" {
+				body += " " + faintStyle.Render("· "+info)
+			}
+		}
 		line := faintStyle.Render(local.Format("15:04")) + " " + name + ": " + body
 		b.WriteString(wrap.Render(line) + "\n")
 		if r := renderReactions(m.Reactions); r != "" {
@@ -200,4 +210,19 @@ func renderReactions(rs []wa.ReactionCount) string {
 		parts = append(parts, p)
 	}
 	return strings.Join(parts, "  ")
+}
+
+// humanSize renders a byte count like "2.3 MB"; "" for unknown.
+func humanSize(n int64) string {
+	switch {
+	case n <= 0:
+		return ""
+	case n < 1<<10:
+		return fmt.Sprintf("%d B", n)
+	case n < 1<<20:
+		return fmt.Sprintf("%.0f KB", float64(n)/(1<<10))
+	case n < 1<<30:
+		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
+	}
+	return fmt.Sprintf("%.1f GB", float64(n)/(1<<30))
 }

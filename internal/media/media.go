@@ -37,10 +37,32 @@ func (c Cache) base(chat, id string) string {
 	return filepath.Join(c.Dir, hex.EncodeToString(sum[:12]))
 }
 
-// ext picks a file extension so viewers recognise the file.
+// openable lists the extensions we write and hand to the system opener.
+// The OS picks a handler by extension, and senders choose file names, so a
+// document called "invoice.command" (macOS runs it in Terminal) or
+// "x.desktop" (xdg-open can execute it) must never keep its extension.
+// Anything not listed is saved as .bin and not opened automatically.
+var openable = map[string]bool{
+	// images
+	".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true, ".heic": true, ".heif": true, ".bmp": true, ".tiff": true,
+	// video and audio
+	".mp4": true, ".mov": true, ".m4v": true, ".3gp": true, ".webm": true, ".mkv": true,
+	".mp3": true, ".m4a": true, ".aac": true, ".ogg": true, ".opus": true, ".wav": true, ".flac": true, ".amr": true,
+	// documents
+	".pdf": true, ".txt": true, ".md": true, ".csv": true, ".rtf": true, ".epub": true, ".vcf": true,
+	".doc": true, ".docx": true, ".xls": true, ".xlsx": true, ".ppt": true, ".pptx": true,
+	".odt": true, ".ods": true, ".odp": true, ".pages": true, ".numbers": true, ".key": true,
+	".zip": true,
+}
+
+// ErrNotOpenable means the file was saved but has a type we won't hand to
+// the system opener.
+var ErrNotOpenable = errors.New("unrecognised file type, not opened automatically")
+
+// ext picks an extension viewers recognise, from the allowlist only.
 func ext(m wa.Media) string {
-	if e := filepath.Ext(m.FileName); e != "" && len(e) <= 10 {
-		return strings.ToLower(e)
+	if e := strings.ToLower(filepath.Ext(m.FileName)); openable[e] {
+		return e
 	}
 	mt, _, _ := strings.Cut(m.Mime, ";")
 	switch mt { // mime.ExtensionsByType's first pick varies by OS for these
@@ -49,19 +71,44 @@ func ext(m wa.Media) string {
 	case "audio/ogg":
 		return ".ogg"
 	}
-	if exts, err := mime.ExtensionsByType(mt); err == nil && len(exts) > 0 {
-		return exts[0]
+	if exts, err := mime.ExtensionsByType(mt); err == nil {
+		for _, e := range exts {
+			if openable[e] {
+				return e
+			}
+		}
 	}
 	return ".bin"
 }
 
+// files lists the cached files for a message (any extension). It scans the
+// directory rather than using filepath.Glob, whose pattern syntax would
+// misread a data dir containing '[' or '*'.
+func (c Cache) files(chat, id string) ([]string, error) {
+	entries, err := os.ReadDir(c.Dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	prefix := filepath.Base(c.base(chat, id)) + "."
+	var out []string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), prefix) {
+			out = append(out, filepath.Join(c.Dir, e.Name()))
+		}
+	}
+	return out, nil
+}
+
 // Lookup returns the cached file for a message, if any.
 func (c Cache) Lookup(chat, id string) (string, bool) {
-	matches, err := filepath.Glob(c.base(chat, id) + ".*")
-	if err != nil || len(matches) == 0 {
+	files, err := c.files(chat, id)
+	if err != nil || len(files) == 0 {
 		return "", false
 	}
-	return matches[0], true
+	return files[0], true
 }
 
 // Fetch returns the cached file for a message, downloading it first if
@@ -116,7 +163,7 @@ func (c Cache) Put(chat, id, src string, m wa.Media) (err error) {
 
 // Remove deletes a message's cached file, if any.
 func (c Cache) Remove(chat, id string) error {
-	matches, err := filepath.Glob(c.base(chat, id) + ".*")
+	matches, err := c.files(chat, id)
 	if err != nil {
 		return err
 	}
@@ -141,17 +188,32 @@ func openCommand(goos, path string) (string, []string) {
 	}
 }
 
-// Open hands path to the system's default application. The command's
-// output is discarded (it must not write over the TUI), and it may not
-// hang the caller.
-func Open(ctx context.Context, path string) error {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
+// openWait is how long Open waits for the opener to report an error. Some
+// openers (xdg-open's fallbacks) stay running while the viewer is open, so
+// still running after this counts as success.
+const openWait = 2 * time.Second
+
+// Open hands path to the system's default application. Files with an
+// extension outside the allowlist are refused (ErrNotOpenable). The
+// command's output is discarded so it can't write over the TUI.
+func Open(path string) error {
+	if !openable[strings.ToLower(filepath.Ext(path))] {
+		return ErrNotOpenable
+	}
 	name, args := openCommand(runtime.GOOS, path)
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := exec.Command(name, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("opening %s with %s: %w", filepath.Base(path), name, err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }() // also reaps the process if it outlives us
+	select {
+	case err := <-done:
+		if err != nil {
+			return fmt.Errorf("opening %s with %s: %w", filepath.Base(path), name, err)
+		}
+	case <-time.After(openWait):
 	}
 	return nil
 }

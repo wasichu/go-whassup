@@ -56,8 +56,17 @@ step lands or the plan changes.
    dwell while focused, `[privacy] mark_read` = local-only/read-receipts-off/read-receipts-on. *(Live test pending.)*
 3. [x] **Edits, deletes and reactions** applied to stored messages and shown in the
    TUI. *(Live test pending.)* Follow-up: sending reactions/edits/deletes from the TUI.
-4. **Media:** download images and documents; open them with `open` / `xdg-open`; and
-   **send files** (pick a path, send as a document or image).
+4. [x] **Media:**
+   - download and open attachments (`o`), with an extension allowlist;
+   - send files (`a`): photos for JPEG/PNG/WebP, documents otherwise;
+   - a cache with cleanup on delete and prune;
+   - media keys sealed through the codec.
+
+   *(Live test pending.)* Follow-ups:
+   - video/audio sent as native media (needs duration/waveform);
+   - a policy for the media cache under encryption;
+   - on macOS, setting the quarantine attribute on downloads;
+   - inline image previews via Kitty graphics.
 5. **Groups:** names from group info, participants, mentions.
 6. **Message search** (local, SQLite FTS5). Unavailable while encryption is on
    (decided); the UI says so. Chat/contact name search is unaffected.

@@ -105,6 +105,13 @@ func TestExtAndOpenCommand(t *testing.T) {
 		{wa.Media{Mime: "image/png"}, ".png"},
 		{wa.Media{Mime: "audio/ogg; codecs=opus"}, ".ogg"},
 		{wa.Media{Mime: "application/x-unknown-thing"}, ".bin"},
+		// Sender-chosen names must never smuggle in an executable extension.
+		{wa.Media{FileName: "invoice.command"}, ".bin"},
+		{wa.Media{FileName: "x.pdf.command"}, ".bin"},
+		{wa.Media{FileName: "page.html"}, ".bin"},
+		{wa.Media{FileName: "app.desktop"}, ".bin"},
+		{wa.Media{FileName: "run.sh", Mime: "application/x-sh"}, ".bin"},
+		{wa.Media{FileName: "evil.command", Mime: "application/pdf"}, ".pdf"},
 	} {
 		if got := ext(tt.m); got != tt.want {
 			t.Errorf("ext(%+v) = %q, want %q", tt.m, got, tt.want)
@@ -115,5 +122,33 @@ func TestExtAndOpenCommand(t *testing.T) {
 	}
 	if name, _ := openCommand("linux", "/x/a.jpg"); name != "xdg-open" {
 		t.Errorf("linux = %s", name)
+	}
+}
+
+func TestOpenRefusesUnlistedTypes(t *testing.T) {
+	for _, p := range []string{"/tmp/x.bin", "/tmp/x.command", "/tmp/x.desktop", "/tmp/noext"} {
+		if err := Open(p); !errors.Is(err, ErrNotOpenable) {
+			t.Errorf("Open(%s) = %v, want ErrNotOpenable", p, err)
+		}
+	}
+}
+
+func TestCacheDirWithGlobCharacters(t *testing.T) {
+	c := Cache{Dir: filepath.Join(t.TempDir(), "we[ird]*dir")}
+	src := filepath.Join(t.TempDir(), "a.txt")
+	if err := os.WriteFile(src, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Put("c", "id", src, wa.Media{FileName: "a.txt"}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	if _, ok := c.Lookup("c", "id"); !ok {
+		t.Error("lookup failed in a dir with glob metacharacters")
+	}
+	if err := c.Remove("c", "id"); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+	if _, ok := c.Lookup("c", "id"); ok {
+		t.Error("remove failed in a dir with glob metacharacters")
 	}
 }

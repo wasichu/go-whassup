@@ -10,6 +10,9 @@ import (
 	"sync"
 	"time"
 
+	"go.mau.fi/whatsmeow/proto/waE2E"
+	"google.golang.org/protobuf/proto"
+
 	"github.com/wasichu/go-whassup/internal/wa"
 )
 
@@ -168,7 +171,7 @@ func (c *Client) SendFile(_ context.Context, chat, path, caption string) (string
 		ID: id, Chat: chat, Sender: "me@s.whatsapp.net", FromMe: true,
 		Timestamp: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC), Kind: wa.KindDocument,
 		Text:  filepath.Base(path),
-		Media: &wa.Media{Data: []byte("fake"), Mime: "application/octet-stream", FileName: filepath.Base(path)},
+		Media: DocumentMedia(filepath.Base(path)),
 	})
 	return id, nil
 }
@@ -266,4 +269,24 @@ func (c *Client) Closed() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.closed
+}
+
+// DocumentMedia returns valid media for a document named name, as the real
+// client would attach to a message.
+func DocumentMedia(name string) *wa.Media { return SizedDocumentMedia(name, 0) }
+
+// SizedDocumentMedia is DocumentMedia with a file size.
+func SizedDocumentMedia(name string, size uint64) *wa.Media {
+	data, err := proto.Marshal(&waE2E.Message{DocumentMessage: &waE2E.DocumentMessage{
+		FileName: proto.String(name), Mimetype: proto.String("application/octet-stream"),
+		DirectPath: proto.String("/fake"), MediaKey: []byte("fake-key"), FileLength: proto.Uint64(size),
+	}})
+	if err != nil {
+		panic(err) // a fixed, valid message always marshals
+	}
+	m, err := wa.ParseMedia(data)
+	if err != nil {
+		panic(err)
+	}
+	return m
 }

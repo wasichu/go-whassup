@@ -858,3 +858,14 @@ func TestRecorderRemovesCachedMedia(t *testing.T) {
 		t.Errorf("removed from cache = %v, want %v", cache.removed, want)
 	}
 }
+
+func TestUndecodableMediaKeepsMessage(t *testing.T) {
+	st := openStore(t, "", nil)
+	m := msg(ada, "1", t0, "cat")
+	m.Kind, m.Media = wa.KindImage, &wa.Media{Data: []byte("not a proto")}
+	mustSave(t, st, m)
+	got := onlyMessage(t, st, ada, "1")
+	if got.Media != nil || got.Text != "cat" {
+		t.Errorf("message = %+v; want it shown, without media", got)
+	}
+}

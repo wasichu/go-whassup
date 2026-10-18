@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/wasichu/go-whassup/internal/config"
+	"github.com/wasichu/go-whassup/internal/media"
 	"github.com/wasichu/go-whassup/internal/store"
 	"github.com/wasichu/go-whassup/internal/termcaps"
 	"github.com/wasichu/go-whassup/internal/wa"
@@ -21,6 +22,13 @@ type Store interface {
 	Directory(ctx context.Context) ([]store.ChatSummary, error)
 	UnreadMessages(ctx context.Context, chat string) ([]wa.Message, error)
 	MarkRead(ctx context.Context, chat string, at time.Time) error
+}
+
+// MediaCache is what the UI needs from internal/media's Cache.
+type MediaCache interface {
+	Lookup(chat, id string) (string, bool)
+	Fetch(ctx context.Context, d media.Downloader, chat, id string, m wa.Media) (string, error)
+	Put(chat, id, src string, m wa.Media) error
 }
 
 // Deps are the UI's collaborators, wired by internal/app.
@@ -38,6 +46,11 @@ type Deps struct {
 	// Graphics is the terminal's inline-image support (termcaps); images are
 	// used when it allows and Config.UI.InlineImages is set.
 	Graphics termcaps.Graphics
+	// Media is the attachment cache; OpenFile hands a file to the system
+	// viewer (media.Open). Both optional: without them media can't be opened.
+	Media    MediaCache
+	OpenFile func(path string) error
+
 	// FocusHint, if set, explains why focus tracking won't work (tmux);
 	// shown once in the status line.
 	FocusHint string
@@ -55,9 +68,10 @@ type (
 		err   error
 	}
 	messagesLoadedMsg struct {
-		chat string
-		msgs []wa.Message
-		err  error
+		chat   string
+		msgs   []wa.Message
+		cached map[string]bool // message IDs whose attachment is on disk
+		err    error
 	}
 	connectResultMsg struct{ err error }
 	sendResultMsg    struct{ err error }
@@ -83,10 +97,22 @@ func loadChats(ctx context.Context, st Store) tea.Cmd {
 	}
 }
 
-func loadMessages(ctx context.Context, st Store, chat string) tea.Cmd {
+// loadMessages reads a chat's messages and, off the UI goroutine, which of
+// their attachments are already cached (View must not touch the disk).
+func loadMessages(ctx context.Context, deps Deps, chat string) tea.Cmd {
 	return func() tea.Msg {
-		msgs, err := st.Messages(ctx, chat, messagesPerChat)
-		return messagesLoadedMsg{chat: chat, msgs: msgs, err: err}
+		msgs, err := deps.Store.Messages(ctx, chat, messagesPerChat)
+		cached := map[string]bool{}
+		if deps.Media != nil {
+			for _, m := range msgs {
+				if m.Media != nil {
+					if _, ok := deps.Media.Lookup(chat, m.ID); ok {
+						cached[m.ID] = true
+					}
+				}
+			}
+		}
+		return messagesLoadedMsg{chat: chat, msgs: msgs, cached: cached, err: err}
 	}
 }
 
