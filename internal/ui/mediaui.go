@@ -193,8 +193,9 @@ func (m Model) mediaOpened(msg mediaOpenedMsg) (Model, tea.Cmd) {
 			m.notice += " (not encrypted)"
 		}
 	case errors.Is(msg.err, media.ErrNotOpenable):
-		// Lead with the outcome: the status line truncates long notices.
-		m.notice, m.noticeIsErr = "Not opened (unrecognised file type); saved to "+tildePath(msg.path), false
+		// The cached copy's path means nothing to the user (hashed name,
+		// maybe a temporary folder); say what they can do instead.
+		m.notice, m.noticeIsErr = "Not opened: unrecognised file type. Press d to save a copy.", false
 	case msg.err != nil:
 		m.setError("opening attachment", msg.err)
 	default:
@@ -215,17 +216,18 @@ func mediaLabel(msg wa.Message) string {
 
 func (p *picker) view(r rootAPI, width, height int) string {
 	title := paneTitleStyle.Render("Attachments in " + chatTitle(r.chat(), r.own()))
+	keysLine := "\n\n" + keyLine(pickerHelp)
 	if !r.inlineImages() {
-		return pageStyle(width, height).Render(title + "\n\n" + p.listView(r, width, height-3))
+		return pageStyle(width, height).Render(title + "\n\n" + p.listView(r, width, height-5) + keysLine)
 	}
 	listW, _, _ := browserLayout(width, height)
-	bodyH := max(height-3, 1)
+	bodyH := max(height-5, 1)
 	list := lipgloss.NewStyle().Width(listW).Height(bodyH).MaxHeight(bodyH).Render(p.listView(r, listW, bodyH))
 	side := ""
 	if it := p.items[p.selected]; p.preview.showing(it.ID) {
 		side = lipgloss.NewStyle().PaddingLeft(2).Render(p.preview.placeholders())
 	}
-	return pageStyle(width, height).Render(title + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, list, side))
+	return pageStyle(width, height).Render(title + "\n\n" + lipgloss.JoinHorizontal(lipgloss.Top, list, side) + keysLine)
 }
 
 // listView lists the attachments, scrolled to keep the selection visible.

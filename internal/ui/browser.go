@@ -201,11 +201,11 @@ func (b *browser) view(r rootAPI, width, height int) string {
 		paneTitleStyle.Render("Send a file to " + chatTitle(r.chat(), r.own())),
 		faintStyle.Render(tildePath(b.dir)), "",
 	}
-	bodyH := max(height-len(head)-1, 1)
+	bodyH := max(height-len(head)-3, 1)
 	list := lipgloss.NewStyle().Width(listW).Height(bodyH).MaxHeight(bodyH).Render(b.listView(listW, bodyH))
 	side := lipgloss.NewStyle().PaddingLeft(2).Render(b.sideView(width - listW - 4))
 	body := lipgloss.JoinHorizontal(lipgloss.Top, list, side)
-	return pageStyle(width, height).Render(strings.Join(head, "\n") + "\n" + body)
+	return pageStyle(width, height).Render(strings.Join(head, "\n") + "\n" + body + "\n\n" + keyLine(browserHelp))
 }
 
 func (b *browser) listView(width, height int) string {

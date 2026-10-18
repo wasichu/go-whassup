@@ -117,8 +117,10 @@ names stay readable on disk.**
   default app.
   - **Only ordinary document and media types are opened** (images, video, audio, PDF,
     office files, text, zip, …). The sender chooses the file name, so anything else,
-    such as `.command`, `.desktop`, `.html` or scripts, is saved as `.bin` and **not
-    opened**; the status line says where it was saved.
+    such as `.command`, `.desktop`, `.html` or scripts, is cached as `.bin` and **not
+    opened**; `d` saves a copy if you want it.
+  - The attachments view and the file browser list their keys at the bottom (`esc` goes
+    back), so they stay visible while the status line shows a message.
   - Media older than WhatsApp keeps on its servers can't be downloaded; you'll be told
     to ask the sender to resend it.
   - Where the terminal can show images, a **preview** appears beside the list: the

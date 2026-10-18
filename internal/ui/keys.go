@@ -1,6 +1,10 @@
 package ui
 
-import "charm.land/bubbles/v2/key"
+import (
+	"strings"
+
+	"charm.land/bubbles/v2/key"
+)
 
 // keys is the single source of truth for key bindings: handlers match
 // against it and the status-line hints and ? overlay are generated from it.
@@ -99,4 +103,15 @@ type helpSection struct {
 // hint is b with a shorter description, for the status line.
 func hint(b key.Binding, desc string) key.Binding {
 	return key.NewBinding(key.WithKeys(b.Keys()...), key.WithHelp(b.Help().Key, desc))
+}
+
+// keyLine renders bindings as a one-line hint inside a page ("↑/↓ choose •
+// esc back"), so a page's keys stay visible even when the status line is
+// busy with a message.
+func keyLine(bs []key.Binding) string {
+	parts := make([]string, 0, len(bs))
+	for _, b := range bs {
+		parts = append(parts, b.Help().Key+" "+b.Help().Desc)
+	}
+	return faintStyle.Render(strings.Join(parts, " • "))
 }

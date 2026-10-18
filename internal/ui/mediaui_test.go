@@ -79,8 +79,9 @@ func TestOpenAttachmentProblems(t *testing.T) {
 	h2.key("ctrl+o")
 	h2.key("enter")
 	h2.settle()
-	if v := h2.view(); !strings.Contains(v, "Not opened (unrecognised file type)") {
-		t.Errorf("unrecognised-type notice missing:\n%s", v)
+	if v := ansi.Strip(h2.view()); !strings.Contains(v, "Not opened: unrecognised file type. Press d to save a copy.") ||
+		strings.Contains(v, h2.cache.Dir) {
+		t.Errorf("unrecognised-type notice should say what to do, not where the cache file is:\n%s", v)
 	}
 
 	h3 := newHarness(t, true)
@@ -278,6 +279,9 @@ func TestSaveAttachmentCopy(t *testing.T) {
 	}
 	if n := h.model().notice; !strings.HasPrefix(n, "Saved to ") || !strings.HasSuffix(n, "report.pdf") {
 		t.Errorf("notice = %q", n)
+	}
+	if v := ansi.Strip(h.view()); !strings.Contains(v, "esc back") || !strings.Contains(v, "d save a copy") {
+		t.Errorf("the attachments view should show its keys, esc included:\n%s", v)
 	}
 	h.key("d") // again: a second copy, not an overwrite
 	h.settle()
