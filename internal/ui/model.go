@@ -328,6 +328,12 @@ func (m Model) handleEvent(evt wa.Event) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, loadMessages(m.ctx, m.deps.Store, v.Chat))
 		}
 		return m, tea.Batch(cmds...)
+	case wa.MessageEdited, wa.MessageDeleted, wa.Reaction:
+		cmds := []tea.Cmd{next, loadChats(m.ctx, m.deps.Store)} // deletes change unread counts
+		if chatOf(evt) == m.conv.chat.JID {
+			cmds = append(cmds, loadMessages(m.ctx, m.deps.Store, m.conv.chat.JID))
+		}
+		return m, tea.Batch(cmds...)
 	case wa.HistorySync, wa.Contacts:
 		// New names or history: refresh titles and the open chat's senders.
 		cmds := []tea.Cmd{next, loadChats(m.ctx, m.deps.Store)}
@@ -455,4 +461,17 @@ func (m Model) contextHelp() []key.Binding {
 	default:
 		return listHelp
 	}
+}
+
+// chatOf returns the chat an edit, delete or reaction applies to.
+func chatOf(evt wa.Event) string {
+	switch v := evt.(type) {
+	case wa.MessageEdited:
+		return v.Chat
+	case wa.MessageDeleted:
+		return v.Chat
+	case wa.Reaction:
+		return v.Chat
+	}
+	return ""
 }

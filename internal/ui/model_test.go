@@ -13,6 +13,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/colorprofile"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/wasichu/go-whassup/internal/config"
 	"github.com/wasichu/go-whassup/internal/store"
@@ -957,5 +958,25 @@ func TestFocusHintShown(t *testing.T) {
 	h.send(tea.WindowSizeMsg{Width: 200, Height: 30})
 	if !strings.Contains(h.view(), "focus-events on") {
 		t.Errorf("focus hint not shown:\n%s", h.view())
+	}
+}
+
+func TestEditsDeletesReactionsRender(t *testing.T) {
+	h := newHarness(t, true)
+	h.client.Emit(wa.Message{ID: "a2", Chat: ada, Sender: ada, Timestamp: day.Add(time.Minute), Kind: wa.KindText, Text: "secret plans"})
+	h.client.Emit(wa.MessageEdited{Chat: ada, ID: "a1", Kind: wa.KindText, Text: "hello from ada!", At: day.Add(2 * time.Minute)})
+	h.client.Emit(wa.MessageDeleted{Chat: ada, ID: "a2", At: day.Add(3 * time.Minute)})
+	h.client.Emit(wa.Reaction{Chat: ada, MessageID: "a1", Sender: ada, Emoji: "🎉", At: day.Add(4 * time.Minute)})
+	h.client.Emit(wa.Reaction{Chat: ada, MessageID: "a1", Sender: "me@s.whatsapp.net", FromMe: true, Emoji: "🎉", At: day.Add(5 * time.Minute)})
+	h.settle()
+
+	v := ansi.Strip(h.view())
+	for _, want := range []string{"hello from ada! (edited)", "This message was deleted", "🎉 2"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("view missing %q:\n%s", want, v)
+		}
+	}
+	if strings.Contains(v, "secret plans") {
+		t.Error("deleted text still shown")
 	}
 }

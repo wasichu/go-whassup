@@ -52,6 +52,15 @@ Shortcuts only act from the chat list. In the message box `q`, `/`, `L`, `,` and
 characters. Hints in the status line are generated from the same keymap as the
 handlers (`internal/ui/keys.go`), so they can't drift.
 
+### Edits, deletes and reactions
+
+- Edited messages show their latest text with a faint **(edited)**.
+- Messages deleted for everyone show *This message was deleted*; their text is wiped
+  from `messages.db`, not just hidden. Messages you delete "for me" on your phone
+  disappear.
+- Reactions appear under the message as `🎉 2  ❤️`, with your own highlighted.
+- Sending reactions, edits and deletes from go-whassup isn't supported yet.
+
 ### Unread messages
 
 - Chats with unread messages are **bold with a count badge**. Opening one shows a

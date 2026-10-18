@@ -151,6 +151,20 @@ func (c Console) printEvent(evt wa.Event) {
 		c.printf("%s  %s  %s: %s\n", v.Timestamp.Local().Format("15:04:05"), v.Chat, senderLabel(v), v.Summary())
 	case wa.HistorySync:
 		c.printf("-- history sync: %d chats, %d messages\n", len(v.Chats), len(v.Messages))
+	case wa.MessageEdited:
+		c.Log.Info("message edited", "chat", v.Chat, "id", v.ID)
+		c.Log.Debug("edited text", "id", v.ID, "text", v.Text)
+		c.printf("-- %s: a message was edited: %s\n", v.Chat, v.Text)
+	case wa.MessageDeleted:
+		c.Log.Info("message deleted", "chat", v.Chat, "id", v.ID, "for_me", v.ForMe)
+		c.printf("-- %s: a message was deleted\n", v.Chat)
+	case wa.Reaction:
+		c.Log.Info("reaction", "chat", v.Chat, "id", v.MessageID, "sender", v.Sender)
+		if v.Emoji == "" {
+			c.printf("-- %s: %s removed a reaction\n", v.Chat, v.Sender)
+		} else {
+			c.printf("-- %s: %s reacted %s\n", v.Chat, v.Sender, v.Emoji)
+		}
 	case wa.ChatRead:
 		c.Log.Debug("chat read elsewhere", "chat", v.Chat)
 	case wa.Contacts:

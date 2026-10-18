@@ -54,7 +54,8 @@ step lands or the plan changes.
    any contact and message someone you haven't chatted with yet. *(Live test pending.)*
 2. [x] **Unread counts and new-message markers**: badges, a "N new" divider, read after
    dwell while focused, `[privacy] mark_read` = local/devices/everyone. *(Live test pending.)*
-3. **Edits, deletes and reactions** applied to stored messages.
+3. [x] **Edits, deletes and reactions** applied to stored messages and shown in the
+   TUI. *(Live test pending.)* Follow-up: sending reactions/edits/deletes from the TUI.
 4. **Media:** download images and documents; open them with `open` / `xdg-open`; and
    **send files** (pick a path, send as a document or image).
 5. **Groups:** names from group info, participants, mentions.

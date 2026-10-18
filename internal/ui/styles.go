@@ -20,5 +20,8 @@ var (
 	onlineStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
 	unreadBadgeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("2")).Bold(true)
 	newDividerStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Align(lipgloss.Center)
+	deletedStyle     = lipgloss.NewStyle().Foreground(muted).Italic(true)
+	reactionStyle    = lipgloss.NewStyle().Foreground(muted)
+	myReactionStyle  = lipgloss.NewStyle().Foreground(accent).Bold(true)
 	codeStyle        = lipgloss.NewStyle().Bold(true).Foreground(accent).Padding(0, 2)
 )

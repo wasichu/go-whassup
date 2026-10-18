@@ -151,8 +151,18 @@ func renderMessages(msgs []wa.Message, chat store.ChatSummary, width int, newFro
 		if m.FromMe {
 			name = fromMeStyle.Render("me")
 		}
-		line := faintStyle.Render(local.Format("15:04")) + " " + name + ": " + m.Summary()
+		body := m.Summary()
+		switch {
+		case m.Deleted:
+			body = deletedStyle.Render("This message was deleted")
+		case m.Edited:
+			body += " " + faintStyle.Render("(edited)")
+		}
+		line := faintStyle.Render(local.Format("15:04")) + " " + name + ": " + body
 		b.WriteString(wrap.Render(line) + "\n")
+		if r := renderReactions(m.Reactions); r != "" {
+			b.WriteString(wrap.Render("      "+r) + "\n")
+		}
 	}
 	return strings.TrimSuffix(b.String(), "\n")
 }
@@ -172,4 +182,22 @@ func senderName(m wa.Message, chat store.ChatSummary) string {
 	}
 	user, _, _ := strings.Cut(m.Sender, "@")
 	return user
+}
+
+// renderReactions summarises reactions as "👍 2  ❤️", marking the user's own.
+func renderReactions(rs []wa.ReactionCount) string {
+	parts := make([]string, 0, len(rs))
+	for _, r := range rs {
+		p := r.Emoji
+		if r.Count > 1 {
+			p += " " + fmt.Sprint(r.Count)
+		}
+		if r.Mine {
+			p = myReactionStyle.Render(p)
+		} else {
+			p = reactionStyle.Render(p)
+		}
+		parts = append(parts, p)
+	}
+	return strings.Join(parts, "  ")
 }
