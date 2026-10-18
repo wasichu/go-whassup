@@ -12,6 +12,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
@@ -72,8 +74,23 @@ func (k Keyring) runner() runner {
 	return run
 }
 
-// Get returns the stored key, or ErrNotFound.
+// validName keeps Service and Account safe to place in security -i's
+// whitespace-split command line.
+var validName = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
+func (k Keyring) check() error {
+	if !validName.MatchString(k.Service) || !validName.MatchString(k.Account) {
+		return fmt.Errorf("invalid keyring service/account %q/%q", k.Service, k.Account)
+	}
+	return nil
+}
+
+// Get returns the stored key, or ErrNotFound. The key is random, so it is
+// used directly as the key-encryption key (no passphrase derivation).
 func (k Keyring) Get(ctx context.Context) ([]byte, error) {
+	if err := k.check(); err != nil {
+		return nil, err
+	}
 	var out []byte
 	var err error
 	switch k.os() {
@@ -105,6 +122,9 @@ func (k Keyring) Get(ctx context.Context) ([]byte, error) {
 
 // Put stores key (replacing any existing entry), passing it on stdin.
 func (k Keyring) Put(ctx context.Context, key []byte) error {
+	if err := k.check(); err != nil {
+		return err
+	}
 	secret := hex.EncodeToString(key)
 	var err error
 	switch k.os() {
@@ -126,6 +146,9 @@ func (k Keyring) Put(ctx context.Context, key []byte) error {
 
 // Delete removes the stored key, if any.
 func (k Keyring) Delete(ctx context.Context) error {
+	if err := k.check(); err != nil {
+		return err
+	}
 	var err error
 	switch k.os() {
 	case "darwin":
@@ -159,12 +182,16 @@ func (c Command) Passphrase(ctx context.Context) ([]byte, error) {
 	if strings.TrimSpace(c.Cmd) == "" {
 		return nil, errors.New("encryption.password_command is empty")
 	}
-	info, err := os.Stat(c.ConfigPath)
-	if err != nil {
-		return nil, fmt.Errorf("checking %s: %w", c.ConfigPath, err)
-	}
-	if info.Mode().Perm()&0o022 != 0 {
-		return nil, fmt.Errorf("refusing to run password_command: %s is writable by other users (chmod 600 it)", c.ConfigPath)
+	// The file, and its directory (someone could replace the file), must
+	// not be writable by others.
+	for _, p := range []string{c.ConfigPath, filepath.Dir(c.ConfigPath)} {
+		info, err := os.Stat(p)
+		if err != nil {
+			return nil, fmt.Errorf("checking %s: %w", p, err)
+		}
+		if info.Mode().Perm()&0o022 != 0 {
+			return nil, fmt.Errorf("refusing to run password_command: %s is writable by other users (chmod go-w it)", p)
+		}
 	}
 	r := c.run
 	if r == nil {

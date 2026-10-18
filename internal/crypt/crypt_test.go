@@ -56,8 +56,10 @@ func TestSealOpenRoundTripAndBinding(t *testing.T) {
 	}
 }
 
-// TestFixedVector pins the wire format: a blob sealed by today's code must
-// open with tomorrow's.
+// TestFixedVector pins our wire format (nonce || ciphertext || tag): a blob
+// sealed by today's code must open with tomorrow's. It was generated with
+// the same crypto/cipher calls, so it doesn't check AES-GCM itself; see
+// TestKnownAnswer for that.
 func TestFixedVector(t *testing.T) {
 	a, err := NewAEAD(key(7))
 	if err != nil {
@@ -112,6 +114,31 @@ func TestDeriveKEK(t *testing.T) {
 	}
 }
 
-// fixedCiphertext was produced independently with crypto/cipher (key 0x07*32,
+// fixedCiphertext was produced with crypto/cipher (key 0x07*32,
 // nonce 000102..0b, aad "v", plaintext "pinned").
 const fixedCiphertext = "68e8871e786de1a7ca90a014de9ea842d1f7f6752799"
+
+// TestKnownAnswer checks AES-256-GCM with associated data against a known
+// answer from Go's crypto/cipher test suite (aesGCMTests).
+func TestKnownAnswer(t *testing.T) {
+	h := func(s string) []byte {
+		b, err := hex.DecodeString(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return b
+	}
+	k := h("feffe9928665731c6d6a8f9467308308feffe9928665731c6d6a8f9467308308")
+	nonce := h("e1934f5db57cc983e6b180e7")
+	plain := h("73ed042327f70fe9c572a61545eda8b2a0c6e1d6c291ef19248e973aee6c312012f490c2c6f6166f4a59431e182663fcaea05a")
+	ad := h("0a8a18a7150e940c3d87b38e73baee9a5c049ee21795663e264b694a949822b639092d0e67015e86363583fcf0ca645af9f43375f05fdb4ce84f411dcbca73c2220dea03a20115d2e51398344b16bee1ed7c499b353d6c597af8")
+	result := h("fc1ae2b5dcd2c4176c3f538b4c3cc21197f79e608cc3730167936382e4b1e5a7b75ae1678bcebd876705477eb0e0fdbbcda92fb9a0dc58c8d8f84fb590e0422e6077ef")
+	a, err := NewAEAD(k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := a.Open(append(nonce, result...), ad)
+	if err != nil || !bytes.Equal(got, plain) {
+		t.Fatalf("known answer failed: %x, %v", got, err)
+	}
+}

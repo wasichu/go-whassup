@@ -73,14 +73,21 @@ func TestKeyringLinuxUsesStdin(t *testing.T) {
 	if _, err := k.Get(t.Context()); !errors.Is(err, ErrNotFound) { // empty lookup output
 		t.Errorf("empty lookup = %v, want ErrNotFound", err)
 	}
-	if _, err := (Keyring{goos: "plan9"}).Get(t.Context()); err == nil || !strings.Contains(err.Error(), "password-command") {
+	if err := (Keyring{Service: "svc x", Account: "a", goos: "darwin", run: recorder("", nil, &calls)}).Put(t.Context(), []byte{1}); err == nil {
+		t.Error("a service name with a space would change the keychain entry; must be refused")
+	}
+	if _, err := (Keyring{Service: "s", Account: "a", goos: "plan9"}).Get(t.Context()); err == nil || !strings.Contains(err.Error(), "password-command") {
 		t.Errorf("unsupported OS = %v", err)
 	}
 }
 
 func configFile(t *testing.T, mode os.FileMode) string {
 	t.Helper()
-	p := filepath.Join(t.TempDir(), "config.toml")
+	dir := filepath.Join(t.TempDir(), "cfg")
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	p := filepath.Join(dir, "config.toml")
 	if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -104,6 +111,13 @@ func TestCommand(t *testing.T) {
 	c.ConfigPath = configFile(t, 0o664)
 	if _, err := c.Passphrase(t.Context()); err == nil || !strings.Contains(err.Error(), "writable by other users") {
 		t.Errorf("group-writable config = %v", err)
+	}
+	c.ConfigPath = configFile(t, 0o600)
+	if err := os.Chmod(filepath.Dir(c.ConfigPath), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Passphrase(t.Context()); err == nil || !strings.Contains(err.Error(), "writable by other users") {
+		t.Errorf("world-writable config dir = %v", err)
 	}
 	c.ConfigPath = configFile(t, 0o600)
 	c.run = recorder("", nil, &calls)
