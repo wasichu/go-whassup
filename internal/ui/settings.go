@@ -19,6 +19,8 @@ type settings struct {
 	cfg      config.Config
 	selected int
 	editing  bool
+	pending  *config.Config // a change awaiting y/n because its field has a Confirm text
+	confirm  string
 	input    textinput.Model
 	err      string
 	saved    string // last confirmation
@@ -28,8 +30,8 @@ func newSettings(cfg config.Config) settings {
 	in := textinput.New()
 	in.Prompt = ""
 	in.SetVirtualCursor(true)
-	in.CharLimit = 9
-	in.SetWidth(10)
+	in.CharLimit = 512
+	in.SetWidth(40)
 	return settings{cfg: cfg, input: in}
 }
 
@@ -71,6 +73,18 @@ func (m Model) settingsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s.selected = min(s.selected, len(fields)-1)
 	f := fields[s.selected]
 
+	if s.pending != nil {
+		next := *s.pending
+		switch msg.String() {
+		case "y":
+			s.pending, s.confirm = nil, ""
+			return m.commitSetting(next)
+		case "n", "esc":
+			s.pending, s.confirm = nil, ""
+		}
+		return m, nil
+	}
+
 	if s.editing {
 		switch {
 		case key.Matches(msg, keys.Back):
@@ -104,6 +118,14 @@ func (m Model) settingsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if f.Kind == config.KindBool || f.Kind == config.KindChoice {
 			next := s.cfg
 			next.Fields()[s.selected].Cycle()
+			if f.Confirm != "" {
+				if err := next.Validate(); err != nil {
+					s.err = err.Error()
+					return m, nil
+				}
+				s.pending, s.confirm = &next, f.Confirm
+				return m, nil
+			}
 			return m.commitSetting(next)
 		}
 		s.editing, s.err = true, ""
@@ -180,7 +202,9 @@ func (m Model) settingsView(width, height int) string {
 			b.WriteString(faintStyle.Render("Applies the next time you link (L › Re-link).") + "\n")
 		}
 	}
-	if s.err != "" {
+	if s.pending != nil {
+		b.WriteString("\n" + lipgloss.NewStyle().Width(min(width-4, 80)).Render(s.confirm) + "\n" + senderStyle.Render("(y/n)") + "\n")
+	} else if s.err != "" {
 		b.WriteString("\n" + errorStyle.Render(s.err) + "\n")
 	} else if s.saved != "" {
 		b.WriteString("\n" + onlineStyle.Render(s.saved) + "\n")

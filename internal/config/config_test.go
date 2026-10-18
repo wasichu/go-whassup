@@ -19,7 +19,8 @@ func TestLoadMissingFileGivesDefaults(t *testing.T) {
 
 func TestSaveLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "config.toml")
-	want := Config{History: History{RequestFullSync: true, FullSyncDays: 365, KeepDays: 90, MaxMessagesPerChat: 5000}, UI: UI{InlineImages: false}, Privacy: Privacy{MarkRead: MarkReadReceiptsOn}}
+	want := Config{History: History{RequestFullSync: true, FullSyncDays: 365, KeepDays: 90, MaxMessagesPerChat: 5000}, UI: UI{InlineImages: false}, Privacy: Privacy{MarkRead: MarkReadReceiptsOn},
+		Encryption: Encryption{KeySource: KeySourcePrompt}}
 	if err := Save(path, want); err != nil {
 		t.Fatalf("Save: %v", err)
 	}

@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -18,9 +19,24 @@ import (
 // file by Save and shown by the Settings screen, so keep them user-facing.
 // Tag `applies:"pairing"` marks settings that only take effect when linking.
 type Config struct {
-	History History `toml:"history" comment:"How much chat history to fetch and keep."`
-	UI      UI      `toml:"ui" comment:"How the terminal interface looks and behaves."`
-	Privacy Privacy `toml:"privacy" comment:"What go-whassup tells WhatsApp about you."`
+	History    History    `toml:"history" comment:"How much chat history to fetch and keep."`
+	UI         UI         `toml:"ui" comment:"How the terminal interface looks and behaves."`
+	Privacy    Privacy    `toml:"privacy" comment:"What go-whassup tells WhatsApp about you."`
+	Encryption Encryption `toml:"encryption" comment:"Encryption of stored messages at rest. See docs/storage.md."`
+}
+
+// Key sources for Encryption.KeySource.
+const (
+	KeySourceKeyring         = "keyring"
+	KeySourcePasswordCommand = "password-command"
+	KeySourcePrompt          = "prompt"
+)
+
+// Encryption controls at-rest encryption of messages.db.
+type Encryption struct {
+	Enabled         bool   `toml:"enabled" confirm:"Encrypts message text and attachment keys only: who you talk to, when, and contact names stay readable on disk. Turning it on re-encrypts stored messages and turns message search off; turning it off decrypts everything back. Continue?" comment:"Encrypt message text and attachment keys in messages.db.\nEncrypts message text only: who you talk to, when, and contact names stay readable on disk.\nMessage search is unavailable while this is on."`
+	KeySource       string `toml:"key_source" choices:"keyring,password-command,prompt" comment:"Where the key comes from: keyring = your OS keychain (no prompt);\npassword-command = run password_command and use its output as a passphrase;\nprompt = ask for a passphrase when go-whassup starts."`
+	PasswordCommand string `toml:"password_command" text:"true" comment:"With key_source = password-command: a shell command that prints your passphrase,\ne.g. \"pass show whatsapp\" or \"gpg --decrypt ~/.config/go-whassup/pass.gpg\"."`
 }
 
 // Mark-read modes for Privacy.MarkRead.
@@ -52,7 +68,11 @@ type History struct {
 // Default returns the configuration used when no file exists: store
 // everything the phone sends.
 func Default() Config {
-	return Config{UI: UI{InlineImages: true}, Privacy: Privacy{MarkRead: MarkReadLocalOnly}}
+	return Config{
+		UI:         UI{InlineImages: true},
+		Privacy:    Privacy{MarkRead: MarkReadLocalOnly},
+		Encryption: Encryption{KeySource: KeySourceKeyring},
+	}
 }
 
 // Validate reports every invalid setting.
@@ -70,6 +90,14 @@ func (c Config) Validate() error {
 	case MarkReadLocalOnly, MarkReadReceiptsOff, MarkReadReceiptsOn:
 	default:
 		errs = append(errs, fmt.Errorf("privacy.mark_read must be %s, got %q", markReadChoicesForError, c.Privacy.MarkRead))
+	}
+	switch c.Encryption.KeySource {
+	case KeySourceKeyring, KeySourcePasswordCommand, KeySourcePrompt:
+	default:
+		errs = append(errs, fmt.Errorf("encryption.key_source must be keyring, password-command or prompt, got %q", c.Encryption.KeySource))
+	}
+	if c.Encryption.Enabled && c.Encryption.KeySource == KeySourcePasswordCommand && strings.TrimSpace(c.Encryption.PasswordCommand) == "" {
+		errs = append(errs, errors.New("encryption.password_command is required with key_source = password-command"))
 	}
 	if c.History.FullSyncDays > 0 && !c.History.RequestFullSync {
 		errs = append(errs, errors.New("history.full_sync_days is only used with history.request_full_sync = true"))

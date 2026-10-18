@@ -1220,3 +1220,32 @@ func TestSearchJumpsToOlderMessage(t *testing.T) {
 		t.Errorf("should scroll to the hit:\n%s", v)
 	}
 }
+
+func TestSettingsConfirmsEncryptionToggle(t *testing.T) {
+	h := newHarness(t, true)
+	h.key(",")
+	for range 6 { // down to encryption.enabled
+		h.key("down")
+	}
+	st := h.model().settings
+	if f := st.cfg.Fields()[st.selected]; f.Name() != "encryption.enabled" {
+		t.Fatalf("selected %s", f.Name())
+	}
+	h.key("enter")
+	v := ansi.Strip(h.view())
+	if !strings.Contains(v, "who you talk to") || !strings.Contains(v, "(y/n)") {
+		t.Fatalf("confirmation with metadata warning missing:\n%s", v)
+	}
+	if len(h.applied) != 0 {
+		t.Fatal("applied before confirming")
+	}
+	h.key("n")
+	if len(h.applied) != 0 || h.model().settings.cfg.Encryption.Enabled {
+		t.Fatal("n should cancel")
+	}
+	h.key("enter")
+	h.key("y")
+	if len(h.applied) != 1 || !h.applied[0].Encryption.Enabled {
+		t.Errorf("y should apply: %+v", h.applied)
+	}
+}

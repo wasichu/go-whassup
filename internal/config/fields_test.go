@@ -12,7 +12,7 @@ func TestFieldsDiscoveryAndEditing(t *testing.T) {
 	for _, f := range fields {
 		names = append(names, f.Name())
 	}
-	want := "history.request_full_sync history.full_sync_days history.keep_days history.max_messages_per_chat ui.inline_images privacy.mark_read"
+	want := "history.request_full_sync history.full_sync_days history.keep_days history.max_messages_per_chat ui.inline_images privacy.mark_read encryption.enabled encryption.key_source encryption.password_command"
 	if got := strings.Join(names, " "); got != want {
 		t.Fatalf("fields = %s, want %s", got, want)
 	}
@@ -66,5 +66,31 @@ func TestChoiceField(t *testing.T) {
 	}
 	if err := f.Set(MarkReadReceiptsOff); err != nil || cfg.Privacy.MarkRead != MarkReadReceiptsOff {
 		t.Errorf("Set(read-receipts-off) = %v, %q", err, cfg.Privacy.MarkRead)
+	}
+}
+
+func TestEncryptionFields(t *testing.T) {
+	cfg := Default()
+	byName := map[string]Field{}
+	for _, f := range cfg.Fields() {
+		byName[f.Name()] = f
+	}
+	if f := byName["encryption.enabled"]; f.Kind != KindBool || !strings.Contains(f.Confirm, "who you talk to") {
+		t.Errorf("enabled field = %+v; want a bool with the metadata warning as confirmation", f)
+	}
+	if f := byName["encryption.key_source"]; f.Kind != KindChoice || f.Value() != KeySourceKeyring {
+		t.Errorf("key_source = %+v (%q)", f, f.Value())
+	}
+	cmd := byName["encryption.password_command"]
+	if cmd.Kind != KindText {
+		t.Fatalf("password_command kind = %v", cmd.Kind)
+	}
+	if err := cmd.Set("pass show whatsapp"); err != nil || cfg.Encryption.PasswordCommand != "pass show whatsapp" {
+		t.Errorf("Set = %v, %q", err, cfg.Encryption.PasswordCommand)
+	}
+
+	cfg.Encryption.Enabled, cfg.Encryption.KeySource, cfg.Encryption.PasswordCommand = true, KeySourcePasswordCommand, " "
+	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "password_command is required") {
+		t.Errorf("Validate = %v", err)
 	}
 }

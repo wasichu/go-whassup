@@ -23,8 +23,9 @@ TUI's Settings screen (`,`) reads and writes it.
 - **Precedence:** defaults < file < command-line flags (`-debug`). Environment
   variables are not supported (add them only when there's a real need).
 - **Settings screen.** `Config.Fields()` discovers settings by reflection over the
-  struct tags: bool and int fields, and string fields with a `choices:"a,b"` tag, which
-  enter cycles through. Tag `applies:"pairing"` marks link-time-only settings. The TUI renders and edits them generically, so a new setting appears there
+  struct tags: bool and int fields; string fields with a `choices:"a,b"` tag (enter
+  cycles through them) or `text:"true"` (free text). A `confirm:"…"` tag makes Settings
+  ask y/n with that text before changing the value. Tag `applies:"pairing"` marks link-time-only settings. The TUI renders and edits them generically, so a new setting appears there
   with no UI code. A change goes through `Validate` → `Save` → `ApplyConfig` (wired in
   `internal/app`), which updates the client's pairing options and the recorder's
   retention, then prunes.
@@ -71,8 +72,18 @@ documented behavior.)
 The trade-off with `read-receipts-off`/`read-receipts-on`: each read sends an (end-to-end encrypted)
 receipt, so WhatsApp's servers learn *when* you read chats, though not what.
 
+### `[encryption]`
+
+**Not active yet.** The setting exists and the Settings screen shows its confirmation,
+but encryption itself is being implemented. Until this note is gone, turning it on does
+nothing.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `false` | Encrypt message text and attachment keys in `messages.db`. **Encrypts message text only: who you talk to, when, and contact names stay readable on disk.** Message search is off while it's on. Turning it on re-encrypts stored messages; turning it off decrypts them back. The Settings toggle asks for confirmation first. |
+| `key_source` | `"keyring"` | `keyring` (OS keychain, no prompt), `password-command` (runs `password_command`; its output is the passphrase), or `prompt` (asks at startup). |
+| `password_command` | `""` | Shell command that prints the passphrase, e.g. `pass show whatsapp`. Required with `password-command`. |
+
 ## Planned sections
 
-- `[encryption]`: whether message text is encrypted at rest, and the key source
-  (`keyring`, `password_command`, `prompt`). See `storage.md`.
 - More `[ui]` settings: theme and keybindings, as the TUI grows.

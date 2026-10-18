@@ -15,6 +15,7 @@ const (
 	KindBool FieldKind = iota
 	KindInt
 	KindChoice // a string limited to Choices
+	KindText   // a free-form string (tag text:"true")
 )
 
 // Field is one setting, discovered from Config's struct tags so editors
@@ -29,6 +30,8 @@ type Field struct {
 	PairingOnly bool
 	// Choices lists the allowed values of a KindChoice field, in display order.
 	Choices []string
+	// Confirm, if set, is shown for confirmation before the value changes.
+	Confirm string
 	v       reflect.Value
 }
 
@@ -40,7 +43,7 @@ func (f Field) Value() string {
 	switch f.Kind {
 	case KindBool:
 		return strconv.FormatBool(f.v.Bool())
-	case KindChoice:
+	case KindChoice, KindText:
 		return f.v.String()
 	}
 	return strconv.FormatInt(f.v.Int(), 10)
@@ -63,6 +66,8 @@ func (f Field) Set(s string) error {
 			return fmt.Errorf("%s: want a whole number", f.Name())
 		}
 		f.v.SetInt(int64(n))
+	case KindText:
+		f.v.SetString(s)
 	case KindChoice:
 		if !slices.Contains(f.Choices, s) {
 			return fmt.Errorf("%s: want one of %s", f.Name(), strings.Join(f.Choices, ", "))
@@ -103,6 +108,7 @@ func (c *Config) Fields() []Field {
 				Key:         tagName(sf),
 				Comment:     sf.Tag.Get("comment"),
 				PairingOnly: sf.Tag.Get("applies") == "pairing",
+				Confirm:     sf.Tag.Get("confirm"),
 				v:           sv.Field(j),
 			}
 			switch sf.Type.Kind() {
@@ -111,11 +117,14 @@ func (c *Config) Fields() []Field {
 			case reflect.Int:
 				f.Kind = KindInt
 			case reflect.String:
-				choices := sf.Tag.Get("choices")
-				if choices == "" {
-					continue // free-form strings aren't editable generically
+				switch {
+				case sf.Tag.Get("choices") != "":
+					f.Kind, f.Choices = KindChoice, strings.Split(sf.Tag.Get("choices"), ",")
+				case sf.Tag.Get("text") == "true":
+					f.Kind = KindText
+				default:
+					continue // not editable generically
 				}
-				f.Kind, f.Choices = KindChoice, strings.Split(choices, ",")
 			default:
 				continue // not editable generically
 			}
