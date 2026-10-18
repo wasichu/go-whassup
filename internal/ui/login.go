@@ -128,46 +128,12 @@ func (m Model) openLogin(notice string) Model {
 
 func (m Model) loginKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	l := &m.login
-	waiting := l.step == loginRequesting || l.step == loginCode || l.step == loginQR
-
 	if key.Matches(msg, keys.Back) {
-		switch {
-		case waiting:
-			// First esc cancels the pairing; a second leaves the screen.
-			l.step, l.code, l.qr, l.err = loginChoose, "", "", ""
-			m, hide, _ := m.hideQRImage()
-			return m, tea.Batch(cancelPairing(m.deps.Client), hide)
-		case l.step == loginPhone || l.step == loginConfirm || l.step == loginFailed:
-			l.step, l.err = loginChoose, ""
-			return m, nil
-		case l.step == loginUnlinking || l.step == loginFinishing:
-			return m, nil // can't abandon these halfway
-		}
-		m.screen = screenMain
-		return m, nil
+		return m.loginBack()
 	}
-
 	switch l.step {
 	case loginChoose:
-		opts := l.options(m.deps.Client.IsPaired())
-		switch {
-		case key.Matches(msg, keys.Up):
-			l.choice = max(l.choice-1, 0)
-		case key.Matches(msg, keys.Down):
-			l.choice = min(l.choice+1, len(opts)-1)
-		case key.Matches(msg, keys.Select):
-			switch opts[min(l.choice, len(opts)-1)] {
-			case optPhone:
-				l.step = loginPhone
-				cmd := l.phone.Focus() // evaluate before m is copied into the return
-				return m, cmd
-			case optQR:
-				l.step, l.err = loginQR, ""
-				return m, pairQR(m.ctx, m.deps.Client)
-			case optRelink:
-				l.step = loginConfirm
-			}
-		}
+		return m.loginChooseKey(msg)
 	case loginConfirm:
 		if msg.String() == "y" {
 			l.step = loginUnlinking
@@ -177,23 +143,72 @@ func (m Model) loginKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			l.step = loginChoose
 		}
 	case loginPhone:
-		if key.Matches(msg, keys.Select) && msg.String() == "enter" {
-			if _, err := wa.NormalizePhone(l.phone.Value()); err != nil {
-				l.err = err.Error()
-				return m, nil
-			}
-			l.step, l.err = loginRequesting, ""
-			return m, pairPhone(m.ctx, m.deps.Client, l.phone.Value())
-		}
-		var cmd tea.Cmd
-		l.phone, cmd = l.phone.Update(msg)
-		return m, cmd
+		return m.loginPhoneKey(msg)
 	case loginFailed:
 		if key.Matches(msg, keys.Select) {
 			l.step, l.err = loginChoose, ""
 		}
 	}
 	return m, nil
+}
+
+// loginBack is esc: it backs out one step, cancelling a pairing in
+// progress, and leaves the screen from the first step.
+func (m Model) loginBack() (Model, tea.Cmd) {
+	l := &m.login
+	switch l.step {
+	case loginRequesting, loginCode, loginQR:
+		// First esc cancels the pairing; a second leaves the screen.
+		l.step, l.code, l.qr, l.err = loginChoose, "", "", ""
+		m, hide, _ := m.hideQRImage()
+		return m, tea.Batch(cancelPairing(m.deps.Client), hide)
+	case loginPhone, loginConfirm, loginFailed:
+		l.step, l.err = loginChoose, ""
+		return m, nil
+	case loginUnlinking, loginFinishing:
+		return m, nil // can't abandon these halfway
+	}
+	m.screen = screenMain
+	return m, nil
+}
+
+func (m Model) loginChooseKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
+	l := &m.login
+	opts := l.options(m.deps.Client.IsPaired())
+	switch {
+	case key.Matches(msg, keys.Up):
+		l.choice = max(l.choice-1, 0)
+	case key.Matches(msg, keys.Down):
+		l.choice = min(l.choice+1, len(opts)-1)
+	case key.Matches(msg, keys.Select):
+		switch opts[min(l.choice, len(opts)-1)] {
+		case optPhone:
+			l.step = loginPhone
+			cmd := l.phone.Focus() // evaluate before m is copied into the return
+			return m, cmd
+		case optQR:
+			l.step, l.err = loginQR, ""
+			return m, pairQR(m.ctx, m.deps.Client)
+		case optRelink:
+			l.step = loginConfirm
+		}
+	}
+	return m, nil
+}
+
+func (m Model) loginPhoneKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
+	l := &m.login
+	if key.Matches(msg, keys.Select) && msg.String() == "enter" {
+		if _, err := wa.NormalizePhone(l.phone.Value()); err != nil {
+			l.err = err.Error()
+			return m, nil
+		}
+		l.step, l.err = loginRequesting, ""
+		return m, pairPhone(m.ctx, m.deps.Client, l.phone.Value())
+	}
+	var cmd tea.Cmd
+	l.phone, cmd = l.phone.Update(msg)
+	return m, cmd
 }
 
 // loginResult handles the login commands' results.
@@ -288,69 +303,88 @@ func (m Model) hideQRImage() (Model, tea.Cmd, bool) {
 }
 
 func (m Model) loginView(width, height int) string {
-	l := m.login
-	pad := pageStyle(width, height)
 	title := paneTitleStyle.Render("Link go-whassup to WhatsApp")
-	if l.step == loginQR {
-		// The QR needs every row it can get: title, blank line, then the code.
-		// A tip on enabling inline images costs two rows, so only when they'd
-		// actually be used (setting on) and the text QR still fits.
-		qr := m.qrView(width-2, height-2)
-		if hint := m.deps.Graphics.Hint; hint != "" && m.deps.Config.UI.InlineImages {
-			if withTip := m.qrView(width-2, height-4); !strings.Contains(withTip, "doesn't fit") || strings.Contains(qr, "doesn't fit") {
-				qr = withTip + "\n\n" + faintStyle.Render("Tip: "+hint)
-			}
-		}
-		return pad.Render(title + "\n\n" + qr)
+	if m.login.step == loginQR {
+		return pageStyle(width, height).Render(title + "\n\n" + m.loginQRView(width, height))
 	}
-
 	var body []string
-	if l.notice != "" && (l.step == loginChoose || l.step == loginConfirm) {
+	if l := m.login; l.notice != "" && (l.step == loginChoose || l.step == loginConfirm) {
 		body = append(body, faintStyle.Render(l.notice), "")
 	}
+	body = append(body, m.loginBody()...)
+	return pageStyle(width, height).Render(title + "\n\n" + strings.Join(body, "\n"))
+}
+
+// loginQRView is the QR step: the QR needs every row it can get (title,
+// blank line, then the code). A tip on enabling inline images costs two
+// rows, so it's shown only when they'd actually be used (setting on) and
+// the text QR still fits.
+func (m Model) loginQRView(width, height int) string {
+	qr := m.qrView(width-2, height-2)
+	if hint := m.deps.Graphics.Hint; hint != "" && m.deps.Config.UI.InlineImages {
+		if withTip := m.qrView(width-2, height-4); !strings.Contains(withTip, "doesn't fit") || strings.Contains(qr, "doesn't fit") {
+			qr = withTip + "\n\n" + faintStyle.Render("Tip: "+hint)
+		}
+	}
+	return qr
+}
+
+// loginBody is the current step's lines (other than the QR step).
+func (m Model) loginBody() []string {
+	l := m.login
 	switch l.step {
 	case loginChoose:
-		paired := m.deps.Client.IsPaired()
-		if paired {
-			body = append(body, "This device is linked.", "")
-		}
-		for i, o := range l.options(paired) {
-			line := "  " + o.label()
-			if i == l.choice {
-				line = activeSelStyle.Render("› " + o.label())
-			}
-			body = append(body, line)
-		}
-		if !paired {
-			body = append(body, "", faintStyle.Render("A QR code needs a fairly large window (about 35 rows)."))
-		}
+		return m.chooseLines()
 	case loginConfirm:
-		body = append(body,
+		return []string{
 			"Re-link removes go-whassup from your phone's Linked devices and deletes",
 			"the session here, then pairs again. Your stored messages are kept, and",
 			"the phone sends a fresh history sync.",
-			"", senderStyle.Render("Re-link now? (y/n)"))
+			"", senderStyle.Render("Re-link now? (y/n)"),
+		}
 	case loginUnlinking:
-		body = append(body, "Unlinking…")
+		return []string{"Unlinking…"}
 	case loginPhone:
-		body = append(body, "Your WhatsApp number, with country code:", "", l.phone.View())
+		body := []string{"Your WhatsApp number, with country code:", "", l.phone.View()}
 		if l.err != "" {
 			body = append(body, "", errorStyle.Render(l.err))
 		}
+		return body
 	case loginRequesting:
-		body = append(body, "Requesting a pairing code…")
+		return []string{"Requesting a pairing code…"}
 	case loginCode:
-		body = append(body,
+		return []string{
 			"On your phone: Settings › Linked devices › Link a device ›",
 			"“Link with phone number instead”, then enter:", "",
 			codeStyle.Render(spaced(l.code)), "",
-			faintStyle.Render("The code expires in about 3 minutes."))
+			faintStyle.Render("The code expires in about 3 minutes."),
+		}
 	case loginFinishing:
-		body = append(body, onlineStyle.Render("Linked as "+l.jid), "Finishing setup…")
+		return []string{onlineStyle.Render("Linked as " + l.jid), "Finishing setup…"}
 	case loginFailed:
-		body = append(body, errorStyle.Render("Pairing failed: "+l.err), "", "Press enter to try again.")
+		return []string{errorStyle.Render("Pairing failed: " + l.err), "", "Press enter to try again."}
 	}
-	return pad.Render(title + "\n\n" + strings.Join(body, "\n"))
+	return nil
+}
+
+// chooseLines lists the ways to link (or re-link).
+func (m Model) chooseLines() []string {
+	var body []string
+	paired := m.deps.Client.IsPaired()
+	if paired {
+		body = append(body, "This device is linked.", "")
+	}
+	for i, o := range m.login.options(paired) {
+		line := "  " + o.label()
+		if i == m.login.choice {
+			line = activeSelStyle.Render("› " + o.label())
+		}
+		body = append(body, line)
+	}
+	if !paired {
+		body = append(body, "", faintStyle.Render("A QR code needs a fairly large window (about 35 rows)."))
+	}
+	return body
 }
 
 // qrInstructions sit beside the QR when there's room, above it otherwise.
