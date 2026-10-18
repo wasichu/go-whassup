@@ -183,6 +183,10 @@ func (h *harness) key(k string) {
 		h.send(tea.KeyPressMsg{Code: tea.KeyDown})
 	case "up":
 		h.send(tea.KeyPressMsg{Code: tea.KeyUp})
+	case "left":
+		h.send(tea.KeyPressMsg{Code: tea.KeyLeft})
+	case "right":
+		h.send(tea.KeyPressMsg{Code: tea.KeyRight})
 	case "ctrl+c":
 		h.send(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	default:

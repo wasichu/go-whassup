@@ -57,7 +57,11 @@ var (
 		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open")),
 		keys.Back,
 	}
-	settingsHelp = []key.Binding{keys.Up, keys.Down, keys.Edit, keys.Back}
+	// ←/→ cycle a choice either way, so every option is reachable without
+	// passing through one that asks for more (key_source = password-command).
+	settingsPrev = key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/→", "cycle"))
+	settingsNext = key.NewBinding(key.WithKeys("right", "l"))
+	settingsHelp = []key.Binding{keys.Up, keys.Down, keys.Edit, settingsPrev, keys.Back}
 	fullMainHelp = [][]key.Binding{
 		{keys.Up, keys.Down, keys.Open, keys.Find, keys.Search, keys.Quit},
 		{keys.Media, keys.Attach, keys.Info},

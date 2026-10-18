@@ -104,3 +104,64 @@ func TestSettingsConfirmsEncryptionToggle(t *testing.T) {
 		t.Errorf("y should apply: %+v", h.applied)
 	}
 }
+
+func TestSettingsKeySourceAsksForPasswordCommand(t *testing.T) {
+	h := newHarness(t, true)
+	h.key(",")
+	for range 7 { // down to encryption.key_source
+		h.key("down")
+	}
+	if v := ansi.Strip(h.view()); hasSettingRow(v, "password_command") {
+		t.Fatalf("password_command shown with key_source = keyring:\n%s", v)
+	}
+
+	h.key("enter") // keyring -> password-command reveals the empty command
+	v := ansi.Strip(h.view())
+	if !strings.Contains(v, "‹ password-command ›") || !hasSettingRow(v, "password_command") || !h.model().settings.editing {
+		t.Fatalf("command not asked for:\n%s", v)
+	}
+	h.key("enter") // nothing typed
+	if v := ansi.Strip(h.view()); !strings.Contains(v, "password_command is required") || len(h.applied) != 0 {
+		t.Fatalf("empty command accepted (applied %d):\n%s", len(h.applied), v)
+	}
+	h.key("esc") // drops the key_source change too
+	v = ansi.Strip(h.view())
+	if hasSettingRow(v, "password_command") || !strings.Contains(v, "‹ keyring ›") || len(h.applied) != 0 {
+		t.Fatalf("esc should leave keyring unchanged:\n%s", v)
+	}
+
+	h.key("enter")
+	h.key("pass show wa")
+	h.key("enter")
+	h.settle()
+	if n := len(h.applied); n != 1 || h.applied[0].Encryption.KeySource != "password-command" || h.applied[0].Encryption.PasswordCommand != "pass show wa" {
+		t.Fatalf("applied = %+v", h.applied)
+	}
+	if v := ansi.Strip(h.view()); !strings.Contains(v, "pass show wa") {
+		t.Errorf("saved command not listed:\n%s", v)
+	}
+
+	h.key("up") // password_command -> key_source
+	h.key("right")
+	h.settle()
+	if got := h.applied[len(h.applied)-1].Encryption.KeySource; got != "prompt" || h.model().settings.editing {
+		t.Errorf("right: key_source = %q, editing = %v; want prompt with no question", got, h.model().settings.editing)
+	}
+	h.key("left") // back to password-command: its command is already set
+	h.key("left") // and on to keyring
+	h.settle()
+	if got := h.applied[len(h.applied)-1].Encryption.KeySource; got != "keyring" {
+		t.Errorf("left twice: key_source = %q, want keyring", got)
+	}
+}
+
+// hasSettingRow reports whether the Settings view lists key as a row (its
+// name also appears in other settings' help text).
+func hasSettingRow(view, key string) bool {
+	for _, line := range strings.Split(view, "\n") {
+		if f := strings.Fields(strings.TrimLeft(line, " ›")); len(f) > 0 && f[0] == key {
+			return true
+		}
+	}
+	return false
+}

@@ -36,7 +36,7 @@ const (
 type Encryption struct {
 	Enabled         bool   `toml:"enabled" confirm:"Encrypts message text and attachment keys only: who you talk to, when, and contact names stay readable on disk. Turning it on re-encrypts stored messages and turns message search off; turning it off decrypts everything back. Takes effect when you next start go-whassup. Continue?" comment:"Encrypt message text and attachment keys in messages.db.\nEncrypts message text only: who you talk to, when, and contact names stay readable on disk.\nMessage search is unavailable while this is on."`
 	KeySource       string `toml:"key_source" choices:"keyring,password-command,prompt" comment:"Where the key comes from: keyring = your OS keychain (no prompt);\npassword-command = run password_command and use its output as a passphrase;\nprompt = ask for a passphrase when go-whassup starts."`
-	PasswordCommand string `toml:"password_command" text:"true" comment:"With key_source = password-command: a shell command that prints your passphrase,\ne.g. \"pass show whatsapp\" or \"gpg --decrypt ~/.config/go-whassup/pass.gpg\"."`
+	PasswordCommand string `toml:"password_command" text:"true" shown_when:"key_source=password-command" comment:"With key_source = password-command: a shell command that prints your passphrase,\ne.g. \"pass show whatsapp\" or \"gpg --decrypt ~/.config/go-whassup/pass.gpg\"."`
 }
 
 // Mark-read modes for Privacy.MarkRead.
@@ -96,8 +96,9 @@ func (c Config) Validate() error {
 	default:
 		errs = append(errs, fmt.Errorf("encryption.key_source must be keyring, password-command or prompt, got %q", c.Encryption.KeySource))
 	}
-	if c.Encryption.Enabled && c.Encryption.KeySource == KeySourcePasswordCommand && strings.TrimSpace(c.Encryption.PasswordCommand) == "" {
-		errs = append(errs, errors.New("encryption.password_command is required with key_source = password-command"))
+	if c.Encryption.KeySource == KeySourcePasswordCommand && strings.TrimSpace(c.Encryption.PasswordCommand) == "" {
+		errs = append(errs, errors.New(`encryption.password_command is required with key_source = password-command: `+
+			`enter a command that prints your passphrase, e.g. "pass show whatsapp"`))
 	}
 	if c.History.FullSyncDays > 0 && !c.History.RequestFullSync {
 		errs = append(errs, errors.New("history.full_sync_days is only used with history.request_full_sync = true"))

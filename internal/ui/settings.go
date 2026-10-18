@@ -21,9 +21,15 @@ type settings struct {
 	editing  bool
 	pending  *config.Config // a change awaiting y/n because its field has a Confirm text
 	confirm  string
-	input    textinput.Model
-	err      string
-	saved    string // last confirmation
+	// staged is a change that revealed an empty setting (key_source =
+	// password-command shows password_command): it's held, and shown,
+	// until that setting is filled in. Esc drops both. stagedFrom is the
+	// row to return to.
+	staged     *config.Config
+	stagedFrom int
+	input      textinput.Model
+	err        string
+	saved      string // last confirmation
 }
 
 func newSettings(cfg config.Config) settings {
@@ -86,8 +92,16 @@ func (s *settings) help() []key.Binding {
 	return settingsHelp
 }
 
+// shown is the config the page displays: a staged change, else the saved one.
+func (s *settings) shown() *config.Config {
+	if s.staged != nil {
+		return s.staged
+	}
+	return &s.cfg
+}
+
 func (s *settings) key(r rootAPI, msg tea.KeyPressMsg) (bool, tea.Cmd) {
-	fields := s.cfg.Fields()
+	fields := s.shown().Fields()
 	if len(fields) == 0 {
 		return true, nil
 	}
@@ -107,8 +121,10 @@ func (s *settings) key(r rootAPI, msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	case key.Matches(msg, keys.Down):
 		s.selected = min(s.selected+1, len(fields)-1)
 		s.err = ""
-	case key.Matches(msg, keys.Select):
-		return false, s.change(r, fields[s.selected])
+	case key.Matches(msg, keys.Select), key.Matches(msg, settingsNext):
+		return false, s.change(r, fields[s.selected], 1)
+	case key.Matches(msg, settingsPrev):
+		return false, s.change(r, fields[s.selected], -1)
 	}
 	return false, nil
 }
@@ -132,9 +148,12 @@ func (s *settings) editKey(r rootAPI, msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, keys.Back):
 		s.editing, s.err = false, ""
 		s.input.Blur()
+		if s.staged != nil { // drop the change that asked for this value
+			s.staged, s.selected = nil, s.stagedFrom
+		}
 		return nil
 	case msg.String() == "enter":
-		next := s.cfg // value copy; edit it, keep s.cfg until valid
+		next := *s.shown() // value copy; edit it, keep s.cfg until valid
 		if err := next.Fields()[s.selected].Set(s.input.Value()); err != nil {
 			s.err = err.Error()
 			return nil
@@ -146,17 +165,23 @@ func (s *settings) editKey(r rootAPI, msg tea.KeyPressMsg) tea.Cmd {
 	return cmd
 }
 
-// change cycles a bool or choice (asking first if the field says so), or
-// starts editing a text field.
-func (s *settings) change(r rootAPI, f config.Field) tea.Cmd {
+// change cycles a bool or choice (dir 1 forward, -1 back; asking first if
+// the field says so), or starts editing a text field. A choice that
+// reveals an empty setting is staged while that setting is asked for.
+func (s *settings) change(r rootAPI, f config.Field, dir int) tea.Cmd {
 	if f.Kind != config.KindBool && f.Kind != config.KindChoice {
-		s.editing, s.err = true, ""
-		s.input.SetValue(f.Value())
-		s.input.CursorEnd()
-		return s.input.Focus()
+		return s.edit(f)
 	}
 	next := s.cfg
-	next.Fields()[s.selected].Cycle()
+	if dir < 0 {
+		next.Fields()[s.selected].CycleBack()
+	} else {
+		next.Fields()[s.selected].Cycle()
+	}
+	if i, ok := revealedEmpty(&s.cfg, &next); ok {
+		s.staged, s.stagedFrom, s.selected = &next, s.selected, i
+		return s.edit(next.Fields()[i])
+	}
 	if f.Confirm == "" {
 		return s.commit(r, next)
 	}
@@ -166,6 +191,29 @@ func (s *settings) change(r rootAPI, f config.Field) tea.Cmd {
 	}
 	s.pending, s.confirm = &next, f.Confirm
 	return nil
+}
+
+// edit starts editing a text field.
+func (s *settings) edit(f config.Field) tea.Cmd {
+	s.editing, s.err = true, ""
+	s.input.SetValue(f.Value())
+	s.input.CursorEnd()
+	return s.input.Focus()
+}
+
+// revealedEmpty finds a text setting that after lists but before doesn't
+// (see config's shown_when), still empty: it must be filled in first.
+func revealedEmpty(before, after *config.Config) (int, bool) {
+	had := map[string]bool{}
+	for _, f := range before.Fields() {
+		had[f.Name()] = true
+	}
+	for i, f := range after.Fields() {
+		if !had[f.Name()] && f.Kind == config.KindText && strings.TrimSpace(f.Value()) == "" {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
 func (s *settings) commit(r rootAPI, next config.Config) tea.Cmd {
@@ -181,8 +229,13 @@ func (s *settings) commit(r rootAPI, next config.Config) tea.Cmd {
 // savedResult shows the outcome of a save. (The root adopts the saved
 // config even if this page has closed meanwhile.)
 func (s *settings) savedResult(r rootAPI, msg configSavedMsg) {
+	staged := s.staged != nil
+	s.staged = nil
 	if !msg.saved {
 		s.err = "saving: " + msg.err.Error()
+		if staged {
+			s.selected = s.stagedFrom
+		}
 		return
 	}
 	// Saved; adopt it even if applying partly failed, since the file now
@@ -195,7 +248,7 @@ func (s *settings) savedResult(r rootAPI, msg configSavedMsg) {
 }
 
 func (s *settings) view(r rootAPI, width, height int) string {
-	fields := s.cfg.Fields()
+	fields := s.shown().Fields()
 	if s.pending != nil {
 		// A confirmation gets the whole screen so it fits small terminals.
 		name := fields[s.selected].Name()

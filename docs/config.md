@@ -23,9 +23,12 @@ TUI's Settings screen (`,`) reads and writes it.
 - **Precedence:** defaults < file < command-line flags (`-debug`). Environment
   variables are not supported (add them only when there's a real need).
 - **Settings screen.** `Config.Fields()` discovers settings by reflection over the
-  struct tags: bool and int fields; string fields with a `choices:"a,b"` tag (enter
-  cycles through them) or `text:"true"` (free text). A `confirm:"…"` tag makes Settings
-  ask y/n with that text before changing the value. Tag `applies:"pairing"` marks link-time-only settings. The TUI renders and edits them generically, so a new setting appears there
+  struct tags: bool and int fields; string fields with a `choices:"a,b"` tag (enter or
+  →/← cycles through them) or `text:"true"` (free text). A `confirm:"…"` tag makes Settings
+  ask y/n with that text before changing the value. Tag `applies:"pairing"` marks link-time-only settings.
+  `shown_when:"key=value"` lists a setting only while a sibling has that value
+  (`password_command` only with `key_source = password-command`). A choice that reveals an
+  empty text setting asks for it at once, and Esc drops the choice too. The TUI renders and edits them generically, so a new setting appears there
   with no UI code. A change goes through `Validate` → `Save` → `ApplyConfig` (wired in
   `internal/app`), which updates the client's pairing options and the recorder's
   retention, then prunes.
@@ -82,7 +85,7 @@ encryption off, let it finish, then turn it on with the new source.
 | --- | --- | --- |
 | `enabled` | `false` | Encrypt message text, reactions and attachment keys in `messages.db`. **Encrypts message text only: who you talk to, when, and contact names stay readable on disk.** Message search is off while it's on. Turning it on re-encrypts stored messages; turning it off decrypts them back. The Settings toggle asks for confirmation first. |
 | `key_source` | `"keyring"` | `keyring` (OS keychain, no prompt), `password-command` (runs `password_command`; its output is the passphrase), or `prompt` (asks at startup). |
-| `password_command` | `""` | Shell command that prints the passphrase, e.g. `pass show whatsapp`. Required with `password-command`. |
+| `password_command` | `""` | Shell command that prints the passphrase, e.g. `pass show whatsapp`. Required with `key_source = password-command` (even while encryption is off), and only listed in Settings then; choosing that source asks for it. |
 
 ## Planned sections
 

@@ -12,7 +12,7 @@ func TestFieldsDiscoveryAndEditing(t *testing.T) {
 	for _, f := range fields {
 		names = append(names, f.Name())
 	}
-	want := "history.request_full_sync history.full_sync_days history.keep_days history.max_messages_per_chat ui.inline_images privacy.mark_read encryption.enabled encryption.key_source encryption.password_command"
+	want := "history.request_full_sync history.full_sync_days history.keep_days history.max_messages_per_chat ui.inline_images privacy.mark_read encryption.enabled encryption.key_source" // password_command only with key_source = password-command
 	if got := strings.Join(names, " "); got != want {
 		t.Fatalf("fields = %s, want %s", got, want)
 	}
@@ -81,16 +81,32 @@ func TestEncryptionFields(t *testing.T) {
 	if f := byName["encryption.key_source"]; f.Kind != KindChoice || f.Value() != KeySourceKeyring {
 		t.Errorf("key_source = %+v (%q)", f, f.Value())
 	}
-	cmd := byName["encryption.password_command"]
-	if cmd.Kind != KindText {
-		t.Fatalf("password_command kind = %v", cmd.Kind)
+	if _, ok := byName["encryption.password_command"]; ok {
+		t.Error("password_command listed while key_source is keyring")
+	}
+	cfg.Encryption.KeySource = KeySourcePasswordCommand
+	for _, f := range cfg.Fields() {
+		byName[f.Name()] = f
+	}
+	cmd, ok := byName["encryption.password_command"]
+	if !ok || cmd.Kind != KindText {
+		t.Fatalf("password_command = %+v, %v; want a text field with key_source = password-command", cmd, ok)
 	}
 	if err := cmd.Set("pass show whatsapp"); err != nil || cfg.Encryption.PasswordCommand != "pass show whatsapp" {
 		t.Errorf("Set = %v, %q", err, cfg.Encryption.PasswordCommand)
 	}
 
-	cfg.Encryption.Enabled, cfg.Encryption.KeySource, cfg.Encryption.PasswordCommand = true, KeySourcePasswordCommand, " "
+	// Required with that source even while encryption is off, so the file
+	// never holds a source that can't work.
+	cfg.Encryption.Enabled, cfg.Encryption.PasswordCommand = false, " "
 	if err := cfg.Validate(); err == nil || !strings.Contains(err.Error(), "password_command is required") {
 		t.Errorf("Validate = %v", err)
+	}
+
+	src := byName["encryption.key_source"]
+	src.Set(KeySourceKeyring) //nolint:errcheck // a listed choice
+	src.CycleBack()
+	if cfg.Encryption.KeySource != KeySourcePrompt {
+		t.Errorf("CycleBack from keyring = %q, want prompt (wrapping)", cfg.Encryption.KeySource)
 	}
 }

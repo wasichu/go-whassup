@@ -79,19 +79,28 @@ func (f Field) Set(s string) error {
 
 // Cycle moves a choice field to its next allowed value (wrapping), or
 // flips a bool.
-func (f Field) Cycle() {
+func (f Field) Cycle() { f.step(1) }
+
+// CycleBack moves a choice field to its previous allowed value (wrapping),
+// or flips a bool.
+func (f Field) CycleBack() { f.step(-1) }
+
+func (f Field) step(dir int) {
 	switch f.Kind {
 	case KindBool:
 		f.v.SetBool(!f.v.Bool())
 	case KindChoice:
+		n := len(f.Choices)
 		i := slices.Index(f.Choices, f.v.String())
-		f.v.SetString(f.Choices[(i+1)%len(f.Choices)])
+		f.v.SetString(f.Choices[((i+dir)%n+n)%n])
 	}
 }
 
 // Fields lists c's settings in file order. Sections are Config's struct
 // fields; settings are their bool and int fields, and string fields with a
-// `choices:"a,b,c"` tag.
+// `choices:"a,b,c"` or `text:"true"` tag. A field tagged
+// `shown_when:"key=value"` is listed only while the sibling setting key
+// has that value (it's still loaded and saved either way).
 func (c *Config) Fields() []Field {
 	var out []Field
 	root := reflect.ValueOf(c).Elem()
@@ -103,6 +112,9 @@ func (c *Config) Fields() []Field {
 		}
 		for j := range sv.NumField() {
 			sf := sv.Type().Field(j)
+			if !shown(sv, sf.Tag.Get("shown_when")) {
+				continue
+			}
 			f := Field{
 				Section:     tagName(section),
 				Key:         tagName(sf),
@@ -140,4 +152,19 @@ func tagName(f reflect.StructField) string {
 		return f.Name
 	}
 	return name
+}
+
+// shown evaluates a shown_when condition ("key=value") against the
+// section's other settings. An empty condition is always true.
+func shown(section reflect.Value, cond string) bool {
+	if cond == "" {
+		return true
+	}
+	key, want, _ := strings.Cut(cond, "=")
+	for i := range section.NumField() {
+		if tagName(section.Type().Field(i)) == key {
+			return section.Field(i).String() == want
+		}
+	}
+	return false
 }

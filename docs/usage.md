@@ -66,8 +66,8 @@ handlers (`internal/ui/keys.go`), so they can't drift.
   accents are ignored (`cafe` finds *Café*). Newest matches first, up to 200.
 - `enter` opens the chat at that message, highlighted. A hit older than the 500 most
   recent messages loaded per chat says so instead.
-- **Unavailable while encryption is on.** Finding chats and contacts by name (`/`) still
-  works.
+- **Unavailable while encryption is on**, which the page says as soon as it opens.
+  Finding chats and contacts by name (`/`) still works.
 
 ### Encryption at rest
 
@@ -185,8 +185,12 @@ names stay readable on disk.**
 
 - Lists every setting in `config.toml`, grouped by section, with its description (the
   same comment written into the file).
-- `↑`/`↓` to choose; `enter` or space toggles yes/no settings or edits numbers (`enter`
-  saves, `esc` cancels).
+- `↑`/`↓` to choose; `enter` or space toggles yes/no settings, cycles choices, or edits
+  numbers and text (`enter` saves, `esc` cancels). `←`/`→` (or `h`/`l`) cycle a choice
+  backwards or forwards.
+- Some settings only appear when they apply: `password_command` is listed once
+  `key_source` is `password-command`, and choosing that source asks for the command
+  straight away (`esc` keeps the previous source).
 - **Each committed change is validated, saved to the file and applied immediately.**
   For example, lowering `keep_days` prunes right away. Settings that only matter when
   linking are labelled as such.
