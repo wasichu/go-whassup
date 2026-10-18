@@ -37,10 +37,11 @@ type WhatsApp struct {
 	container *sqlstore.Container
 	log       *slog.Logger
 
-	mu         sync.RWMutex
-	cli        *whatsmeow.Client // replaced by Logout; read via client()
-	opts       Options
-	cancelPair context.CancelFunc // set while a pairing is in progress
+	mu            sync.RWMutex
+	cli           *whatsmeow.Client // replaced by Logout; read via client()
+	opts          Options
+	cancelPair    context.CancelFunc // set while a pairing is in progress
+	lastGroupSync time.Time          // see groupSyncInterval
 }
 
 var _ Client = (*WhatsApp)(nil)
@@ -412,6 +413,44 @@ func (w *WhatsApp) decryptSecret(evt *events.Message) (*waE2E.Message, error) {
 	return msg, err
 }
 
+// groupSyncInterval limits full group syncs to one per this long, however
+// often the connection drops and comes back.
+const groupSyncInterval = time.Hour
+
+// emitGroupSnapshot fetches all joined groups (one request) and emits them.
+func (w *WhatsApp) emitGroupSnapshot() {
+	w.mu.Lock()
+	if time.Since(w.lastGroupSync) < groupSyncInterval {
+		w.mu.Unlock()
+		return
+	}
+	w.lastGroupSync = time.Now()
+	w.mu.Unlock()
+
+	cli := w.client()
+	groups, err := cli.GetJoinedGroups(context.Background())
+	if err != nil {
+		w.log.Warn("fetching groups", "err", err)
+		return
+	}
+	list := make([]Group, 0, len(groups))
+	for _, g := range groups {
+		list = append(list, groupFromInfo(g, w.resolveKey))
+	}
+	w.log.Info("groups snapshot", "count", len(list))
+	w.emit(Groups{List: list, Snapshot: true})
+}
+
+// refreshGroup re-fetches one group after the server reports a change.
+func (w *WhatsApp) refreshGroup(jid types.JID) {
+	info, err := w.client().GetGroupInfo(context.Background(), jid)
+	if err != nil {
+		w.log.Warn("fetching group info", "group", jid, "err", err)
+		return
+	}
+	w.emit(Groups{List: []Group{groupFromInfo(info, w.resolveKey)}})
+}
+
 // emitContactSnapshot emits every known contact. It reads whatsmeow's local
 // store, so it is cheap and works whenever a session exists.
 func (w *WhatsApp) emitContactSnapshot() {
@@ -471,6 +510,11 @@ func (w *WhatsApp) handleEvent(evt any) {
 		go w.announceName() // not on whatsmeow's event goroutine: it sends a node
 		w.emit(Connected{})
 		go w.emitContactSnapshot()
+		go w.emitGroupSnapshot()
+	case *events.JoinedGroup:
+		w.emit(Groups{List: []Group{groupFromInfo(&v.GroupInfo, w.resolveKey)}})
+	case *events.GroupInfo:
+		go w.refreshGroup(v.JID) // name, topic or membership changed
 	case *events.AppStateSyncComplete:
 		go w.emitContactSnapshot() // address-book names arrive via app state
 	case *events.Contact:

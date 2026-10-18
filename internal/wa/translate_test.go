@@ -354,3 +354,34 @@ func textEventWith(msg *waE2E.Message) *events.Message {
 	e.Message = msg
 	return e
 }
+
+func TestGroupFromInfo(t *testing.T) {
+	info := &types.GroupInfo{
+		JID:        group,
+		GroupName:  types.GroupName{Name: "Book club"},
+		GroupTopic: types.GroupTopic{Topic: "chapter 3 this week"},
+		Participants: []types.GroupParticipant{
+			{JID: lidAda, PhoneNumber: pnAda, IsAdmin: true},
+			{JID: lidAda}, // LID only: resolved by the mapping store
+			{JID: pnMe, IsSuperAdmin: true},
+		},
+	}
+	g := groupFromInfo(info, stubResolver)
+	want := Group{JID: group.String(), Name: "Book club", Topic: "chapter 3 this week", Participants: []Participant{
+		{JID: pnAda.String(), Admin: true}, {JID: pnAda.String()}, {JID: pnMe.String(), Admin: true},
+	}}
+	if !reflect.DeepEqual(g, want) {
+		t.Errorf("group = %+v\nwant  %+v", g, want)
+	}
+}
+
+func TestNormalizeMentions(t *testing.T) {
+	msg := &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+		Text:        proto.String("hey @987654321 and @15559876543"),
+		ContextInfo: &waE2E.ContextInfo{MentionedJID: []string{lidAda.String(), "15559876543@s.whatsapp.net"}},
+	}}
+	got, ok := messageFromEvent(textEventWith(msg), stubResolver)
+	if !ok || got.Text != "hey @15551234567 and @15559876543" {
+		t.Errorf("text = %q", got.Text)
+	}
+}

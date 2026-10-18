@@ -193,6 +193,27 @@ type ReactionCount struct {
 	Mine  bool // the user is one of the reactors
 }
 
+// Group is a group chat's metadata.
+type Group struct {
+	JID          string
+	Name         string
+	Topic        string
+	Participants []Participant // nil means unknown (keep what's stored)
+}
+
+// Participant is a group member.
+type Participant struct {
+	JID   string // stable user key
+	Admin bool
+}
+
+// Groups carries group metadata: a snapshot of all joined groups after
+// connecting, or single groups when they change or are joined.
+type Groups struct {
+	List     []Group
+	Snapshot bool
+}
+
 // ChatRead reports that the user read a chat on another device, up to At.
 type ChatRead struct {
 	Chat string
@@ -238,3 +259,4 @@ func (ChatRead) isEvent()       {}
 func (MessageEdited) isEvent()  {}
 func (MessageDeleted) isEvent() {}
 func (Reaction) isEvent()       {}
+func (Groups) isEvent()         {}

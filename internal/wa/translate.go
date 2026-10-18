@@ -3,6 +3,7 @@ package wa
 import (
 	"log/slog"
 	"slices"
+	"strings"
 	"time"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
@@ -32,7 +33,7 @@ func messageFromEvent(evt *events.Message, resolve keyResolver) (Message, bool) 
 		return Message{}, false // reactions are Reaction events, not messages
 	}
 	m, _ := messageFromEventBase(evt, resolve)
-	m.Kind, m.Text, m.Media = kind, text, mediaOf(evt.Message)
+	m.Kind, m.Text, m.Media = kind, normalizeMentions(text, evt.Message, resolve), mediaOf(evt.Message)
 	return m, true
 }
 
@@ -239,4 +240,55 @@ func firstNonEmpty(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// groupFromInfo translates whatsmeow's group info, keying participants by
+// phone number where known.
+func groupFromInfo(info *types.GroupInfo, resolve keyResolver) Group {
+	g := Group{
+		JID:          info.JID.ToNonAD().String(),
+		Name:         info.Name,
+		Topic:        info.Topic,
+		Participants: make([]Participant, 0, len(info.Participants)),
+	}
+	for _, p := range info.Participants {
+		g.Participants = append(g.Participants, Participant{
+			JID:   resolve(p.JID, p.PhoneNumber),
+			Admin: p.IsAdmin || p.IsSuperAdmin,
+		})
+	}
+	return g
+}
+
+// contextInfo returns the ContextInfo of messages that can mention people.
+func contextInfo(msg *waE2E.Message) *waE2E.ContextInfo {
+	switch {
+	case msg.GetExtendedTextMessage() != nil:
+		return msg.GetExtendedTextMessage().GetContextInfo()
+	case msg.GetImageMessage() != nil:
+		return msg.GetImageMessage().GetContextInfo()
+	case msg.GetVideoMessage() != nil:
+		return msg.GetVideoMessage().GetContextInfo()
+	case msg.GetDocumentMessage() != nil:
+		return msg.GetDocumentMessage().GetContextInfo()
+	}
+	return nil
+}
+
+// normalizeMentions rewrites "@<lid digits>" mentions in text to
+// "@<phone digits>" when the mentioned privacy ID resolves to a number, so
+// stored text always mentions people the way contacts are keyed.
+func normalizeMentions(text string, msg *waE2E.Message, resolve keyResolver) string {
+	for _, raw := range contextInfo(msg).GetMentionedJID() {
+		jid, err := types.ParseJID(raw)
+		if err != nil || jid.Server != types.HiddenUserServer {
+			continue
+		}
+		key, err := types.ParseJID(resolve(jid, types.EmptyJID))
+		if err != nil || key.Server != types.DefaultUserServer {
+			continue
+		}
+		text = strings.ReplaceAll(text, "@"+jid.User, "@"+key.User)
+	}
+	return text
 }
