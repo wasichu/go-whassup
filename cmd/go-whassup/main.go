@@ -1,4 +1,4 @@
-// Command wa-tui is a WhatsApp client for the terminal. See docs/usage.md.
+// Command go-whassup is a WhatsApp client for the terminal. See docs/usage.md.
 package main
 
 import (
@@ -16,7 +16,7 @@ func main() {
 	err := app.Run(ctx, os.Args[1:], app.IO{In: os.Stdin, Out: os.Stdout, Err: os.Stderr})
 	stop()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "wa-tui:", err)
+		fmt.Fprintln(os.Stderr, "go-whassup:", err)
 		os.Exit(1)
 	}
 }

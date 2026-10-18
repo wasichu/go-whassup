@@ -18,7 +18,7 @@ nothing else to install or run.
 | Command | What it does |
 | --- | --- |
 | `just check` | fmt-check + build + vet + lint + test. **Run before declaring any change done.** |
-| `just build` | Builds `bin/wa-tui` |
+| `just build` | Builds `bin/go-whassup` |
 | `just run [args]` | Builds and runs: no args = TUI (needs a real terminal); `login [phone]` = pair via phone code; `listen` = headless, prints incoming messages. Flags work before or after the subcommand. Full usage: `docs/usage.md`. |
 | `just test [flags]` | `go test ./...` with extra flags, e.g. `just test -run TestX -v` |
 | `just lint [flags]` | golangci-lint. `.golangci.yml` enforces import boundaries, bans cgo sqlite and Bubble Tea v1, forbids printing to the terminal and discarding errors, and limits function size/complexity (`funlen` 80 lines/50 statements, `gocognit` 20, `nestif` 4; tests exempt from the first two). Fix the code; don't weaken the config or add exclusions. |
@@ -74,7 +74,7 @@ invocations in docs.
 ## Layout
 
 ```
-cmd/wa-tui/          main.go only: signal ctx -> app.Run -> exit code. Keep it ~20 lines.
+cmd/go-whassup/          main.go only: signal ctx -> app.Run -> exit code. Keep it ~20 lines.
 internal/app/        composition root: args, paths, logging, wiring. No business logic.
 internal/paths/      XDG locations (ConfigFile, DataDir, SessionDB, MessagesDB, LogFile)
 internal/config/     typed Config: defaults, Load (strict), Validate, Save (atomic), Fields (generic editing)

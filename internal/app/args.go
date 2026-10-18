@@ -16,15 +16,15 @@ type invocation struct {
 }
 
 const usage = `Usage:
-  wa-tui [-debug]                     start the TUI
-  wa-tui login [-relink] [phone]      link this device with a phone-number code;
-                                      -relink first unlinks the current session
-  wa-tui listen [-debug]              connect and print incoming messages
-  wa-tui db chats                     list stored chats (reads messages.db; no network)
-  wa-tui db messages [-n N] <chat>    show a stored chat's newest N messages;
-                                      <chat> is a name, phone number or JID
-  wa-tui db search [-n N] <words>     search stored messages (newest N matches)
-  wa-tui db reset                     delete stored messages and media (asks first)
+  go-whassup [-debug]                     start the TUI
+  go-whassup login [-relink] [phone]      link this device with a phone-number code;
+                                          -relink first unlinks the current session
+  go-whassup listen [-debug]              connect and print incoming messages
+  go-whassup db chats                     list stored chats (reads messages.db; no network)
+  go-whassup db messages [-n N] <chat>    show a stored chat's newest N messages;
+                                          <chat> is a name, phone number or JID
+  go-whassup db search [-n N] <words>     search stored messages (newest N matches)
+  go-whassup db reset                     delete stored messages and media (asks first)
 
 Flags may come before or after the subcommand.
 `
@@ -41,11 +41,11 @@ var commands = map[string]struct{ min, max int }{
 }
 
 // parseArgs accepts flags before and/or after the subcommand, so
-// `wa-tui -debug login` and `wa-tui login -debug` are equivalent. Usage and
+// `go-whassup -debug login` and `go-whassup login -debug` are equivalent. Usage and
 // flag errors are written to errOut; -h returns flag.ErrHelp.
 func parseArgs(args []string, errOut io.Writer) (invocation, error) {
 	var inv invocation
-	fs := flag.NewFlagSet("wa-tui", flag.ContinueOnError)
+	fs := flag.NewFlagSet("go-whassup", flag.ContinueOnError)
 	fs.SetOutput(errOut)
 	fs.Usage = func() {
 		fmt.Fprint(errOut, usage)
@@ -77,13 +77,13 @@ func parseArgs(args []string, errOut io.Writer) (invocation, error) {
 
 	bounds, ok := commands[inv.cmd]
 	if !ok {
-		return inv, fmt.Errorf("unknown command %q (see wa-tui -h)", inv.cmd)
+		return inv, fmt.Errorf("unknown command %q (see go-whassup -h)", inv.cmd)
 	}
 	if len(inv.args) > bounds.max {
 		return inv, fmt.Errorf("%s: unexpected arguments %q", inv.cmd, inv.args[bounds.max:])
 	}
 	if len(inv.args) < bounds.min {
-		return inv, fmt.Errorf("%s: missing argument (see wa-tui -h)", inv.cmd)
+		return inv, fmt.Errorf("%s: missing argument (see go-whassup -h)", inv.cmd)
 	}
 	if inv.relink && inv.cmd != "login" {
 		return inv, fmt.Errorf("-relink only applies to login")

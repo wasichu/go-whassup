@@ -34,7 +34,7 @@ const (
 
 // Encryption controls at-rest encryption of messages.db.
 type Encryption struct {
-	Enabled         bool   `toml:"enabled" confirm:"Encrypts message text and attachment keys only: who you talk to, when, and contact names stay readable on disk. Turning it on re-encrypts stored messages and turns message search off; turning it off decrypts everything back. Takes effect when you next start wa-tui. Continue?" comment:"Encrypt message text and attachment keys in messages.db.\nEncrypts message text only: who you talk to, when, and contact names stay readable on disk.\nMessage search is unavailable while this is on."`
+	Enabled         bool   `toml:"enabled" confirm:"Encrypts message text and attachment keys only: who you talk to, when, and contact names stay readable on disk. Turning it on re-encrypts stored messages and turns message search off; turning it off decrypts everything back. Takes effect when you next start go-whassup. Continue?" comment:"Encrypt message text and attachment keys in messages.db.\nEncrypts message text only: who you talk to, when, and contact names stay readable on disk.\nMessage search is unavailable while this is on."`
 	KeySource       string `toml:"key_source" choices:"keyring,password-command,prompt" comment:"Where the key comes from: keyring = your OS keychain (no prompt);\npassword-command = run password_command and use its output as a passphrase;\nprompt = ask for a passphrase when go-whassup starts."`
 	PasswordCommand string `toml:"password_command" text:"true" comment:"With key_source = password-command: a shell command that prints your passphrase,\ne.g. \"pass show whatsapp\" or \"gpg --decrypt ~/.config/go-whassup/pass.gpg\"."`
 }
@@ -59,7 +59,7 @@ type UI struct {
 
 // History controls history sync requests and local retention.
 type History struct {
-	RequestFullSync    bool `toml:"request_full_sync" applies:"pairing" comment:"Ask the phone for ~1 year of history when linking, instead of its default ~3 months.\nOnly takes effect when pairing a device (wa-tui login)."`
+	RequestFullSync    bool `toml:"request_full_sync" applies:"pairing" comment:"Ask the phone for ~1 year of history when linking, instead of its default ~3 months.\nOnly takes effect when pairing a device (go-whassup login)."`
 	FullSyncDays       int  `toml:"full_sync_days" applies:"pairing" comment:"With request_full_sync: how many days to ask for. 0 = the phone's full-sync default."`
 	KeepDays           int  `toml:"keep_days" comment:"Delete stored messages older than this many days. 0 = keep everything."`
 	MaxMessagesPerChat int  `toml:"max_messages_per_chat" comment:"Keep at most this many of the newest messages per chat. 0 = no limit."`

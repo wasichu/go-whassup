@@ -16,7 +16,7 @@ func (c Console) Chats(ctx context.Context, st *store.Store) error {
 		return err
 	}
 	if len(chats) == 0 {
-		c.printf("No chats stored yet. Run `wa-tui listen` (or `login`) to sync.\n")
+		c.printf("No chats stored yet. Run `go-whassup listen` (or `login`) to sync.\n")
 		return nil
 	}
 	tw := tabwriter.NewWriter(c.Out, 0, 4, 2, ' ', 0)

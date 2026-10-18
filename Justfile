@@ -3,7 +3,7 @@
 set positional-arguments
 
 go := "mise exec -- go"
-bin := "bin/wa-tui"
+bin := "bin/go-whassup"
 
 # List recipes
 default:
@@ -11,7 +11,7 @@ default:
 
 # Build the binary into bin/
 build:
-    {{go}} build -o {{bin}} ./cmd/wa-tui
+    {{go}} build -o {{bin}} ./cmd/go-whassup
 
 # Build and run the TUI
 run *args: build

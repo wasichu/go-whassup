@@ -114,7 +114,7 @@ func TestLoginEmptyPrompt(t *testing.T) {
 
 func TestListenNotPaired(t *testing.T) {
 	err := newConsole("", io.Discard).Listen(t.Context(), &watest.Client{})
-	if err == nil || !strings.Contains(err.Error(), "wa-tui login") {
+	if err == nil || !strings.Contains(err.Error(), "go-whassup login") {
 		t.Fatalf("err = %v, want hint to run login", err)
 	}
 }

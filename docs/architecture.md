@@ -1,7 +1,7 @@
 # Architecture
 
 ```
-cmd/wa-tui (main: signals + exit code only)
+cmd/go-whassup (main: signals + exit code only)
    └─► internal/app            composition root: args, paths, logging, wiring
          ├─► internal/paths     XDG locations (config, data dir, DBs, log)
          ├─► internal/config    typed Config (TOML)
@@ -17,7 +17,7 @@ cmd/wa-tui (main: signals + exit code only)
 
 ## Rules of the layout
 
-- **`cmd/wa-tui/main.go` stays tiny.** It sets up the signal context, calls `app.Run`,
+- **`cmd/go-whassup/main.go` stays tiny.** It sets up the signal context, calls `app.Run`,
   and maps the error to an exit code.
 - **`internal/app` wires things together and holds no logic.** If a function there
   grows decisions, move them to the package that owns the concern.

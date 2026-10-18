@@ -64,7 +64,7 @@ func TestParseArgsHelp(t *testing.T) {
 	if !errors.Is(err, flag.ErrHelp) {
 		t.Fatalf("err = %v, want flag.ErrHelp", err)
 	}
-	if !strings.Contains(out.String(), "wa-tui login") {
+	if !strings.Contains(out.String(), "go-whassup login") {
 		t.Errorf("usage missing commands:\n%s", out.String())
 	}
 }

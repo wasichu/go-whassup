@@ -7,15 +7,15 @@ step lands or the plan changes.
 
 1. **Scaffold:** mise-pinned toolchain, Justfile, lint rules enforcing the AGENTS.md
    invariants, graft + gopls MCP.
-2. **Headless pairing and listening:** phone-code pairing (`wa-tui login`),
-   `wa-tui listen`. Verified live on 2026-10-18.
+2. **Headless pairing and listening:** phone-code pairing (`go-whassup login`),
+   `go-whassup listen`. Verified live on 2026-10-18.
 3. **Storage (step 2)**, verified live on 2026-10-18, including a fresh re-link with history backfill:
    - `messages.db` with an encryption-ready codec seam;
    - recording of live messages and history sync, with privacy-ID-stable keys;
    - retention limits;
    - typed TOML config (`[history]`);
-   - `wa-tui db chats` / `db messages`;
-   - `wa-tui login -relink` to unlink and pair again.
+   - `go-whassup db chats` / `db messages`;
+   - `go-whassup login -relink` to unlink and pair again.
 
 ## Done: step 3, minimal TUI (verified live 2026-10-18)
 
@@ -70,7 +70,7 @@ step lands or the plan changes.
 5. [x] **Groups:** names and topics from group info, participants with admins (`i`),
    member counts, `@mentions` shown as names (and `@you`). *(Live test pending.)*
    Follow-up: typing mentions when sending (autocomplete).
-6. [x] **Message search** (`s`, `wa-tui db search`): local SQLite FTS5, accent-insensitive,
+6. [x] **Message search** (`s`, `go-whassup db search`): local SQLite FTS5, accent-insensitive,
    prefix on the last word, jump-to-message. Unavailable while encryption is on (the
    index is plaintext). *(Live test pending.)*
 7. [x] **Encryption at rest** (built 2026-10-18; *live test pending*). Follow-ups:

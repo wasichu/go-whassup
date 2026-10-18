@@ -28,8 +28,8 @@ Relative `XDG_*` values are ignored, as the XDG spec requires.
   `DoTxn` helpers can nest, which risks deadlock on a single connection.
 - `internal/sqlite.Open` is the only place that knows the driver and DSN. For the
   session DB we pass its `*sql.DB` to `sqlstore.NewWithDB` + `Upgrade`.
-- **Two processes are fine.** Thanks to WAL, `wa-tui db chats` can read while
-  `wa-tui listen` writes.
+- **Two processes are fine.** Thanks to WAL, `go-whassup db chats` can read while
+  `go-whassup listen` writes.
 
 ## Messages DB (`internal/store`)
 
@@ -79,7 +79,7 @@ whatsmeow does **not** persist message content, so we do.
 - **History arrives only when linking.** The phone pushes its history sync right after
   pairing, and whatsmeow doesn't replay it. To backfill an existing install:
   1. Set any `[history] request_*` options.
-  2. Run `wa-tui login -relink`, and leave it running until the `history sync` lines
+  2. Run `go-whassup login -relink`, and leave it running until the `history sync` lines
      stop. It unlinks the old session (on the phone too, when reachable) before pairing.
 
 ### Built so encryption can be added later
@@ -200,9 +200,9 @@ The keychain entry is left in place; remove it in Keychain Access if you like.
   keep its own copy.
 
 **Unlock failure.**
-- `wa-tui` refuses to start and explains why: a wrong passphrase or keychain secret, or a
+- `go-whassup` refuses to start and explains why: a wrong passphrase or keychain secret, or a
   missing keychain entry.
-- The way out is `wa-tui db reset` (type `yes`): it deletes `messages.db` and the media
+- The way out is `go-whassup db reset` (type `yes`): it deletes `messages.db` and the media
   cache, keeps the session, and warns that history older than the phone's re-sync is
   lost.
 

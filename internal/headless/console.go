@@ -41,7 +41,7 @@ type Console struct {
 // paired it prints a note and returns wa.ErrAlreadyPaired.
 func (c Console) Login(ctx context.Context, client wa.Client, phone string) (*wa.Subscription, error) {
 	if client.IsPaired() {
-		c.printf("Already paired. Run `wa-tui listen` to connect, or `wa-tui login -relink` to pair again.\n")
+		c.printf("Already paired. Run `go-whassup listen` to connect, or `go-whassup login -relink` to pair again.\n")
 		return nil, wa.ErrAlreadyPaired
 	}
 	if phone == "" {
@@ -78,7 +78,7 @@ func (c Console) Login(ctx context.Context, client wa.Client, phone string) (*wa
 				// The phone pushes app-state keys and history sync right after
 				// linking; callers should keep the connection up (Follow).
 				c.printf("Connected and session saved. Staying online for the initial sync;\n")
-				c.printf("Ctrl-C when you're done (then use `wa-tui listen`).\n")
+				c.printf("Ctrl-C when you're done (then use `go-whassup listen`).\n")
 				return sub, nil
 			case wa.PairFailed:
 				return nil, fmt.Errorf("pairing failed: %s", v.Reason)
@@ -119,7 +119,7 @@ func (c Console) Listen(ctx context.Context, client wa.Client) error {
 	sub := wa.Subscribe(client, eventBuffer, c.Log)
 	if err := client.Connect(ctx); err != nil {
 		if errors.Is(err, wa.ErrNotPaired) {
-			return errors.New("not paired yet; run `wa-tui login` first")
+			return errors.New("not paired yet; run `go-whassup login` first")
 		}
 		return err
 	}
@@ -180,7 +180,7 @@ func (c Console) printEvent(evt wa.Event) {
 		}
 	case wa.LoggedOut:
 		c.Log.Warn("logged out", "reason", v.Reason)
-		c.printf("Logged out (%s). Run `wa-tui login` to pair again.\n", v.Reason)
+		c.printf("Logged out (%s). Run `go-whassup login` to pair again.\n", v.Reason)
 	default:
 		c.Log.Info("connection event", "type", fmt.Sprintf("%T", evt))
 		c.printf("-- %T\n", evt)

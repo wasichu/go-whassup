@@ -18,7 +18,7 @@ order:
 6. After `PairSuccess` the server forces a **reconnect**. Wait for `Connected` before
    doing anything.
 7. Stay connected for a while. Right after linking, the phone pushes app-state keys
-   and history sync. `wa-tui login` therefore stays online until Ctrl-C instead of
+   and history sync. `go-whassup login` therefore stays online until Ctrl-C instead of
    exiting at `Connected`.
 
 The `ctx` passed to `Pair`/`Connect` bounds the **connection's lifetime**, including
@@ -104,7 +104,7 @@ server's `auth/request-code` endpoint, and the WAHA *engine* does the pairing:
 - `WEBJS` really is a Chromium browser running WhatsApp Web.
 - `NOWEB` (Baileys) and `GOWS` (whatsmeow) are browserless and face the same rule we do.
 
-## Re-linking (`wa-tui login -relink`)
+## Re-linking (`go-whassup login -relink`)
 
 `wa.Client.Logout` resets to a fresh, unpaired device so `Pair` can run again. Use it
 for a history backfill, a stuck session, or switching accounts.

@@ -21,7 +21,7 @@ const Driver = "sqlite"
 //
 // _txlock=immediate + WAL + busy_timeout is what whatsmeow's own SQLite
 // users run: it avoids "database is locked" under concurrent writers
-// (including a second wa-tui process) without the nested-transaction
+// (including a second go-whassup process) without the nested-transaction
 // deadlocks of a one-connection pool.
 func Open(path string) (*sql.DB, error) {
 	if err := createPrivate(path); err != nil {

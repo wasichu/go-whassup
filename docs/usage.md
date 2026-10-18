@@ -1,38 +1,38 @@
 # Usage
 
 ```
-wa-tui [-debug]                     start the TUI
-wa-tui login [-relink] [phone]      link this device with a phone-number code;
-                                    -relink first unlinks the current session
-wa-tui listen [-debug]              connect and print incoming messages
-wa-tui db chats                     list stored chats (reads messages.db; no network)
-wa-tui db messages [-n N] <chat>    show a stored chat's newest N messages (default 20, 0 = all)
-wa-tui db search [-n N] <words>     search stored messages, newest matches first
-wa-tui db reset                     delete messages.db and the media cache (type "yes");
-                                    the way out if stored messages can't be unlocked
+go-whassup [-debug]                     start the TUI
+go-whassup login [-relink] [phone]      link this device with a phone-number code;
+                                        -relink first unlinks the current session
+go-whassup listen [-debug]              connect and print incoming messages
+go-whassup db chats                     list stored chats (reads messages.db; no network)
+go-whassup db messages [-n N] <chat>    show a stored chat's newest N messages (default 20, 0 = all)
+go-whassup db search [-n N] <words>     search stored messages, newest matches first
+go-whassup db reset                     delete messages.db and the media cache (type "yes");
+                                        the way out if stored messages can't be unlocked
 ```
 
 - `login` and `listen` also **store** everything they receive, including the history
   sync the phone pushes after linking, in `messages.db`.
-- History sync only happens when a device is linked. To backfill, run `wa-tui login -relink`
+- History sync only happens when a device is linked. To backfill, run `go-whassup login -relink`
   (stored messages are kept and deduplicated).
 - The `db` commands only read the local database. They work offline and while
   `listen` is running.
 - `<chat>` can be a JID, a phone number (`+1 555 123 4567`), or part of the chat's name
   (`"book club"`). Ambiguous names list the candidates.
 
-- Flags may come before or after the subcommand (`wa-tui -debug login` ==
-  `wa-tui login -debug`).
+- Flags may come before or after the subcommand (`go-whassup -debug login` ==
+  `go-whassup login -debug`).
 - `phone` is in international format. Quote it if it contains spaces:
-  `wa-tui login "+1 555 123 4567"`. If omitted, `login` prompts for it.
+  `go-whassup login "+1 555 123 4567"`. If omitted, `login` prompts for it.
 - `-debug` enables whatsmeow's very verbose protocol logging and logs message text.
-- `wa-tui -h` prints usage.
+- `go-whassup -h` prints usage.
 - Via just: `just run login +15551234567`, `just run listen`, and `just logs` to tail
   the log.
 
 ## TUI
 
-`wa-tui` opens on the **chat list** (left) and the selected chat (right). It works
+`go-whassup` opens on the **chat list** (left) and the selected chat (right). It works
 offline from `messages.db` and connects in the background; the connection state is in
 the status line. If the device isn't linked, it opens the **login screen** instead.
 
@@ -86,8 +86,8 @@ names stay readable on disk.**
   - downloads live in a temporary directory deleted on exit;
   - message text is never logged, and `-debug` doesn't include whatsmeow's protocol
     chatter.
-- **If it can't unlock** (wrong passphrase, missing keychain entry), `wa-tui` stops and
-  says so. Fix the key source, or run `wa-tui db reset` to start over with an empty
+- **If it can't unlock** (wrong passphrase, missing keychain entry), `go-whassup` stops and
+  says so. Fix the key source, or run `go-whassup db reset` to start over with an empty
   message store (history older than your phone's next sync is lost).
 
 ### Groups and mentions
@@ -176,7 +176,7 @@ names stay readable on disk.**
     missing. Make the window bigger or zoom out (Cmd − / Ctrl −): the QR appears as soon
     as it fits, and pairing keeps running meanwhile. Or use the phone code.
 - **Linked:** *Re-link*, after a y/n confirmation. It does the same as
-  `wa-tui login -relink`.
+  `go-whassup login -relink`.
 - **Esc:** while waiting for the code or a scan, cancels pairing; otherwise goes back.
 - **After you're logged out remotely** (e.g. from the phone), the login screen opens with
   the reason.

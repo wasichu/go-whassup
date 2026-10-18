@@ -44,7 +44,7 @@ TUI's Settings screen (`,`) reads and writes it.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `request_full_sync` | `false` | Ask the phone for about 1 year of history when linking, instead of its default of about 3 months. **Only affects pairing** (`wa-tui login`); to change it later, re-link. |
+| `request_full_sync` | `false` | Ask the phone for about 1 year of history when linking, instead of its default of about 3 months. **Only affects pairing** (`go-whassup login`); to change it later, re-link. |
 | `full_sync_days` | `0` | With `request_full_sync`: how many days to ask for (0 = the phone's full-sync default). Invalid without `request_full_sync`, because WhatsApp only reads it alongside the full-sync flag. |
 | `keep_days` | `0` | Delete stored messages older than this. 0 = keep everything. |
 | `max_messages_per_chat` | `0` | Keep at most this many of the newest messages per chat. 0 = no limit. |
@@ -74,7 +74,7 @@ receipt, so WhatsApp's servers learn *when* you read chats, though not what.
 
 ### `[encryption]`
 
-Changes take effect at the next start of `wa-tui`, `listen` or `login`; `db` commands
+Changes take effect at the next start of `go-whassup`, `listen` or `login`; `db` commands
 never start or reverse encryption. To change `key_source` while encryption is on, turn
 encryption off, let it finish, then turn it on with the new source.
 

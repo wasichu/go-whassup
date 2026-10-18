@@ -137,7 +137,7 @@ func unlock(ctx context.Context, key *store.StoredKey, ks keySources) (*store.Ke
 	case config.KeySourceKeyring:
 		kek, err = ks.keyring.Get(ctx)
 		if errors.Is(err, keysource.ErrNotFound) {
-			return nil, fmt.Errorf("%w: the keychain entry is missing. Restore it, or run `wa-tui db reset` to delete stored messages (history older than what your phone syncs is lost)", ErrLocked)
+			return nil, fmt.Errorf("%w: the keychain entry is missing. Restore it, or run `go-whassup db reset` to delete stored messages (history older than what your phone syncs is lost)", ErrLocked)
 		}
 	default:
 		var pass []byte
@@ -153,7 +153,7 @@ func unlock(ctx context.Context, key *store.StoredKey, ks keySources) (*store.Ke
 	}
 	dek, err := crypt.Unwrap(kek, key.Wrapped)
 	if errors.Is(err, crypt.ErrDecrypt) {
-		return nil, fmt.Errorf("%w: wrong passphrase or keychain secret (key source %s). Fix the key source, or run `wa-tui db reset` to delete stored messages (history older than what your phone syncs is lost)", ErrLocked, key.Source)
+		return nil, fmt.Errorf("%w: wrong passphrase or keychain secret (key source %s). Fix the key source, or run `go-whassup db reset` to delete stored messages (history older than what your phone syncs is lost)", ErrLocked, key.Source)
 	}
 	if err != nil {
 		return nil, err
@@ -251,7 +251,7 @@ func startReseal(ctx context.Context, st *store.Store, e encryption, log *slog.L
 	return wg.Wait
 }
 
-// resetMessages is `wa-tui db reset`: after an explicit confirmation it
+// resetMessages is `go-whassup db reset`: after an explicit confirmation it
 // deletes messages.db (and its journal files) and the media cache. The
 // session stays, so the next login doesn't need re-pairing, but history
 // older than what the phone re-syncs is gone.
@@ -274,6 +274,6 @@ func resetMessages(p paths.Paths, in io.Reader, out io.Writer) error {
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("resetting: %w", err)
 	}
-	_, err := fmt.Fprintln(out, "Deleted. Run `wa-tui login -relink` to fetch history again. A keychain entry named go-whassup, if any, can be removed in Keychain Access.")
+	_, err := fmt.Fprintln(out, "Deleted. Run `go-whassup login -relink` to fetch history again. A keychain entry named go-whassup, if any, can be removed in Keychain Access.")
 	return err
 }
