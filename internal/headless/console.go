@@ -168,6 +168,8 @@ func senderLabel(m wa.Message) string {
 	switch {
 	case m.FromMe:
 		return "me"
+	case m.SenderName != "":
+		return m.SenderName
 	case m.PushName != "":
 		return m.PushName
 	default:

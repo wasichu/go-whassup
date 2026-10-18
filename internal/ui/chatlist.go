@@ -40,6 +40,17 @@ func (l *chatList) selectedJID() string {
 	return c.JID
 }
 
+// selectJID selects the chat with jid and reports whether it exists.
+func (l *chatList) selectJID(jid string) bool {
+	for i, c := range l.chats {
+		if c.JID == jid {
+			l.selected = i
+			return true
+		}
+	}
+	return false
+}
+
 // move changes the selection by delta, clamped, and reports whether it moved.
 func (l *chatList) move(delta int) bool {
 	next := min(max(l.selected+delta, 0), len(l.chats)-1)

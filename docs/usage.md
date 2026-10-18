@@ -41,15 +41,26 @@ the status line. If the device isn't linked, it opens the **login screen** inste
 | `enter`, `tab`, `→`, `l` | write in this chat | `enter` sends |
 | `esc` | | back to chat list |
 | `pgup`/`pgdn` | scroll messages | scroll messages |
+| `/` | find a chat or contact (new chats too) | (typed) |
 | `L` | login screen: link, or re-link | (typed) |
 | `,` | settings | (typed) |
 | `?` | key help (any key closes) | (typed) |
 | `q` | quit | (typed) |
 | `ctrl+c` | quit | quit |
 
-Shortcuts only act from the chat list. In the message box `q`, `L`, `,` and `?` are just
+Shortcuts only act from the chat list. In the message box `q`, `/`, `L`, `,` and `?` are just
 characters. Hints in the status line are generated from the same keymap as the
 handlers (`internal/ui/keys.go`), so they can't drift.
+
+### Finder (`/`)
+
+- Fuzzy-search every chat and every contact from your phone's address book by name, or
+  by number (`555 123`, `+1-555…`). Type to filter; `↑`/`↓` choose; `enter` opens;
+  `esc` goes back.
+- A contact you've never messaged is marked **new chat**. Opening it starts a draft:
+  type and send, and it becomes a regular chat in the list.
+- Chat titles follow the phone: your address-book name for a person, then the name they
+  chose; a group's subject. In groups, each sender shows the same way.
 
 ### Login screen
 

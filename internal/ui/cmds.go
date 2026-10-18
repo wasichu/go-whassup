@@ -16,6 +16,7 @@ import (
 type Store interface {
 	Chats(ctx context.Context) ([]store.ChatSummary, error)
 	Messages(ctx context.Context, chat string, limit int) ([]wa.Message, error)
+	Directory(ctx context.Context) ([]store.ChatSummary, error)
 }
 
 // Deps are the UI's collaborators, wired by internal/app.

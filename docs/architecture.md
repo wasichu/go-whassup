@@ -97,8 +97,10 @@ There are two kinds of consumers:
 
 ## TUI structure (`internal/ui`)
 
-- **One root `Model`** with a `screen` (main, login, settings), a `?` help overlay, and
-  sub-state per screen (`chatList`, `conversation`, `login`, `settings`). Everything
+- **One root `Model`** with a `screen` (main, login, settings, finder), a `?` help overlay,
+  and sub-state per screen (`chatList`, `conversation`, `login`, `settings`, `finder`).
+  `draft` holds a chat opened from the finder that has no messages yet; it turns into a
+  normal selection when the chat appears in the store. Everything
   changes only in `Update`.
 - **`ui.Deps`** also carries `Config`, `ConfigPath` and an `ApplyConfig` hook, so the UI
   never reaches into the recorder or client internals to apply settings.

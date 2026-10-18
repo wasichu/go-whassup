@@ -49,9 +49,9 @@ step lands or the plan changes.
 
 ## After step 3: features (in this order)
 
-1. **Contact names** from the phone's address book (whatsmeow's contact store), so the
-   chat list shows real names. Also **contact search / new chat**: fuzzy-find any
-   contact and message someone you haven't chatted with yet.
+1. [x] **Contact names** from the phone's address book (whatsmeow's contact store), so
+   the chat list shows real names. Also **contact search / new chat** (`/`): fuzzy-find
+   any contact and message someone you haven't chatted with yet. *(Live test pending.)*
 2. **Unread counts and new-message markers** in the chat list.
 3. **Edits, deletes and reactions** applied to stored messages.
 4. **Media:** download images and documents; open them with `open` / `xdg-open`; and

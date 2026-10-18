@@ -93,7 +93,7 @@ func renderMessages(msgs []wa.Message, chat store.ChatSummary, width int) string
 		return ""
 	}
 	if len(msgs) == 0 {
-		return faintStyle.Render("No messages stored for this chat yet.")
+		return faintStyle.Render("No messages here yet. Say hi!")
 	}
 	wrap := lipgloss.NewStyle().Width(width)
 	var b strings.Builder
@@ -118,10 +118,14 @@ func renderMessages(msgs []wa.Message, chat store.ChatSummary, width int) string
 }
 
 // senderName labels an incoming message: in a DM the chat's own title, in a
-// group the sender's push name, falling back to their number.
+// group the sender's best known name (address book, push name), falling
+// back to their number.
 func senderName(m wa.Message, chat store.ChatSummary) string {
 	if !m.IsGroup && chat.Name != "" {
 		return chat.Name
+	}
+	if m.SenderName != "" {
+		return m.SenderName
 	}
 	if m.PushName != "" {
 		return m.PushName

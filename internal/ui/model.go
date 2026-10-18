@@ -27,6 +27,7 @@ const (
 	screenMain screen = iota
 	screenLogin
 	screenSettings
+	screenFinder
 )
 
 type focus int
@@ -65,6 +66,8 @@ type Model struct {
 	conv     conversation
 	login    login
 	settings settings
+	finder   finder
+	draft    string // JID of an open chat that has no messages yet
 	help     help.Model
 }
 
@@ -109,6 +112,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.loginResult(msg)
 	case configSavedMsg:
 		return m.settingsSaved(msg)
+	case directoryLoadedMsg:
+		return m.finderLoaded(msg)
 	case chatsLoadedMsg:
 		if msg.err != nil {
 			m.setError("loading chats", msg.err)
@@ -116,6 +121,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		before := m.chats.selectedJID()
 		m.chats.setChats(msg.chats)
+		if m.draft != "" {
+			// A draft becomes a regular chat once its first message is stored.
+			if !m.chats.selectJID(m.draft) {
+				return m, nil
+			}
+			m.draft = ""
+			c, _ := m.chats.selectedChat()
+			m.conv.setChat(c)
+			return m, loadMessages(m.ctx, m.deps.Store, c.JID)
+		}
 		if c, ok := m.chats.selectedChat(); ok {
 			m.conv.setChat(c)
 			if c.JID != before || len(m.conv.msgs) == 0 {
@@ -155,6 +170,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.login.phone, cmd = m.login.phone.Update(msg)
 	case m.screen == screenSettings && m.settings.editing:
 		m.settings.input, cmd = m.settings.input.Update(msg)
+	case m.screen == screenFinder:
+		m.finder.input, cmd = m.finder.input.Update(msg)
 	case m.screen == screenMain && m.focus == focusInput:
 		m.conv.input, cmd = m.conv.input.Update(msg)
 	}
@@ -176,6 +193,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.loginKey(msg)
 	case screenSettings:
 		return m.settingsKey(msg)
+	case screenFinder:
+		return m.finderKey(msg)
 	}
 
 	switch {
@@ -217,6 +236,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.openLogin(""), nil
 	case key.Matches(msg, keys.Settings):
 		return m.openSettings(), nil
+	case key.Matches(msg, keys.Find):
+		return m.openFinder()
 	case key.Matches(msg, keys.Up):
 		return m.selectChat(-1)
 	case key.Matches(msg, keys.Down):
@@ -232,7 +253,15 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) selectChat(delta int) (tea.Model, tea.Cmd) {
-	if !m.chats.move(delta) {
+	if m.draft != "" {
+		// Leaving a draft: show the list's selection again.
+		m.draft = ""
+		c, _ := m.chats.selectedChat()
+		m.conv.setChat(c)
+		if !m.chats.move(delta) {
+			return m, loadMessages(m.ctx, m.deps.Store, c.JID)
+		}
+	} else if !m.chats.move(delta) {
 		return m, nil
 	}
 	c, _ := m.chats.selectedChat()
@@ -267,7 +296,8 @@ func (m Model) handleEvent(evt wa.Event) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, loadMessages(m.ctx, m.deps.Store, v.Chat))
 		}
 		return m, tea.Batch(cmds...)
-	case wa.HistorySync:
+	case wa.HistorySync, wa.Contacts:
+		// New names or history: refresh titles and the open chat's senders.
 		cmds := []tea.Cmd{next, loadChats(m.ctx, m.deps.Store)}
 		if m.conv.chat.JID != "" {
 			cmds = append(cmds, loadMessages(m.ctx, m.deps.Store, m.conv.chat.JID))
@@ -314,6 +344,8 @@ func (m Model) render() string {
 		body = m.loginView(m.width, bodyH)
 	case m.screen == screenSettings:
 		body = m.settingsView(m.width, bodyH)
+	case m.screen == screenFinder:
+		body = m.finderView(m.width, bodyH)
 	default:
 		left := m.chats.view(m.listWidth(), bodyH, m.focus == focusList)
 		sep := separatorStyle.Render(strings.TrimSuffix(strings.Repeat("│\n", bodyH), "\n"))
@@ -325,7 +357,7 @@ func (m Model) render() string {
 
 func (m Model) helpView(height int) string {
 	content := paneTitleStyle.Render("Keys") + "\n\n" + m.help.FullHelpView(fullMainHelp) +
-		"\n\n" + faintStyle.Render("q , ? and L only act from the chat list; in the message box they're typed. Press any key to close.")
+		"\n\n" + faintStyle.Render("q / , ? and L only act from the chat list; in the message box they're typed. Press any key to close.")
 	return lipgloss.NewStyle().Width(m.width).Height(height).MaxHeight(height).Padding(0, 1).Render(content)
 }
 
@@ -378,6 +410,8 @@ func (m Model) contextHelp() []key.Binding {
 			return []key.Binding{keys.Back}
 		}
 		return menuHelp
+	case m.screen == screenFinder:
+		return finderHelp
 	case m.screen == screenSettings:
 		if m.settings.editing {
 			return formHelp
