@@ -107,6 +107,9 @@ step lands or the plan changes.
 - [x] **Release binaries:** cgo-free cross-compiles for darwin/linux/windows ×
   amd64/arm64, with the version stamped via `-ldflags -X`, from a `just release` recipe
   (no GoReleaser unless needed). Windows builds but is untested (and has no keyring).
+- [ ] **Homebrew:** our own tap first (`brew install wasichu/tap/go-whassup`, built from
+  source with bottles), auto-bumped on release; homebrew-core maybe later. Plan and
+  draft formula: `homebrew.md`.
 - [x] **Dependency bumps:** Renovate (`renovate.json`), gated by CI. Not Dependabot: it
   can't update pseudo-versions, and whatsmeow has no tags. Renovate also covers
   `mise.toml` and the GitHub Actions. Needs the Renovate app installed on the repo.
