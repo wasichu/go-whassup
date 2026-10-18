@@ -3,6 +3,7 @@ package ui
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -12,6 +13,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/wasichu/go-whassup/internal/config"
+	"github.com/wasichu/go-whassup/internal/store"
 )
 
 // Encryption turns at-rest encryption on and off while the app runs
@@ -101,9 +103,14 @@ func (m Model) encryptionDone(msg encryptionDoneMsg) (Model, tea.Cmd) {
 	if msg.seq != m.encSeq {
 		return m, nil
 	}
+	var unreadable *store.ResealError
 	switch {
+	case errors.As(msg.err, &unreadable):
+		// Retrying can't help: the same value fails every time.
+		m.setError("changing encryption stopped: a stored message can't be read, so it stops there every time "+
+			"(go-whassup db reset starts over; history older than your phone's sync is lost)", msg.err)
 	case msg.err != nil:
-		m.setError("changing encryption (it resumes at the next start)", msg.err)
+		m.setError("changing encryption stopped (it's retried at the next start)", msg.err)
 	case msg.on:
 		m.notice, m.noticeIsErr = "Encryption is on: stored messages are encrypted.", false
 	default:

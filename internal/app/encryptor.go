@@ -232,7 +232,11 @@ func (e *encryptor) reseal(ctx context.Context, finish func(context.Context) err
 			if ctx.Err() != nil {
 				break
 			}
-			e.log.Error("re-sealing stopped; it resumes next start", "done", total, "err", err)
+			if rerr := (*store.ResealError)(nil); errors.As(err, &rerr) {
+				e.log.Error("re-sealing stopped at a value that can't be opened; it will stop there again", "done", total, "err", err)
+			} else {
+				e.log.Error("re-sealing stopped; it's retried at the next start", "done", total, "err", err)
+			}
 			return err
 		}
 		if n == 0 {

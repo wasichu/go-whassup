@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/wasichu/go-whassup/internal/config"
+	"github.com/wasichu/go-whassup/internal/store"
 )
 
 type encCall struct {
@@ -183,5 +184,17 @@ func TestSearchComesBackWhenDecrypted(t *testing.T) {
 	h.settle()
 	if v := ansi.Strip(h.view()); !strings.Contains(v, "hi from bob") {
 		t.Errorf("search doesn't work after decrypting:\n%s", v)
+	}
+}
+
+func TestEncryptionFailureWording(t *testing.T) {
+	h := newHarness(t, true)
+	h.send(encryptionDoneMsg{seq: h.model().encSeq, err: &store.ResealError{Chat: "c", ID: "m1", Err: errors.New("message authentication failed")}})
+	if n := h.model().notice; !strings.Contains(n, "stops there every time") || strings.Contains(n, "retried") {
+		t.Errorf("unreadable value: %q", n)
+	}
+	h.send(encryptionDoneMsg{seq: h.model().encSeq, err: errors.New("disk I/O error")})
+	if n := h.model().notice; !strings.Contains(n, "retried at the next start") {
+		t.Errorf("other failure: %q", n)
 	}
 }
