@@ -105,19 +105,28 @@ func (f *finder) key(r rootAPI, msg tea.KeyPressMsg) (bool, tea.Cmd) {
 func (m Model) openChat(c store.ChatSummary) (Model, tea.Cmd) {
 	m.screen = screenMain
 	if m.chats.selectJID(c.JID) {
-		m.draft = ""
+		m.setDraft(nil)
 		sel, _ := m.chats.selectedChat()
 		m.conv.setChat(sel)
 		m.focus = focusInput
 		cmd := tea.Batch(m.conv.input.Focus(), loadMessages(m.ctx, m.deps, sel.JID), m.scheduleRead()) // evaluate before m is copied into the return
 		return m, cmd
 	}
-	m.draft = c.JID
+	m.setDraft(&c)
 	m.conv.setChat(c)
 	m.conv.setMessages(nil)
 	m.focus = focusInput
 	cmd := m.conv.input.Focus() // evaluate before m is copied into the return
 	return m, cmd
+}
+
+// setDraft opens c as a draft (nil ends it): the open chat has no messages
+// yet, and the chat list shows it as a placeholder row.
+func (m *Model) setDraft(c *store.ChatSummary) {
+	m.draft, m.chats.draft = "", nil
+	if c != nil {
+		m.draft, m.chats.draft = c.JID, c
+	}
 }
 
 func (f *finder) view(_ rootAPI, width, height int) string {

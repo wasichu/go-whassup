@@ -15,6 +15,9 @@ type chatList struct {
 	chats    []store.ChatSummary
 	selected int
 	offset   int // first visible row
+	// draft, while set, is a chat opened from the finder that has no
+	// messages yet. It's shown as the top row, selected, marked "new".
+	draft *store.ChatSummary
 }
 
 // setChats replaces the list, keeping the selection on the same chat.
@@ -80,24 +83,32 @@ func (l *chatList) view(width, height int, active bool, own string) string {
 	if rows < 1 {
 		return ""
 	}
-	if l.selected < l.offset {
-		l.offset = l.selected
+	items, sel := l.chats, l.selected
+	if l.draft != nil {
+		items, sel = append([]store.ChatSummary{*l.draft}, l.chats...), 0
 	}
-	if l.selected >= l.offset+rows {
-		l.offset = l.selected - rows + 1
+	if sel < l.offset {
+		l.offset = sel
+	}
+	if sel >= l.offset+rows {
+		l.offset = sel - rows + 1
 	}
 
 	var b strings.Builder
 	b.WriteString(paneTitleStyle.Render("Chats"))
-	if len(l.chats) == 0 {
+	if len(items) == 0 {
 		b.WriteString("\n" + faintStyle.Render("No chats yet"))
 	}
 	line := lipgloss.NewStyle().Width(width).MaxWidth(width)
-	for i := l.offset; i < len(l.chats) && i < l.offset+rows; i++ {
-		c := l.chats[i]
+	for i := l.offset; i < len(items) && i < l.offset+rows; i++ {
+		c := items[i]
+		isDraft := l.draft != nil && i == 0
 		title := chatTitle(c, own)
 		badge := ""
-		if c.Unread > 0 {
+		switch {
+		case isDraft:
+			badge = " new "
+		case c.Unread > 0:
 			badge = fmt.Sprintf(" %d ", c.Unread)
 		}
 		// Truncate the title so an unread badge always fits on the row.
@@ -106,9 +117,9 @@ func (l *chatList) view(width, height int, active bool, own string) string {
 		label := " " + title + strings.Repeat(" ", max(room-lipgloss.Width(title), 0))
 		style := line
 		switch {
-		case i == l.selected && active:
+		case i == sel && active:
 			style = line.Inherit(activeSelStyle)
-		case i == l.selected:
+		case i == sel:
 			style = line.Inherit(selectedStyle)
 		case c.Unread > 0:
 			style = line.Bold(true)
@@ -116,7 +127,7 @@ func (l *chatList) view(width, height int, active bool, own string) string {
 		row := style.Render(label)
 		if badge != "" {
 			bs := unreadBadgeStyle
-			if c.Muted(time.Now()) {
+			if isDraft || c.Muted(time.Now()) {
 				bs = mutedBadgeStyle // grey, like the phone
 			}
 			row = lipgloss.NewStyle().Width(width-lipgloss.Width(badge)).MaxWidth(width-lipgloss.Width(badge)).Render(row) + bs.Render(badge)

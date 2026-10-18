@@ -120,8 +120,8 @@ There are two kinds of consumers:
   screen in its own field. Everything changes only in `Update`.
 - **The main and login screens live in the root**: they react to protocol events and
   own focus, drafts, the read timer and pairing. `draft` holds a chat opened from the
-  finder that has no messages yet; it turns into a normal selection when the chat
-  appears in the store.
+  finder that has no messages yet (`setDraft` also gives the chat list its placeholder
+  row); it turns into a normal selection when the chat appears in the store.
 - **Every other screen is a `page`** (`page.go`): finder, search, attachments (picker),
   send file (attach), chat info and settings. A page implements `update`, `view` and
   `help`, and the root just routes: `m.page()` maps `screen` to the active page, keys

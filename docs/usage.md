@@ -176,8 +176,9 @@ names stay readable on disk.**
 - Fuzzy-search every chat and every contact from your phone's address book by name, or
   by number (`555 123`, `+1-555…`). Type to filter; `↑`/`↓` choose; `enter` opens;
   `esc` goes back.
-- A contact you've never messaged is marked **new chat**. Opening it starts a draft:
-  type and send, and it becomes a regular chat in the list.
+- A contact you've never messaged is marked **new chat**. Opening it starts a draft,
+  shown at the top of the chat list marked `new`: type and send, and it becomes a
+  regular chat. Moving down the list without sending drops the draft.
 - Chat titles follow the phone: your address-book name for a person, then the name they
   chose, then their number (`+1555…`); a group's subject. The chat with yourself reads
   `… (You)`, as on WhatsApp Web, and typing `you` in the finder finds it. In groups, each sender shows the same way.

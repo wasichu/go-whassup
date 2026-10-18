@@ -227,7 +227,7 @@ func (m Model) chatsLoaded(msg chatsLoadedMsg) (Model, tea.Cmd) {
 		if !m.chats.selectJID(m.draft) {
 			return m, nil
 		}
-		m.draft = ""
+		m.setDraft(nil)
 		c, _ := m.chats.selectedChat()
 		m.conv.setChat(c)
 		cmd := tea.Batch(loadMessages(m.ctx, m.deps, c.JID), m.scheduleRead()) // evaluate before m is copied into the return
@@ -372,15 +372,16 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) selectChat(delta int) (tea.Model, tea.Cmd) {
-	if m.draft != "" {
-		// Leaving a draft: show the list's selection again.
-		m.draft = ""
-		c, _ := m.chats.selectedChat()
-		m.conv.setChat(c)
-		if !m.chats.move(delta) {
-			return m, loadMessages(m.ctx, m.deps, c.JID)
+	switch {
+	case m.draft != "":
+		// The draft is the top row: up stays, down leaves it for the
+		// first chat below (and the draft, never sent, goes away).
+		if delta < 0 || len(m.chats.chats) == 0 {
+			return m, nil
 		}
-	} else if !m.chats.move(delta) {
+		m.setDraft(nil)
+		m.chats.selected = 0
+	case !m.chats.move(delta):
 		return m, nil
 	}
 	c, _ := m.chats.selectedChat()
