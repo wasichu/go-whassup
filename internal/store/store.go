@@ -147,7 +147,9 @@ type ChatSummary struct {
 	Name          string // see titleSQL; "" if nothing is known
 	IsGroup       bool
 	LastMessageAt time.Time
+	LastReadAt    time.Time
 	Messages      int
+	Unread        int // incoming messages newer than LastReadAt
 }
 
 // Title is the best available label for the chat.
@@ -169,8 +171,9 @@ const titleSQL = `CASE WHEN c.is_group THEN c.name ELSE COALESCE(
 	NULLIF(ct.name, ''), NULLIF(c.name, ''), NULLIF(ct.push_name, ''), NULLIF(ct.business_name, ''), '') END`
 
 const chatSummaryQuery = `
-	SELECT c.jid, ` + titleSQL + `, c.is_group, c.last_message_at,
-	       (SELECT count(*) FROM messages m WHERE m.chat_jid = c.jid)
+	SELECT c.jid, ` + titleSQL + `, c.is_group, c.last_message_at, c.last_read_at,
+	       (SELECT count(*) FROM messages m WHERE m.chat_jid = c.jid),
+	       (SELECT count(*) FROM messages m WHERE m.chat_jid = c.jid AND m.from_me = 0 AND m.ts > c.last_read_at)
 	FROM chats c LEFT JOIN contacts ct ON ct.jid = c.jid`
 
 // Chats lists chats, most recently active first.
@@ -183,11 +186,11 @@ func (s *Store) Chats(ctx context.Context) ([]ChatSummary, error) {
 	var chats []ChatSummary
 	for rows.Next() {
 		var c ChatSummary
-		var last int64
-		if err := rows.Scan(&c.JID, &c.Name, &c.IsGroup, &last, &c.Messages); err != nil {
+		var last, read int64
+		if err := rows.Scan(&c.JID, &c.Name, &c.IsGroup, &last, &read, &c.Messages, &c.Unread); err != nil {
 			return nil, fmt.Errorf("listing chats: %w", err)
 		}
-		c.LastMessageAt = time.Unix(last, 0)
+		c.LastMessageAt, c.LastReadAt = time.Unix(last, 0), time.Unix(read, 0)
 		chats = append(chats, c)
 	}
 	if err := rows.Err(); err != nil {
@@ -306,6 +309,66 @@ func (s *Store) Messages(ctx context.Context, chat string, limit int) ([]wa.Mess
 		return nil, fmt.Errorf("loading messages: %w", err)
 	}
 	return msgs, nil
+}
+
+// MarkRead records that chat was read up to at. Read state only moves
+// forward.
+func (s *Store) MarkRead(ctx context.Context, chat string, at time.Time) error {
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE chats SET last_read_at = max(last_read_at, ?) WHERE jid = ?`, at.Unix(), chat); err != nil {
+		return fmt.Errorf("marking %s read: %w", chat, err)
+	}
+	return nil
+}
+
+// UnreadMessages returns chat's incoming messages newer than its read
+// state (ID, sender and time only), oldest first.
+func (s *Store) UnreadMessages(ctx context.Context, chat string) ([]wa.Message, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT m.id, m.sender_jid, m.ts, c.is_group FROM messages m JOIN chats c ON c.jid = m.chat_jid
+		WHERE m.chat_jid = ? AND m.from_me = 0 AND m.ts > c.last_read_at
+		ORDER BY m.ts, m.id`, chat)
+	if err != nil {
+		return nil, fmt.Errorf("loading unread: %w", err)
+	}
+	defer rows.Close()
+	var msgs []wa.Message
+	for rows.Next() {
+		m := wa.Message{Chat: chat}
+		var ts int64
+		if err := rows.Scan(&m.ID, &m.Sender, &ts, &m.IsGroup); err != nil {
+			return nil, fmt.Errorf("loading unread: %w", err)
+		}
+		m.Timestamp = time.Unix(ts, 0)
+		msgs = append(msgs, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("loading unread: %w", err)
+	}
+	return msgs, nil
+}
+
+// SetUnreadFromPhone sets chat's read state so that its n newest incoming
+// messages are unread, matching the phone's count from history sync. Unlike
+// MarkRead this may move read state backwards: the phone is authoritative.
+func (s *Store) SetUnreadFromPhone(ctx context.Context, chat string, n int) error {
+	var q string
+	var args []any
+	if n <= 0 {
+		q = `UPDATE chats SET last_read_at = max(last_message_at,
+			coalesce((SELECT max(ts) FROM messages WHERE chat_jid = ?1), 0)) WHERE jid = ?1`
+		args = []any{chat}
+	} else {
+		// Just before the nth newest incoming message (or 0 if fewer are stored).
+		q = `UPDATE chats SET last_read_at = coalesce((
+			SELECT ts - 1 FROM messages WHERE chat_jid = ?1 AND from_me = 0
+			ORDER BY ts DESC, id DESC LIMIT 1 OFFSET ?2), 0) WHERE jid = ?1`
+		args = []any{chat, n - 1}
+	}
+	if _, err := s.db.ExecContext(ctx, q, args...); err != nil {
+		return fmt.Errorf("setting unread for %s: %w", chat, err)
+	}
+	return nil
 }
 
 // Retention limits what is kept. Zero values mean no limit.

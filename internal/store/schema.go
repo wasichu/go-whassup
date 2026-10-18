@@ -43,6 +43,11 @@ CREATE TABLE contacts (
 ALTER TABLE contacts ADD COLUMN name TEXT NOT NULL DEFAULT '';
 ALTER TABLE contacts ADD COLUMN business_name TEXT NOT NULL DEFAULT '';
 `,
+	// 3: read state. Chats that exist at upgrade time count as read.
+	`
+ALTER TABLE chats ADD COLUMN last_read_at INTEGER NOT NULL DEFAULT 0; -- unix seconds
+UPDATE chats SET last_read_at = last_message_at;
+`,
 }
 
 // migrate brings the schema up to date inside one transaction.

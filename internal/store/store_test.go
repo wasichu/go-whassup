@@ -471,3 +471,113 @@ func TestRecorderStoresContacts(t *testing.T) {
 		t.Errorf("directory = %+v, %v", dir, err)
 	}
 }
+
+func unreadOf(t *testing.T, st *Store, jid string) int {
+	t.Helper()
+	chats, err := st.Chats(t.Context())
+	if err != nil {
+		t.Fatalf("Chats: %v", err)
+	}
+	for _, c := range chats {
+		if c.JID == jid {
+			return c.Unread
+		}
+	}
+	t.Fatalf("chat %s not found", jid)
+	return 0
+}
+
+func TestUnreadCountsAndMarkRead(t *testing.T) {
+	st := openStore(t, "", nil)
+	ctx := t.Context()
+	mine := msg(ada, "m", t0.Add(time.Minute), "from me")
+	mine.FromMe = true
+	mustSave(t, st, msg(ada, "1", t0, "a"), mine, msg(ada, "2", t0.Add(2*time.Minute), "b"))
+	if got := unreadOf(t, st, ada); got != 2 {
+		t.Fatalf("unread = %d, want 2 (own messages never count)", got)
+	}
+	unread, err := st.UnreadMessages(ctx, ada)
+	if err != nil || len(unread) != 2 || unread[0].ID != "1" {
+		t.Fatalf("UnreadMessages = %v, %v", ids(unread), err)
+	}
+
+	if err := st.MarkRead(ctx, ada, t0.Add(90*time.Second)); err != nil {
+		t.Fatalf("MarkRead: %v", err)
+	}
+	if got := unreadOf(t, st, ada); got != 1 {
+		t.Errorf("after partial read = %d, want 1", got)
+	}
+	if err := st.MarkRead(ctx, ada, t0); err != nil { // older: ignored
+		t.Fatalf("MarkRead: %v", err)
+	}
+	if got := unreadOf(t, st, ada); got != 1 {
+		t.Errorf("read state moved backwards: %d", got)
+	}
+}
+
+func TestSetUnreadFromPhone(t *testing.T) {
+	st := openStore(t, "", nil)
+	ctx := t.Context()
+	mustSave(t, st, msg(ada, "1", t0, "a"), msg(ada, "2", t0.Add(time.Minute), "b"), msg(ada, "3", t0.Add(2*time.Minute), "c"))
+	for _, tt := range []struct{ phone, want int }{{2, 2}, {0, 0}, {5, 3}, {1, 1}} {
+		if err := st.SetUnreadFromPhone(ctx, ada, tt.phone); err != nil {
+			t.Fatalf("SetUnreadFromPhone(%d): %v", tt.phone, err)
+		}
+		if got := unreadOf(t, st, ada); got != tt.want {
+			t.Errorf("phone says %d unread: got %d, want %d", tt.phone, got, tt.want)
+		}
+	}
+}
+
+func TestMigrateV2ToV3TreatsExistingAsRead(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "messages.db")
+	db, err := sqlite.Open(path)
+	if err != nil {
+		t.Fatalf("sqlite.Open: %v", err)
+	}
+	ctx := t.Context()
+	for _, q := range []string{
+		migrations[0], migrations[1], "PRAGMA user_version = 2",
+		`INSERT INTO chats (jid, last_message_at) VALUES ('` + ada + `', 1759320000)`,
+		`INSERT INTO messages (chat_jid, id, sender_jid, ts, from_me, kind, body) VALUES ('` + ada + `', '1', '` + ada + `', 1759320000, 0, 'text', x'')`,
+	} {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatalf("v2 setup %q: %v", q, err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	st := openStore(t, path, nil)
+	if got := unreadOf(t, st, ada); got != 0 {
+		t.Errorf("existing messages should be read after upgrade, unread = %d", got)
+	}
+}
+
+func TestRecorderReadState(t *testing.T) {
+	st := openStore(t, "", nil)
+	client := &watest.Client{Paired: true}
+	(&Recorder{Store: st, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}).Attach(client)
+
+	client.Emit(wa.HistorySync{
+		Chats:    []wa.Chat{{JID: ada, UnreadCount: 1}, {JID: bob, UnreadCount: 0}},
+		Messages: []wa.Message{msg(ada, "1", t0, "a"), msg(ada, "2", t0.Add(time.Minute), "b"), msg(bob, "b1", t0, "x")},
+	})
+	if a, b := unreadOf(t, st, ada), unreadOf(t, st, bob); a != 1 || b != 0 {
+		t.Fatalf("after history: ada %d bob %d, want 1 and 0", a, b)
+	}
+	client.Emit(msg(bob, "b2", t0.Add(time.Hour), "new"))
+	if got := unreadOf(t, st, bob); got != 1 {
+		t.Errorf("live incoming should be unread, got %d", got)
+	}
+	client.Emit(wa.ChatRead{Chat: bob, At: t0.Add(time.Hour)})
+	if got := unreadOf(t, st, bob); got != 0 {
+		t.Errorf("read on another device should clear, got %d", got)
+	}
+	reply := msg(ada, "r", t0.Add(2*time.Hour), "reply")
+	reply.FromMe = true
+	client.Emit(reply)
+	if got := unreadOf(t, st, ada); got != 0 {
+		t.Errorf("replying should mark the chat read, got %d", got)
+	}
+}

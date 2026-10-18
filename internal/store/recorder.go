@@ -42,6 +42,12 @@ func (r *Recorder) Handle(evt wa.Event) {
 	switch v := evt.(type) {
 	case wa.Message:
 		r.saveMessages(ctx, []wa.Message{v})
+		if v.FromMe {
+			// Replying means you've read the chat, as on the phone.
+			r.markRead(ctx, v.Chat, v.Timestamp)
+		}
+	case wa.ChatRead:
+		r.markRead(ctx, v.Chat, v.At)
 	case wa.Contacts:
 		if err := r.Store.SaveContacts(ctx, v.List); err != nil {
 			r.Log.Error("recording contacts", "count", len(v.List), "err", err)
@@ -54,6 +60,11 @@ func (r *Recorder) Handle(evt wa.Event) {
 			r.Log.Error("recording push names", "err", err)
 		}
 		r.saveMessages(ctx, v.Messages)
+		for _, c := range v.Chats {
+			if err := r.Store.SetUnreadFromPhone(ctx, c.JID, c.UnreadCount); err != nil {
+				r.Log.Error("recording unread count", "chat", c.JID, "err", err)
+			}
+		}
 		r.Prune(ctx)
 	}
 }
@@ -77,6 +88,12 @@ func (r *Recorder) Prune(ctx context.Context) {
 	}
 	if n > 0 {
 		r.Log.Info("pruned messages", "count", n)
+	}
+}
+
+func (r *Recorder) markRead(ctx context.Context, chat string, at time.Time) {
+	if err := r.Store.MarkRead(ctx, chat, at); err != nil {
+		r.Log.Error("recording read state", "chat", chat, "err", err)
 	}
 }
 
