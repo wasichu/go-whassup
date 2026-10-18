@@ -53,29 +53,40 @@ func (m Model) openPicker() (Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) pickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	p := &m.picker
-	switch {
-	case key.Matches(msg, keys.Back):
-		m.screen = screenMain
-	case key.Matches(msg, keys.Up):
-		p.selected = max(p.selected-1, 0)
-	case key.Matches(msg, keys.Down):
-		p.selected = min(p.selected+1, len(p.items)-1)
-	case key.Matches(msg, keys.Select):
-		item := p.items[p.selected]
-		if m.downloading[item.ID] {
-			return m, nil // already on its way
-		}
-		if m.deps.Media == nil || m.deps.OpenFile == nil {
-			m.setError("opening", errors.New("media isn't available in this mode"))
-			return m, nil
-		}
-		m.downloading[item.ID] = true
-		m.notice, m.noticeIsErr = "Downloading "+mediaLabel(item)+"…", false
-		return m, fetchAndOpen(m.ctx, m.deps, m.conv.chat.JID, item)
+func (p *picker) update(r rootAPI, msg tea.Msg) (bool, tea.Cmd) {
+	k, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return false, nil
 	}
-	return m, nil
+	switch {
+	case key.Matches(k, keys.Back):
+		return true, nil
+	case key.Matches(k, keys.Up):
+		p.selected = max(p.selected-1, 0)
+	case key.Matches(k, keys.Down):
+		p.selected = min(p.selected+1, len(p.items)-1)
+	case key.Matches(k, keys.Select):
+		return false, r.download(p.items[p.selected])
+	}
+	return false, nil
+}
+
+func (*picker) help() []key.Binding { return menuHelp }
+
+// download fetches (if not cached) and opens an attachment of the open
+// chat; the result arrives as mediaOpenedMsg, even if the picker has
+// closed by then.
+func (m *Model) download(item wa.Message) tea.Cmd {
+	if m.downloading[item.ID] {
+		return nil // already on its way
+	}
+	if m.deps.Media == nil || m.deps.OpenFile == nil {
+		m.setError("opening", errors.New("media isn't available in this mode"))
+		return nil
+	}
+	m.downloading[item.ID] = true
+	m.notice, m.noticeIsErr = "Downloading "+mediaLabel(item)+"…", false
+	return fetchAndOpen(m.ctx, m.deps, m.conv.chat.JID, item)
 }
 
 // fetchAndOpen downloads an attachment if it isn't cached, then opens it.
@@ -115,9 +126,8 @@ func mediaLabel(msg wa.Message) string {
 	return msg.Kind
 }
 
-func (m Model) pickerView(width, height int) string {
-	p := m.picker
-	lines := []string{paneTitleStyle.Render("Attachments in " + chatTitle(m.conv.chat, m.ownJID)), ""}
+func (p *picker) view(r rootAPI, width, height int) string {
+	lines := []string{paneTitleStyle.Render("Attachments in " + chatTitle(r.chat(), r.own())), ""}
 	rows := max(height-len(lines)-1, 1)
 	start := 0
 	if p.selected >= rows {
@@ -133,10 +143,10 @@ func (m Model) pickerView(width, height int) string {
 		if s := humanSize(it.Media.Size); s != "" {
 			meta += " · " + s
 		}
-		if m.conv.cached[it.ID] {
+		if r.cached(it.ID) {
 			meta += " · ✓"
 		}
-		if m.downloading[it.ID] {
+		if r.downloading(it.ID) {
 			meta += " · downloading…"
 		}
 		line := "  " + label
@@ -145,7 +155,7 @@ func (m Model) pickerView(width, height int) string {
 		}
 		lines = append(lines, lipgloss.NewStyle().MaxWidth(width-2).Render(line+"  "+faintStyle.Render(meta)))
 	}
-	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Padding(0, 1).Render(strings.Join(lines, "\n"))
+	return pageStyle(width, height).Render(strings.Join(lines, "\n"))
 }
 
 func newAttach(width int) attach {
@@ -173,22 +183,33 @@ func (m Model) openAttach() (Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) attachKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	a := &m.attach
+func (a *attach) update(r rootAPI, msg tea.Msg) (bool, tea.Cmd) {
+	if k, ok := msg.(tea.KeyPressMsg); ok {
+		return a.key(r, k)
+	}
+	var cmd tea.Cmd
+	if a.onCaption {
+		a.caption, cmd = a.caption.Update(msg)
+	} else {
+		a.path, cmd = a.path.Update(msg)
+	}
+	return false, cmd
+}
+
+func (*attach) help() []key.Binding { return attachHelp }
+
+func (a *attach) key(r rootAPI, msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
-		m.screen = screenMain
-		return m, nil
+		return true, nil
 	case "tab", "shift+tab":
 		a.onCaption = !a.onCaption
 		if a.onCaption {
 			a.path.Blur()
-			cmd := a.caption.Focus()
-			return m, cmd
+			return false, a.caption.Focus()
 		}
 		a.caption.Blur()
-		cmd := a.path.Focus()
-		return m, cmd
+		return false, a.path.Focus()
 	case "enter":
 		path, err := expandHome(strings.TrimSpace(a.path.Value()))
 		if err == nil {
@@ -196,11 +217,10 @@ func (m Model) attachKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		if err != nil || path == "" {
 			a.err = "No such file: " + a.path.Value()
-			return m, nil
+			return false, nil
 		}
-		m.screen = screenMain
-		m.notice, m.noticeIsErr = "Sending "+filepath.Base(path)+"…", false
-		return m, sendFile(m.ctx, m.deps, m.conv.chat.JID, path, strings.TrimSpace(a.caption.Value()))
+		r.notify("Sending " + filepath.Base(path) + "…")
+		return true, sendFile(r.ctx(), r.deps(), r.chat().JID, path, strings.TrimSpace(a.caption.Value()))
 	}
 	var cmd tea.Cmd
 	if a.onCaption {
@@ -209,7 +229,7 @@ func (m Model) attachKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		a.path, cmd = a.path.Update(msg)
 		a.err = ""
 	}
-	return m, cmd
+	return false, cmd
 }
 
 // sendFile sends the file and caches a copy under the new message's ID, so
@@ -239,15 +259,14 @@ func expandHome(p string) (string, error) {
 	return p, nil
 }
 
-func (m Model) attachView(width, height int) string {
-	a := m.attach
+func (a *attach) view(r rootAPI, width, height int) string {
 	lines := []string{
-		paneTitleStyle.Render("Send a file to " + chatTitle(m.conv.chat, m.ownJID)), "",
+		paneTitleStyle.Render("Send a file to " + chatTitle(r.chat(), r.own())), "",
 		a.path.View(), a.caption.View(), "",
 		faintStyle.Render(fmt.Sprintf("JPEG, PNG and WebP go as photos; anything else as a document (max %d MB).", wa.MaxSendSize>>20)),
 	}
 	if a.err != "" {
 		lines = append(lines, "", errorStyle.Render(a.err))
 	}
-	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Padding(0, 1).Render(strings.Join(lines, "\n"))
+	return pageStyle(width, height).Render(strings.Join(lines, "\n"))
 }

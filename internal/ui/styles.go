@@ -29,3 +29,8 @@ var (
 	matchStyle       = lipgloss.NewStyle().Bold(true).Underline(true)
 	codeStyle        = lipgloss.NewStyle().Bold(true).Foreground(accent).Padding(0, 2)
 )
+
+// pageStyle fills a full-screen page, clipping to its height.
+func pageStyle(width, height int) lipgloss.Style {
+	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Padding(0, 1)
+}

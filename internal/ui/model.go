@@ -146,21 +146,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pairCodeMsg, pairQRStartedMsg, logoutMsg:
 		return m.loginResult(msg)
 	case configSavedMsg:
-		return m.settingsSaved(msg)
-	case directoryLoadedMsg:
-		return m.finderLoaded(msg)
+		var reload tea.Cmd
+		if msg.saved {
+			// Adopted even if the settings page has closed meanwhile.
+			m.deps.Config = msg.cfg
+			reload = loadChats(m.ctx, m.deps.Store) // retention may have pruned messages
+		}
+		m, cmd, _ := m.updatePage(msg)
+		return m, tea.Batch(reload, cmd)
 	case mediaOpenedMsg:
 		return m.mediaOpened(msg)
-	case searchResultsMsg:
-		return m.searchResults(msg)
-	case detailsLoadedMsg:
-		if msg.err != nil {
-			m.setError("loading chat info", msg.err)
-			m.screen = screenMain
-			return m, nil
-		}
-		m.info.details, m.info.loaded = msg.details, true
-		return m, nil
 	case fileSentMsg:
 		if msg.err != nil {
 			m.setError("sending file", msg.err)
@@ -230,21 +225,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Anything else (e.g. cursor blink) goes to whichever input has focus.
+	// Anything else (a page's results, cursor blink) goes to the active
+	// page, or to whichever input has focus. Results for a page that has
+	// closed are dropped.
+	if m, cmd, ok := m.updatePage(msg); ok {
+		return m, cmd
+	}
 	var cmd tea.Cmd
 	switch {
 	case m.screen == screenLogin && m.login.step == loginPhone:
 		m.login.phone, cmd = m.login.phone.Update(msg)
-	case m.screen == screenSettings && m.settings.editing:
-		m.settings.input, cmd = m.settings.input.Update(msg)
-	case m.screen == screenFinder:
-		m.finder.input, cmd = m.finder.input.Update(msg)
-	case m.screen == screenSearch:
-		m.search.input, cmd = m.search.input.Update(msg)
-	case m.screen == screenAttach && m.attach.onCaption:
-		m.attach.caption, cmd = m.attach.caption.Update(msg)
-	case m.screen == screenAttach:
-		m.attach.path, cmd = m.attach.path.Update(msg)
 	case m.screen == screenMain && m.focus == focusInput:
 		m.conv.input, cmd = m.conv.input.Update(msg)
 	}
@@ -262,21 +252,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.showHelp = false // any key closes the overlay
 		return m, nil
 	}
-	switch m.screen {
-	case screenLogin:
+	if m.screen == screenLogin {
 		return m.loginKey(msg)
-	case screenSettings:
-		return m.settingsKey(msg)
-	case screenFinder:
-		return m.finderKey(msg)
-	case screenPicker:
-		return m.pickerKey(msg)
-	case screenAttach:
-		return m.attachKey(msg)
-	case screenInfo:
-		return m.infoKey(msg)
-	case screenSearch:
-		return m.searchKey(msg)
+	}
+	if m, cmd, ok := m.updatePage(msg); ok {
+		return m, cmd
 	}
 
 	switch {
@@ -442,18 +422,8 @@ func (m Model) render() string {
 		body = m.helpView(bodyH)
 	case m.screen == screenLogin:
 		body = m.loginView(m.width, bodyH)
-	case m.screen == screenSettings:
-		body = m.settingsView(m.width, bodyH)
-	case m.screen == screenFinder:
-		body = m.finderView(m.width, bodyH)
-	case m.screen == screenPicker:
-		body = m.pickerView(m.width, bodyH)
-	case m.screen == screenAttach:
-		body = m.attachView(m.width, bodyH)
-	case m.screen == screenInfo:
-		body = m.infoView(m.width, bodyH)
-	case m.screen == screenSearch:
-		body = m.searchView(m.width, bodyH)
+	case m.page() != nil:
+		body = m.page().view(rootAPI{&m}, m.width, bodyH)
 	default:
 		left := m.chats.view(m.listWidth(), bodyH, m.focus == focusList, m.ownJID)
 		sep := separatorStyle.Render(strings.TrimSuffix(strings.Repeat("│\n", bodyH), "\n"))
@@ -466,7 +436,7 @@ func (m Model) render() string {
 func (m Model) helpView(height int) string {
 	content := paneTitleStyle.Render("Keys") + "\n\n" + m.help.FullHelpView(fullMainHelp) +
 		"\n\n" + faintStyle.Render("q / s o a i , ? and L only act from the chat list; in the message box they're typed. Press any key to close.")
-	return lipgloss.NewStyle().Width(m.width).Height(height).MaxHeight(height).Padding(0, 1).Render(content)
+	return pageStyle(m.width, height).Render(content)
 }
 
 func (m Model) statusLine() string {
@@ -518,21 +488,8 @@ func (m Model) contextHelp() []key.Binding {
 			return []key.Binding{keys.Back}
 		}
 		return menuHelp
-	case m.screen == screenFinder:
-		return finderHelp
-	case m.screen == screenPicker:
-		return menuHelp
-	case m.screen == screenAttach:
-		return attachHelp
-	case m.screen == screenInfo:
-		return []key.Binding{keys.Up, keys.Down, keys.Back}
-	case m.screen == screenSearch:
-		return finderHelp
-	case m.screen == screenSettings:
-		if m.settings.editing {
-			return formHelp
-		}
-		return settingsHelp
+	case m.page() != nil:
+		return m.page().help()
 	case m.focus == focusInput:
 		return inputHelp
 	default:

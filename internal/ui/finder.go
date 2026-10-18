@@ -8,7 +8,6 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"github.com/wasichu/go-whassup/internal/store"
 )
@@ -53,44 +52,52 @@ func (m Model) openFinder() (Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) finderLoaded(msg directoryLoadedMsg) (Model, tea.Cmd) {
-	if msg.err != nil {
-		m.setError("loading contacts", msg.err)
-		return m, nil
+func (f *finder) update(r rootAPI, msg tea.Msg) (bool, tea.Cmd) {
+	switch msg := msg.(type) {
+	case directoryLoadedMsg:
+		if msg.err != nil {
+			r.setError("loading contacts", msg.err)
+			return false, nil
+		}
+		f.all, f.loaded = msg.entries, true
+		f.refilter()
+		return false, nil
+	case tea.KeyPressMsg:
+		return f.key(r, msg)
 	}
-	m.finder.all, m.finder.loaded = msg.entries, true
-	m.finder.refilter()
-	return m, nil
+	var cmd tea.Cmd
+	f.input, cmd = f.input.Update(msg)
+	return false, cmd
 }
+
+func (*finder) help() []key.Binding { return finderHelp }
 
 func (f *finder) refilter() {
 	f.matches = filterDirectory(f.all, f.input.Value(), f.own)
 	f.selected = min(f.selected, max(len(f.matches)-1, 0))
 }
 
-func (m Model) finderKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	f := &m.finder
+func (f *finder) key(r rootAPI, msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Back):
-		m.screen = screenMain
-		return m, nil
+		return true, nil
 	case msg.String() == "up", msg.String() == "ctrl+p":
 		f.selected = max(f.selected-1, 0)
-		return m, nil
+		return false, nil
 	case msg.String() == "down", msg.String() == "ctrl+n":
 		f.selected = min(f.selected+1, max(len(f.matches)-1, 0))
-		return m, nil
+		return false, nil
 	case msg.String() == "enter":
 		if f.selected >= len(f.matches) {
-			return m, nil
+			return false, nil
 		}
-		return m.openChat(f.matches[f.selected])
+		return true, r.openChat(f.matches[f.selected])
 	}
 	// Everything else edits the query (j/k are letters here, not navigation).
 	var cmd tea.Cmd
 	f.input, cmd = f.input.Update(msg)
 	f.refilter()
-	return m, cmd
+	return false, cmd
 }
 
 // openChat shows c and focuses the message input. A contact without a chat
@@ -113,8 +120,7 @@ func (m Model) openChat(c store.ChatSummary) (Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) finderView(width, height int) string {
-	f := m.finder
+func (f *finder) view(_ rootAPI, width, height int) string {
 	lines := []string{paneTitleStyle.Render("Find a chat or contact"), "", f.input.View(), ""}
 	switch {
 	case !f.loaded:
@@ -150,5 +156,5 @@ func (m Model) finderView(width, height int) string {
 		}
 		lines = append(lines, label)
 	}
-	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Padding(0, 1).Render(strings.Join(lines, "\n"))
+	return pageStyle(width, height).Render(strings.Join(lines, "\n"))
 }

@@ -39,58 +39,73 @@ func (m Model) openInfo() (Model, tea.Cmd) {
 	return m, loadDetails(m.ctx, m.deps.Store, m.conv.chat.JID)
 }
 
-func (m Model) infoKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, keys.Back), msg.String() == "i", msg.String() == "q":
-		m.screen = screenMain
-	case key.Matches(msg, keys.Up):
-		m.info.offset = max(m.info.offset-1, 0)
-	case key.Matches(msg, keys.Down):
-		m.info.offset = min(m.info.offset+1, max(len(m.info.details.Members)-1, 0))
+func (in *info) update(r rootAPI, msg tea.Msg) (bool, tea.Cmd) {
+	switch msg := msg.(type) {
+	case detailsLoadedMsg:
+		if msg.err != nil {
+			r.setError("loading chat info", msg.err)
+			return true, nil
+		}
+		in.details, in.loaded = msg.details, true
+	case tea.KeyPressMsg:
+		switch {
+		case key.Matches(msg, keys.Back), msg.String() == "i", msg.String() == "q":
+			return true, nil
+		case key.Matches(msg, keys.Up):
+			in.offset = max(in.offset-1, 0)
+		case key.Matches(msg, keys.Down):
+			in.offset = min(in.offset+1, max(len(in.details.Members)-1, 0))
+		}
 	}
-	return m, nil
+	return false, nil
 }
 
-func (m Model) infoView(width, height int) string {
-	if !m.info.loaded {
+func (*info) help() []key.Binding { return []key.Binding{keys.Up, keys.Down, keys.Back} }
+
+func (in *info) view(r rootAPI, width, height int) string {
+	if !in.loaded {
 		return lipgloss.NewStyle().Width(width).Height(height).Padding(0, 1).Render("Loading…")
 	}
-	d := m.info.details
+	d := in.details
 	user, _, _ := strings.Cut(d.JID, "@")
-	lines := []string{paneTitleStyle.Render(chatTitle(d.ChatSummary, m.ownJID)), ""}
+	lines := []string{paneTitleStyle.Render(chatTitle(d.ChatSummary, r.own())), ""}
 	if !d.IsGroup {
 		lines = append(lines, "Number:  +"+user)
 		if d.PushName != "" && d.PushName != d.Name {
 			lines = append(lines, "Calls themselves: "+d.PushName)
 		}
-	} else {
-		if d.Topic != "" {
-			lines = append(lines, lipgloss.NewStyle().Width(min(width-4, 80)).Render(d.Topic), "")
-		}
-		lines = append(lines, senderStyle.Render(fmt.Sprintf("%d members", len(d.Members))))
-		if len(d.Members) == 0 {
-			lines = append(lines, faintStyle.Render("Member list arrives after go-whassup connects."))
-		}
-		rows := max(height-len(lines)-1, 1)
-		for i := m.info.offset; i < len(d.Members) && i < m.info.offset+rows; i++ {
-			mem := d.Members[i]
-			muser, _, _ := strings.Cut(mem.JID, "@")
-			name := mem.Name
-			if name == "" {
-				name = "+" + muser
-			}
-			if mem.JID == m.ownJID {
-				name += " (You)"
-			}
-			line := "  " + name
-			if mem.Name != "" {
-				line += "  " + faintStyle.Render("+"+muser)
-			}
-			if mem.Admin {
-				line += "  " + onlineStyle.Render("admin")
-			}
-			lines = append(lines, line)
-		}
+		return pageStyle(width, height).Render(strings.Join(lines, "\n"))
 	}
-	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Padding(0, 1).Render(strings.Join(lines, "\n"))
+	if d.Topic != "" {
+		lines = append(lines, lipgloss.NewStyle().Width(min(width-4, 80)).Render(d.Topic), "")
+	}
+	lines = append(lines, senderStyle.Render(fmt.Sprintf("%d members", len(d.Members))))
+	if len(d.Members) == 0 {
+		lines = append(lines, faintStyle.Render("Member list arrives after go-whassup connects."))
+	}
+	rows := max(height-len(lines)-1, 1)
+	for i := in.offset; i < len(d.Members) && i < in.offset+rows; i++ {
+		lines = append(lines, memberLine(d.Members[i], r.own()))
+	}
+	return pageStyle(width, height).Render(strings.Join(lines, "\n"))
+}
+
+// memberLine is one group member: name (or number), number, admin.
+func memberLine(mem store.Member, own string) string {
+	user, _, _ := strings.Cut(mem.JID, "@")
+	name := mem.Name
+	if name == "" {
+		name = "+" + user
+	}
+	if mem.JID == own {
+		name += " (You)"
+	}
+	line := "  " + name
+	if mem.Name != "" {
+		line += "  " + faintStyle.Render("+"+user)
+	}
+	if mem.Admin {
+		line += "  " + onlineStyle.Render("admin")
+	}
+	return line
 }

@@ -289,7 +289,7 @@ func (m Model) hideQRImage() (Model, tea.Cmd, bool) {
 
 func (m Model) loginView(width, height int) string {
 	l := m.login
-	pad := lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Padding(0, 1)
+	pad := pageStyle(width, height)
 	title := paneTitleStyle.Render("Link go-whassup to WhatsApp")
 	if l.step == loginQR {
 		// The QR needs every row it can get: title, blank line, then the code.

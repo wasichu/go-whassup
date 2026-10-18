@@ -90,7 +90,8 @@ internal/store/      OUR messages.db + Recorder. whatsmeow does NOT persist mess
 internal/media/      attachment cache (hashed names, 0600) + system opener
 internal/crypt/      AES-256-GCM (with associated data), key wrapping, Argon2id
 internal/keysource/  keyring (security/secret-tool via stdin), password_command, prompt
-internal/ui/         Bubble Tea models + Run. Imports internal/wa, never whatsmeow.
+internal/ui/         Bubble Tea models + Run. Root Model routes; screens other than main/login
+                     implement `page` (page.go). Imports internal/wa, never whatsmeow.
 ```
 
 - **Keep `main.go` short and put logic in `internal/*`.** Add packages as real

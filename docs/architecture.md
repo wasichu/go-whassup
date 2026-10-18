@@ -116,11 +116,22 @@ There are two kinds of consumers:
 
 ## TUI structure (`internal/ui`)
 
-- **One root `Model`** with a `screen` (main, login, settings, finder), a `?` help overlay,
-  and sub-state per screen (`chatList`, `conversation`, `login`, `settings`, `finder`).
-  `draft` holds a chat opened from the finder that has no messages yet; it turns into a
-  normal selection when the chat appears in the store. Everything
-  changes only in `Update`.
+- **One root `Model`** with a `screen`, a `?` help overlay, and the state of every
+  screen in its own field. Everything changes only in `Update`.
+- **The main and login screens live in the root**: they react to protocol events and
+  own focus, drafts, the read timer and pairing. `draft` holds a chat opened from the
+  finder that has no messages yet; it turns into a normal selection when the chat
+  appears in the store.
+- **Every other screen is a `page`** (`page.go`): finder, search, attachments (picker),
+  send file (attach), chat info and settings. A page implements `update`, `view` and
+  `help`, and the root just routes: `m.page()` maps `screen` to the active page, keys
+  and any message the root doesn't handle go to it, and `done` returns to main.
+  A page's own async results (directory, search hits, chat details) reach it only
+  while it's active, so stale ones are dropped. Results that must outlive the page
+  (attachment opened, file sent, config saved) are handled by the root.
+- **Pages reach the root only through `rootAPI`**, a narrow facade over the `Model`
+  being updated: context, deps, the open chat, notices, and actions that change root
+  state (`openChat`, `jumpTo`, `download`). It must not be captured in a `tea.Cmd`.
 - **`ui.Deps`** also carries `Config`, `ConfigPath` and an `ApplyConfig` hook, so the UI
   never reaches into the recorder or client internals to apply settings.
 - **`keys.go` is the single keymap.** Handlers use `key.Matches`, and hints/help render

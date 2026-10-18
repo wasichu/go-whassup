@@ -63,51 +63,44 @@ func (m Model) openSettings() Model {
 	return m
 }
 
-func (m Model) settingsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	s := &m.settings
+func (s *settings) update(r rootAPI, msg tea.Msg) (bool, tea.Cmd) {
+	switch msg := msg.(type) {
+	case configSavedMsg:
+		s.savedResult(r, msg)
+		return false, nil
+	case tea.KeyPressMsg:
+		return s.key(r, msg)
+	}
+	if !s.editing {
+		return false, nil
+	}
+	var cmd tea.Cmd
+	s.input, cmd = s.input.Update(msg)
+	return false, cmd
+}
+
+func (s *settings) help() []key.Binding {
+	if s.editing {
+		return formHelp
+	}
+	return settingsHelp
+}
+
+func (s *settings) key(r rootAPI, msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	fields := s.cfg.Fields()
 	if len(fields) == 0 {
-		m.screen = screenMain
-		return m, nil
+		return true, nil
 	}
 	s.selected = min(s.selected, len(fields)-1)
-	f := fields[s.selected]
-
-	if s.pending != nil {
-		next := *s.pending
-		switch msg.String() {
-		case "y":
-			s.pending, s.confirm = nil, ""
-			return m.commitSetting(next)
-		case "n", "esc":
-			s.pending, s.confirm = nil, ""
-		}
-		return m, nil
+	switch {
+	case s.pending != nil:
+		return false, s.confirmKey(r, msg)
+	case s.editing:
+		return false, s.editKey(r, msg)
 	}
-
-	if s.editing {
-		switch {
-		case key.Matches(msg, keys.Back):
-			s.editing, s.err = false, ""
-			s.input.Blur()
-			return m, nil
-		case msg.String() == "enter":
-			next := s.cfg // value copy; edit it, keep s.cfg until valid
-			nf := next.Fields()[s.selected]
-			if err := nf.Set(s.input.Value()); err != nil {
-				s.err = err.Error()
-				return m, nil
-			}
-			return m.commitSetting(next)
-		}
-		var cmd tea.Cmd
-		s.input, cmd = s.input.Update(msg)
-		return m, cmd
-	}
-
 	switch {
 	case key.Matches(msg, keys.Back):
-		m.screen = screenMain
+		return true, nil
 	case key.Matches(msg, keys.Up):
 		s.selected = max(s.selected-1, 0)
 		s.err = ""
@@ -115,58 +108,93 @@ func (m Model) settingsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		s.selected = min(s.selected+1, len(fields)-1)
 		s.err = ""
 	case key.Matches(msg, keys.Select):
-		if f.Kind == config.KindBool || f.Kind == config.KindChoice {
-			next := s.cfg
-			next.Fields()[s.selected].Cycle()
-			if f.Confirm != "" {
-				if err := next.Validate(); err != nil {
-					s.err = err.Error()
-					return m, nil
-				}
-				s.pending, s.confirm = &next, f.Confirm
-				return m, nil
-			}
-			return m.commitSetting(next)
+		return false, s.change(r, fields[s.selected])
+	}
+	return false, nil
+}
+
+// confirmKey answers the y/n question for a pending change.
+func (s *settings) confirmKey(r rootAPI, msg tea.KeyPressMsg) tea.Cmd {
+	next := *s.pending
+	switch msg.String() {
+	case "y":
+		s.pending, s.confirm = nil, ""
+		return s.commit(r, next)
+	case "n", "esc":
+		s.pending, s.confirm = nil, ""
+	}
+	return nil
+}
+
+// editKey handles typing into a field's text input.
+func (s *settings) editKey(r rootAPI, msg tea.KeyPressMsg) tea.Cmd {
+	switch {
+	case key.Matches(msg, keys.Back):
+		s.editing, s.err = false, ""
+		s.input.Blur()
+		return nil
+	case msg.String() == "enter":
+		next := s.cfg // value copy; edit it, keep s.cfg until valid
+		if err := next.Fields()[s.selected].Set(s.input.Value()); err != nil {
+			s.err = err.Error()
+			return nil
 		}
+		return s.commit(r, next)
+	}
+	var cmd tea.Cmd
+	s.input, cmd = s.input.Update(msg)
+	return cmd
+}
+
+// change cycles a bool or choice (asking first if the field says so), or
+// starts editing a text field.
+func (s *settings) change(r rootAPI, f config.Field) tea.Cmd {
+	if f.Kind != config.KindBool && f.Kind != config.KindChoice {
 		s.editing, s.err = true, ""
 		s.input.SetValue(f.Value())
 		s.input.CursorEnd()
-		cmd := s.input.Focus() // evaluate before m is copied into the return
-		return m, cmd
+		return s.input.Focus()
 	}
-	return m, nil
-}
-
-// commitSetting validates next and saves it, or shows why it's invalid and
-// keeps the previous value.
-func (m Model) commitSetting(next config.Config) (tea.Model, tea.Cmd) {
+	next := s.cfg
+	next.Fields()[s.selected].Cycle()
+	if f.Confirm == "" {
+		return s.commit(r, next)
+	}
 	if err := next.Validate(); err != nil {
-		m.settings.err = err.Error()
-		return m, nil
+		s.err = err.Error()
+		return nil
 	}
-	m.settings.editing, m.settings.err, m.settings.saved = false, "", ""
-	m.settings.input.Blur()
-	return m, saveConfig(m.ctx, m.deps, next)
+	s.pending, s.confirm = &next, f.Confirm
+	return nil
 }
 
-func (m Model) settingsSaved(msg configSavedMsg) (tea.Model, tea.Cmd) {
+func (s *settings) commit(r rootAPI, next config.Config) tea.Cmd {
+	if err := next.Validate(); err != nil {
+		s.err = err.Error()
+		return nil
+	}
+	s.editing, s.err, s.saved = false, "", ""
+	s.input.Blur()
+	return saveConfig(r.ctx(), r.deps(), next)
+}
+
+// savedResult shows the outcome of a save. (The root adopts the saved
+// config even if this page has closed meanwhile.)
+func (s *settings) savedResult(r rootAPI, msg configSavedMsg) {
 	if !msg.saved {
-		m.settings.err = "saving: " + msg.err.Error()
-		return m, nil
+		s.err = "saving: " + msg.err.Error()
+		return
 	}
 	// Saved; adopt it even if applying partly failed, since the file now
 	// holds it.
-	m.settings.cfg, m.deps.Config = msg.cfg, msg.cfg
-	m.settings.saved = "Saved to " + tildePath(m.deps.ConfigPath)
+	s.cfg = msg.cfg
+	s.saved = "Saved to " + tildePath(r.deps().ConfigPath)
 	if msg.err != nil {
-		m.settings.err = "saved, but applying failed: " + msg.err.Error()
+		s.err = "saved, but applying failed: " + msg.err.Error()
 	}
-	// Retention may have pruned messages.
-	return m, loadChats(m.ctx, m.deps.Store)
 }
 
-func (m Model) settingsView(width, height int) string {
-	s := m.settings
+func (s *settings) view(r rootAPI, width, height int) string {
 	fields := s.cfg.Fields()
 	if s.pending != nil {
 		// A confirmation gets the whole screen so it fits small terminals.
@@ -174,10 +202,10 @@ func (m Model) settingsView(width, height int) string {
 		content := paneTitleStyle.Render("Change "+name+"?") + "\n\n" +
 			lipgloss.NewStyle().Width(min(width-4, 80)).Render(s.confirm) + "\n\n" +
 			senderStyle.Render("y = yes, n = no")
-		return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Padding(0, 1).Render(content)
+		return pageStyle(width, height).Render(content)
 	}
 	var b strings.Builder
-	b.WriteString(paneTitleStyle.Render("Settings") + "  " + faintStyle.Render(tildePath(m.deps.ConfigPath)) + "\n")
+	b.WriteString(paneTitleStyle.Render("Settings") + "  " + faintStyle.Render(tildePath(r.deps().ConfigPath)) + "\n")
 
 	keyW := 0
 	for _, f := range fields {
@@ -215,7 +243,7 @@ func (m Model) settingsView(width, height int) string {
 	} else if s.saved != "" {
 		b.WriteString("\n" + onlineStyle.Render(s.saved) + "\n")
 	}
-	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Padding(0, 1).Render(b.String())
+	return pageStyle(width, height).Render(b.String())
 }
 
 // tildePath shortens a path under the home directory to ~/....

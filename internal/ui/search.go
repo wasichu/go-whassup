@@ -51,62 +51,79 @@ func (m Model) openSearch() (Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m Model) searchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	s := &m.search
+func (s *search) update(r rootAPI, msg tea.Msg) (bool, tea.Cmd) {
+	switch msg := msg.(type) {
+	case searchResultsMsg:
+		s.results(msg)
+		return false, nil
+	case tea.KeyPressMsg:
+		return s.key(r, msg)
+	}
+	var cmd tea.Cmd
+	s.input, cmd = s.input.Update(msg)
+	return false, cmd
+}
+
+func (*search) help() []key.Binding { return finderHelp }
+
+func (s *search) key(r rootAPI, msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Back):
-		m.screen = screenMain
-		return m, nil
+		return true, nil
 	case msg.String() == "up", msg.String() == "ctrl+p":
 		s.selected = max(s.selected-1, 0)
-		return m, nil
+		return false, nil
 	case msg.String() == "down", msg.String() == "ctrl+n":
 		s.selected = min(s.selected+1, max(len(s.hits)-1, 0))
-		return m, nil
+		return false, nil
 	case msg.String() == "enter":
 		if s.selected >= len(s.hits) {
-			return m, nil
+			return false, nil
 		}
-		hit := s.hits[s.selected]
-		m, cmd := m.openChat(hit.Chat)
-		m.conv.highlight = hit.Message.ID
-		m.focus = focusList // reading, not replying
-		m.conv.input.Blur()
-		if m.conv.showMessage(hit.Message.ID) { // already loaded (same chat)
-			m.conv.render(false)
-			m.conv.showMessage(hit.Message.ID)
-		}
-		return m, cmd
+		return true, r.jumpTo(s.hits[s.selected])
 	}
 	before := s.input.Value()
 	var cmd tea.Cmd
 	s.input, cmd = s.input.Update(msg)
 	if s.input.Value() == before {
-		return m, cmd
+		return false, cmd
 	}
 	s.seq++
 	s.selected, s.err = 0, ""
 	if strings.TrimSpace(s.input.Value()) == "" {
 		s.hits, s.searched = nil, false
-		return m, cmd
+		return false, cmd
 	}
-	return m, tea.Batch(cmd, runSearch(m.ctx, m.deps.Store, s.input.Value(), s.seq))
+	return false, tea.Batch(cmd, runSearch(r.ctx(), r.deps().Store, s.input.Value(), s.seq))
 }
 
-func (m Model) searchResults(msg searchResultsMsg) (Model, tea.Cmd) {
-	if msg.seq != m.search.seq {
-		return m, nil // results for an older query
+// jumpTo opens hit's chat with the message highlighted and in view, for
+// reading rather than replying.
+func (m Model) jumpTo(hit store.SearchHit) (Model, tea.Cmd) {
+	m, cmd := m.openChat(hit.Chat)
+	m.conv.highlight = hit.Message.ID
+	m.focus = focusList
+	m.conv.input.Blur()
+	if m.conv.showMessage(hit.Message.ID) { // already loaded (same chat)
+		m.conv.render(false)
+		m.conv.showMessage(hit.Message.ID)
 	}
-	m.search.searched = true
+	return m, cmd
+}
+
+func (s *search) results(msg searchResultsMsg) {
+	if msg.seq != s.seq {
+		return // results for an older query
+	}
+	s.searched = true
 	switch {
 	case errors.Is(msg.err, store.ErrSearchUnavailable):
-		m.search.err, m.search.hits = msg.err.Error()+".", nil
+		s.err, s.hits = msg.err.Error()+".", nil
 	case msg.err != nil:
-		m.search.err, m.search.hits = "search failed: "+msg.err.Error(), nil
+		s.err, s.hits = "search failed: "+msg.err.Error(), nil
 	default:
-		m.search.hits = msg.hits
+		s.hits = msg.hits
 	}
-	return m, nil
 }
 
 // renderSnippet styles the matched words in a search snippet.
@@ -129,8 +146,7 @@ func renderSnippet(s string) string {
 	}
 }
 
-func (m Model) searchView(width, height int) string {
-	s := m.search
+func (s *search) view(r rootAPI, width, height int) string {
 	lines := []string{paneTitleStyle.Render("Search messages"), "", s.input.View(), ""}
 	switch {
 	case s.err != "":
@@ -151,7 +167,7 @@ func (m Model) searchView(width, height int) string {
 		if !h.Message.FromMe {
 			who = senderName(h.Message, h.Chat)
 		}
-		meta := chatTitle(h.Chat, m.ownJID) + " · " + h.Message.Timestamp.Local().Format("Jan 2 15:04")
+		meta := chatTitle(h.Chat, r.own()) + " · " + h.Message.Timestamp.Local().Format("Jan 2 15:04")
 		line := faintStyle.Render(meta) + "  " + who + ": " + renderSnippet(h.Snippet)
 		if i == s.selected {
 			line = activeSelStyle.Render("›") + " " + line
@@ -163,5 +179,5 @@ func (m Model) searchView(width, height int) string {
 	if len(s.hits) == searchLimit {
 		lines = append(lines, faintStyle.Render("Showing the newest results; add words to narrow down."))
 	}
-	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Padding(0, 1).Render(strings.Join(lines, "\n"))
+	return pageStyle(width, height).Render(strings.Join(lines, "\n"))
 }
