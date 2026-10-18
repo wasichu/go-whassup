@@ -35,6 +35,7 @@ func TestParseArgs(t *testing.T) {
 		{args: []string{"db", "messages", "-n", "-1", "x"}, wantErr: "-n must be"},
 		{args: []string{"listen", "extra"}, wantErr: "unexpected arguments"},
 		{args: []string{"login", "+1", "555"}, wantErr: "unexpected arguments"},
+		{args: []string{"-version"}, want: invocation{cmd: "tui", version: true}},
 	}
 	for _, tt := range tests {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
@@ -51,7 +52,7 @@ func TestParseArgs(t *testing.T) {
 			if tt.want.limit == 0 {
 				tt.want.limit = 20 // default
 			}
-			if got.cmd != tt.want.cmd || got.debug != tt.want.debug || got.limit != tt.want.limit || got.relink != tt.want.relink || !slices.Equal(got.args, tt.want.args) {
+			if got.cmd != tt.want.cmd || got.debug != tt.want.debug || got.limit != tt.want.limit || got.relink != tt.want.relink || got.version != tt.want.version || !slices.Equal(got.args, tt.want.args) {
 				t.Errorf("parseArgs(%q) = %+v, want %+v", tt.args, got, tt.want)
 			}
 		})
@@ -66,5 +67,15 @@ func TestParseArgsHelp(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "go-whassup login") {
 		t.Errorf("usage missing commands:\n%s", out.String())
+	}
+}
+
+func TestVersionFlag(t *testing.T) {
+	var out strings.Builder
+	if err := Run(t.Context(), []string{"-version"}, IO{In: strings.NewReader(""), Out: &out, Err: io.Discard}); err != nil {
+		t.Fatal(err)
+	}
+	if got := out.String(); got != "go-whassup "+version()+"\n" || version() == "" {
+		t.Errorf("-version printed %q", got)
 	}
 }

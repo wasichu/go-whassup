@@ -1,0 +1,19 @@
+# Runs the same gate as locally (`just check`), with the tool versions
+# pinned in mise.toml. macOS too: the keychain code path is darwin-only.
+name: check
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  check:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - run: just check

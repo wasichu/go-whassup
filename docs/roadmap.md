@@ -96,12 +96,14 @@ step lands or the plan changes.
 
 ## Last, before going public
 
-- **LICENSE: MPL-2.0**, matching whatsmeow (decided 2026-10-18).
+- [x] **LICENSE: MPL-2.0**, matching whatsmeow (decided 2026-10-18).
 - **README for users:** what it is, an "unofficial; against WhatsApp's terms" warning,
   install steps, a screenshot. AGENTS.md and `docs/` stay contributor-facing.
-- **CI:** GitHub Actions running `just check` via the mise action, so CI uses the same
-  pinned tools.
-- **Release binaries:** cgo-free cross-compiles for darwin/linux/windows ×
+- [x] **CI:** GitHub Actions running `just check` via the mise action, so CI uses the same
+  pinned tools (`.github/workflows/check.yml`; Linux and macOS).
+- [x] **Release binaries:** cgo-free cross-compiles for darwin/linux/windows ×
   amd64/arm64, with the version stamped via `-ldflags -X`, from a `just release` recipe
-  (no GoReleaser unless needed).
-- **Dependency bumps:** Renovate/Dependabot for whatsmeow's pseudo-versions, gated by CI.
+  (no GoReleaser unless needed). Windows builds but is untested (and has no keyring).
+- [x] **Dependency bumps:** Renovate (`renovate.json`), gated by CI. Not Dependabot: it
+  can't update pseudo-versions, and whatsmeow has no tags. Renovate also covers
+  `mise.toml` and the GitHub Actions. Needs the Renovate app installed on the repo.

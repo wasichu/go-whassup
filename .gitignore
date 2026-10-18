@@ -1,5 +1,6 @@
 # build output
 /bin/
+/dist/
 
 # runtime data should live under XDG dirs, but never commit stray copies
 *.db

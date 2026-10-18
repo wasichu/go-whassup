@@ -8,11 +8,12 @@ import (
 
 // invocation is the parsed command line.
 type invocation struct {
-	cmd    string // "tui", "login", "listen", "db chats" or "db messages"
-	debug  bool
-	relink bool     // -relink, for "login"
-	limit  int      // -n, for "db messages"
-	args   []string // positional arguments after the (sub)command
+	version bool   // -version: print it and exit
+	cmd     string // "tui", "login", "listen", "db chats" or "db messages"
+	debug   bool
+	relink  bool     // -relink, for "login"
+	limit   int      // -n, for "db messages"
+	args    []string // positional arguments after the (sub)command
 }
 
 const usage = `Usage:
@@ -54,6 +55,7 @@ func parseArgs(args []string, errOut io.Writer) (invocation, error) {
 	fs.BoolVar(&inv.debug, "debug", false, "log debug output (very verbose; includes message text)")
 	fs.BoolVar(&inv.relink, "relink", false, "login: unlink the current session first, then pair again (stored messages are kept)")
 	fs.IntVar(&inv.limit, "n", 20, "number of messages to show (db messages; 0 = all)")
+	fs.BoolVar(&inv.version, "version", false, "print the version and exit")
 	if err := fs.Parse(args); err != nil {
 		return inv, err
 	}

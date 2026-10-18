@@ -1,0 +1,13 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "schedule": ["before 6am on monday"],
+  "postUpdateOptions": ["gomodTidy"],
+  "packageRules": [
+    {
+      "description": "whatsmeow has no tagged releases; Renovate follows its latest pseudo-version",
+      "matchPackageNames": ["go.mau.fi/whatsmeow"],
+      "groupName": "whatsmeow"
+    }
+  ]
+}

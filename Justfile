@@ -55,3 +55,20 @@ clean:
 # Rebuild the graft context graph (deterministic, no API key)
 index:
     graft build
+
+# Cross-compile cgo-free release binaries into dist/, stamped with the
+# version (e.g. `just release v0.1.0`), plus SHA256SUMS.
+release version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{version}}" in v[0-9]*) ;; *) echo "version must look like v0.1.0"; exit 1;; esac
+    rm -rf dist && mkdir -p dist
+    for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
+      os="${target%/*}"; arch="${target#*/}"; ext=""
+      if [ "$os" = windows ]; then ext=".exe"; fi
+      GOOS="$os" GOARCH="$arch" mise exec -- go build -trimpath \
+        -ldflags "-s -w -X github.com/wasichu/go-whassup/internal/app.Version={{version}}" \
+        -o "dist/go-whassup-{{version}}-$os-$arch$ext" ./cmd/go-whassup
+    done
+    cd dist && if command -v sha256sum >/dev/null; then sha256sum go-whassup-* > SHA256SUMS; else shasum -a 256 go-whassup-* > SHA256SUMS; fi
+    ls -l

@@ -41,6 +41,10 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 	if err != nil {
 		return err
 	}
+	if inv.version {
+		_, err := fmt.Fprintln(stdio.Out, "go-whassup", version())
+		return err
+	}
 	p, err := paths.Resolve()
 	if err != nil {
 		return err
@@ -109,7 +113,7 @@ func openEnv(ctx context.Context, inv invocation, p paths.Paths, stdio IO, clean
 	}
 	cleanup.add(logCloser.Close)
 	slog.SetDefault(log)
-	log.Info("starting", "cmd", inv.cmd, "data_dir", p.DataDir, "config", fmt.Sprintf("%+v", e.cfg))
+	log.Info("starting", "version", version(), "cmd", inv.cmd, "data_dir", p.DataDir, "config", fmt.Sprintf("%+v", e.cfg))
 	e.log = log
 
 	if e.st, err = store.Open(ctx, p.MessagesDB, nil); err != nil {
