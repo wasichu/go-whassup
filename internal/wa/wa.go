@@ -106,6 +106,10 @@ type Message struct {
 	IsGroup   bool
 	Kind      string // "text", "image", "reaction", ... see messageKind
 	Text      string // body or caption; may be empty for media
+
+	// SenderName is the best display name for Sender (address book, then
+	// push name). Filled in by the store when reading; empty on the wire.
+	SenderName string
 }
 
 // Summary renders the message for one-line display, e.g. "[image] caption".
@@ -126,6 +130,23 @@ type Chat struct {
 	IsGroup bool
 }
 
+// Contact is a person's names as known to WhatsApp. Empty fields are
+// unknown, not cleared.
+type Contact struct {
+	JID          string // stable user key, see ChatKey
+	Name         string // the user's own address-book name for them
+	PushName     string // the name they chose for themselves
+	BusinessName string // verified business name
+}
+
+// Contacts carries contact names: a full snapshot after connecting and
+// after app-state sync, or single updates when a name changes. Consumers
+// upsert; an entry never means "delete".
+type Contacts struct {
+	List     []Contact
+	Snapshot bool
+}
+
 // HistorySync is a batch of past conversations pushed by the phone after
 // linking (and occasionally later). Messages within a batch are not ordered.
 type HistorySync struct {
@@ -142,3 +163,4 @@ func (PairFailed) isEvent()   {}
 func (PairQRCode) isEvent()   {}
 func (Message) isEvent()      {}
 func (HistorySync) isEvent()  {}
+func (Contacts) isEvent()     {}

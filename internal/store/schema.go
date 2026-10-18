@@ -9,7 +9,7 @@ import (
 // migrations[i] upgrades the schema from user_version i to i+1. Append only;
 // never edit a migration that has shipped.
 var migrations = []string{
-	// 1: chats, messages, contacts.
+	// 1: chats, messages, contacts (push names).
 	`
 CREATE TABLE chats (
 	jid             TEXT PRIMARY KEY,
@@ -37,6 +37,11 @@ CREATE TABLE contacts (
 	jid       TEXT PRIMARY KEY,
 	push_name TEXT NOT NULL
 ) STRICT;
+`,
+	// 2: address-book and business names for contacts.
+	`
+ALTER TABLE contacts ADD COLUMN name TEXT NOT NULL DEFAULT '';
+ALTER TABLE contacts ADD COLUMN business_name TEXT NOT NULL DEFAULT '';
 `,
 }
 

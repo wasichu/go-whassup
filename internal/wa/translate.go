@@ -2,6 +2,7 @@ package wa
 
 import (
 	"log/slog"
+	"slices"
 
 	"go.mau.fi/whatsmeow/proto/waHistorySync"
 	"go.mau.fi/whatsmeow/proto/waWeb"
@@ -106,4 +107,46 @@ func historyFromProto(data *waHistorySync.HistorySync, parse webMessageParser, r
 	}
 	empty := len(h.Chats) == 0 && len(h.Messages) == 0 && len(h.PushNames) == 0
 	return h, !empty
+}
+
+// contactsFromStore translates whatsmeow's contact store snapshot, merging
+// entries that resolve to the same key (a LID and its phone number) so the
+// most complete names win.
+func contactsFromStore(all map[types.JID]types.ContactInfo, resolve keyResolver) []Contact {
+	merged := map[string]*Contact{}
+	var order []string
+	for jid, info := range all {
+		if jid.Server != types.DefaultUserServer && jid.Server != types.HiddenUserServer {
+			continue
+		}
+		key := resolve(jid, types.EmptyJID)
+		c, ok := merged[key]
+		if !ok {
+			c = &Contact{JID: key}
+			merged[key] = c
+			order = append(order, key)
+		}
+		name := info.FullName
+		if name == "" {
+			name = info.FirstName
+		}
+		c.Name = firstNonEmpty(c.Name, name)
+		c.PushName = firstNonEmpty(c.PushName, info.PushName)
+		c.BusinessName = firstNonEmpty(c.BusinessName, info.BusinessName)
+	}
+	slices.Sort(order) // deterministic output for tests and diffs
+	out := make([]Contact, 0, len(order))
+	for _, k := range order {
+		if c := merged[k]; c.Name != "" || c.PushName != "" || c.BusinessName != "" {
+			out = append(out, *c)
+		}
+	}
+	return out
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }

@@ -111,26 +111,40 @@ func (s *Store) SaveChats(ctx context.Context, chats []wa.Chat) error {
 
 // SavePushNames records the display names users chose for themselves.
 func (s *Store) SavePushNames(ctx context.Context, names map[string]string) error {
-	return s.inTx(ctx, "saving push names", func(tx *sql.Tx) error {
-		for jid, name := range names {
-			if name == "" {
+	contacts := make([]wa.Contact, 0, len(names))
+	for jid, name := range names {
+		contacts = append(contacts, wa.Contact{JID: jid, PushName: name})
+	}
+	return s.SaveContacts(ctx, contacts)
+}
+
+// SaveContacts upserts contact names. Empty fields leave stored values alone,
+// so partial updates (e.g. only a new push name) never erase anything.
+func (s *Store) SaveContacts(ctx context.Context, contacts []wa.Contact) error {
+	return s.inTx(ctx, "saving contacts", func(tx *sql.Tx) error {
+		for _, c := range contacts {
+			if c.JID == "" || c.Name == "" && c.PushName == "" && c.BusinessName == "" {
 				continue
 			}
 			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO contacts (jid, push_name) VALUES (?, ?)
-				ON CONFLICT (jid) DO UPDATE SET push_name = excluded.push_name`,
-				jid, name); err != nil {
-				return fmt.Errorf("contact %s: %w", jid, err)
+				INSERT INTO contacts (jid, name, push_name, business_name) VALUES (?, ?, ?, ?)
+				ON CONFLICT (jid) DO UPDATE SET
+					name          = CASE WHEN excluded.name          != '' THEN excluded.name          ELSE name          END,
+					push_name     = CASE WHEN excluded.push_name     != '' THEN excluded.push_name     ELSE push_name     END,
+					business_name = CASE WHEN excluded.business_name != '' THEN excluded.business_name ELSE business_name END`,
+				c.JID, c.Name, c.PushName, c.BusinessName); err != nil {
+				return fmt.Errorf("contact %s: %w", c.JID, err)
 			}
 		}
 		return nil
 	})
 }
 
-// ChatSummary is a chat as listed in the chat list.
+// ChatSummary is a chat as listed in the chat list (or, from Directory, a
+// contact who could be messaged).
 type ChatSummary struct {
 	JID           string
-	Name          string // chat name, else the contact's push name, else ""
+	Name          string // see titleSQL; "" if nothing is known
 	IsGroup       bool
 	LastMessageAt time.Time
 	Messages      int
@@ -144,8 +158,14 @@ func (c ChatSummary) Title() string {
 	return c.JID
 }
 
+// titleSQL picks a chat's display name, like WhatsApp does: for a group its
+// subject; for a person the user's address-book name, then the name history
+// sync gave the chat, then their own push name, then their business name.
+const titleSQL = `CASE WHEN c.is_group THEN c.name ELSE COALESCE(
+	NULLIF(ct.name, ''), NULLIF(c.name, ''), NULLIF(ct.push_name, ''), NULLIF(ct.business_name, ''), '') END`
+
 const chatSummaryQuery = `
-	SELECT c.jid, COALESCE(NULLIF(c.name, ''), ct.push_name, ''), c.is_group, c.last_message_at,
+	SELECT c.jid, ` + titleSQL + `, c.is_group, c.last_message_at,
 	       (SELECT count(*) FROM messages m WHERE m.chat_jid = c.jid)
 	FROM chats c LEFT JOIN contacts ct ON ct.jid = c.jid`
 
@@ -168,6 +188,36 @@ func (s *Store) Chats(ctx context.Context) ([]ChatSummary, error) {
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("listing chats: %w", err)
+	}
+	return chats, nil
+}
+
+// Directory lists everyone and every group the user can message: all chats
+// (most recent first), then named contacts without a chat, by name.
+func (s *Store) Directory(ctx context.Context) ([]ChatSummary, error) {
+	chats, err := s.Chats(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT ct.jid, COALESCE(NULLIF(ct.name, ''), NULLIF(ct.push_name, ''), ct.business_name) AS title
+		FROM contacts ct
+		WHERE NOT EXISTS (SELECT 1 FROM chats c WHERE c.jid = ct.jid)
+		  AND (ct.name != '' OR ct.push_name != '' OR ct.business_name != '')
+		ORDER BY lower(title), ct.jid`)
+	if err != nil {
+		return nil, fmt.Errorf("listing contacts: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var c ChatSummary
+		if err := rows.Scan(&c.JID, &c.Name); err != nil {
+			return nil, fmt.Errorf("listing contacts: %w", err)
+		}
+		chats = append(chats, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("listing contacts: %w", err)
 	}
 	return chats, nil
 }
@@ -221,8 +271,12 @@ func (s *Store) Messages(ctx context.Context, chat string, limit int) ([]wa.Mess
 		limit = -1 // SQLite: no limit
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, sender_jid, push_name, ts, from_me, kind, body, codec, is_group FROM (
-			SELECT m.*, c.is_group FROM messages m JOIN chats c ON c.jid = m.chat_jid
+		SELECT id, sender_jid, push_name, ts, from_me, kind, body, codec, is_group, sender_name FROM (
+			SELECT m.*, c.is_group,
+			       COALESCE(NULLIF(ct.name, ''), NULLIF(ct.push_name, ''), NULLIF(m.push_name, ''), ct.business_name, '') AS sender_name
+			FROM messages m
+			JOIN chats c ON c.jid = m.chat_jid
+			LEFT JOIN contacts ct ON ct.jid = m.sender_jid
 			WHERE m.chat_jid = ? ORDER BY m.ts DESC, m.id DESC LIMIT ?
 		) ORDER BY ts, id`, chat, limit)
 	if err != nil {
@@ -235,7 +289,7 @@ func (s *Store) Messages(ctx context.Context, chat string, limit int) ([]wa.Mess
 		var ts int64
 		var body []byte
 		var codecID int
-		if err := rows.Scan(&m.ID, &m.Sender, &m.PushName, &ts, &m.FromMe, &m.Kind, &body, &codecID, &m.IsGroup); err != nil {
+		if err := rows.Scan(&m.ID, &m.Sender, &m.PushName, &ts, &m.FromMe, &m.Kind, &body, &codecID, &m.IsGroup, &m.SenderName); err != nil {
 			return nil, fmt.Errorf("loading messages: %w", err)
 		}
 		m.Timestamp = time.Unix(ts, 0)

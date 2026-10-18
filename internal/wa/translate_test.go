@@ -202,3 +202,31 @@ func TestHistoryWithRealParser(t *testing.T) {
 		t.Errorf("message = %+v", m)
 	}
 }
+
+func TestContactsFromStore(t *testing.T) {
+	bob := types.NewJID("15559876543", types.DefaultUserServer)
+	all := map[types.JID]types.ContactInfo{
+		pnAda:  {Found: true, FullName: "Ada Lovelace", PushName: "ada"},
+		lidAda: {Found: true, PushName: "ada (lid)", BusinessName: "Analytical Engines"}, // same person via LID
+		bob:    {Found: true, FirstName: "Bob"},
+		types.NewJID("777", types.HiddenUserServer): {Found: true}, // no names: dropped
+		group: {Found: true, FullName: "not a person"}, // groups aren't contacts
+	}
+	got := contactsFromStore(all, stubResolver)
+	want := []Contact{
+		{JID: pnAda.String(), Name: "Ada Lovelace", PushName: "ada", BusinessName: "Analytical Engines"},
+		{JID: bob.String(), Name: "Bob"},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("contacts = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		// PushName of the merged entry depends on map order; either is right.
+		if got[i].JID != want[i].JID || got[i].Name != want[i].Name || got[i].BusinessName != want[i].BusinessName {
+			t.Errorf("contact %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+	if got[0].PushName == "" {
+		t.Error("merged contact lost its push name")
+	}
+}

@@ -83,6 +83,14 @@ There are two kinds of consumers:
 - **Push name.** On each `Connected`, we send presence **`unavailable`** once. This
   registers our display name, so recipients don't see "-" as the sender. "Available"
   would also mark the user online and switch on active read receipts, which we avoid.
+- **Contacts.** whatsmeow keeps the phone's address book in its own store (applied from
+  app-state sync). We emit `wa.Contacts`:
+  - a full **snapshot** after each `Connected` and `AppStateSyncComplete`;
+  - **single updates** on `events.Contact`, `PushName` and `BusinessName`. Full-sync
+    contact events are skipped, because the snapshot covers them.
+
+  Keys are mapped to phone-number form, and a LID and its phone number are merged. The
+  recorder upserts them into `contacts`.
 - **History sync** arrives as `wa.HistorySync{Chats, Messages, PushNames}`, parsed with
   whatsmeow's `ParseWebMessage`. Empty batches aren't emitted. App-state sync,
   receipts and presence are still only logged at debug level.

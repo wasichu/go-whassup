@@ -42,6 +42,10 @@ func (r *Recorder) Handle(evt wa.Event) {
 	switch v := evt.(type) {
 	case wa.Message:
 		r.saveMessages(ctx, []wa.Message{v})
+	case wa.Contacts:
+		if err := r.Store.SaveContacts(ctx, v.List); err != nil {
+			r.Log.Error("recording contacts", "count", len(v.List), "err", err)
+		}
 	case wa.HistorySync:
 		if err := r.Store.SaveChats(ctx, v.Chats); err != nil {
 			r.Log.Error("recording history chats", "err", err)

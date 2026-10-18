@@ -344,6 +344,23 @@ func (w *WhatsApp) announceName() {
 	}
 }
 
+// emitContactSnapshot emits every known contact. It reads whatsmeow's local
+// store, so it is cheap and works whenever a session exists.
+func (w *WhatsApp) emitContactSnapshot() {
+	cli := w.client()
+	if cli == nil || cli.Store.ID == nil {
+		return
+	}
+	all, err := cli.Store.Contacts.GetAllContacts(context.Background())
+	if err != nil {
+		w.log.Warn("reading contacts", "err", err)
+		return
+	}
+	list := contactsFromStore(all, w.resolveKey)
+	w.log.Info("contacts snapshot", "count", len(list))
+	w.emit(Contacts{List: list, Snapshot: true})
+}
+
 func (w *WhatsApp) Disconnect() { w.client().Disconnect() }
 
 func (w *WhatsApp) Close() error {
@@ -385,6 +402,26 @@ func (w *WhatsApp) handleEvent(evt any) {
 	case *events.Connected:
 		go w.announceName() // not on whatsmeow's event goroutine: it sends a node
 		w.emit(Connected{})
+		go w.emitContactSnapshot()
+	case *events.AppStateSyncComplete:
+		go w.emitContactSnapshot() // address-book names arrive via app state
+	case *events.Contact:
+		if v.FromFullSync {
+			return // the AppStateSyncComplete snapshot covers these
+		}
+		name := v.Action.GetFullName()
+		if name == "" {
+			name = v.Action.GetFirstName()
+		}
+		var pn types.JID
+		if p, err := types.ParseJID(v.Action.GetPnJID()); err == nil {
+			pn = p
+		}
+		w.emit(Contacts{List: []Contact{{JID: w.resolveKey(v.JID, pn), Name: name}}})
+	case *events.PushName:
+		w.emit(Contacts{List: []Contact{{JID: w.resolveKey(v.JID, v.JIDAlt), PushName: v.NewPushName}}})
+	case *events.BusinessName:
+		w.emit(Contacts{List: []Contact{{JID: w.resolveKey(v.JID, types.EmptyJID), BusinessName: v.NewBusinessName}}})
 	case *events.Disconnected:
 		w.emit(Disconnected{})
 	case *events.StreamReplaced:

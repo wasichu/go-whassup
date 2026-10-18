@@ -34,13 +34,13 @@ Relative `XDG_*` values are ignored, as the XDG spec requires.
 
 whatsmeow does **not** persist message content, so we do.
 
-**Schema (v1; migrations in `schema.go`, tracked by `PRAGMA user_version`, append-only):**
+**Schema (v2; migrations in `schema.go`, tracked by `PRAGMA user_version`, append-only):**
 
 | Table | Columns |
 | --- | --- |
 | `chats` | `jid` PK, `name`, `is_group`, `last_message_at` (unix s) |
 | `messages` | PK `(chat_jid, id)`, `sender_jid`, `push_name`, `ts` (unix s), `from_me`, `kind`, `body` BLOB, `codec` |
-| `contacts` | `jid` PK, `push_name`: names users chose for themselves (from history sync and incoming messages) |
+| `contacts` | `jid` PK, `name` (your address-book name for them), `push_name` (the name they chose), `business_name`. Filled by contact snapshots/updates, history sync and incoming messages. v2 added `name` and `business_name`. |
 
 **Behaviour:**
 - **Writing.** `store.Recorder` is registered directly with `AddEventHandler`, not through a
@@ -51,8 +51,13 @@ whatsmeow does **not** persist message content, so we do.
   - Reactions are **skipped** for now (they'll attach to their target messages later).
   - Edits and deletes are not applied yet (whatsmeow delivers them as protocol messages,
     which we skip).
-- **Names.** A chat's title is its own name (group subject or history display name),
-  else the contact's push name, else the JID. An empty name never overwrites a known one.
+- **Names** (`titleSQL`). A group's title is its subject. A person's title, as on the
+  phone, is your **address-book name**, then the name history sync gave the chat, then
+  their push name, then their business name, then the JID.
+  - In groups, each message's `SenderName` resolves the same way per sender.
+  - Contact updates are partial upserts: an empty field never erases a known one.
+- **Directory** (`Store.Directory`): all chats, then contacts you've never chatted with
+  (by name). The TUI's finder searches this.
 - **Ordering.** By `(ts, id)`, so messages in the same second stay stable.
 - **Retention.** `keep_days` and `max_messages_per_chat` (see `config.md`) are applied by
   `Store.Prune` on startup and after every history sync batch. The per-chat cap uses a

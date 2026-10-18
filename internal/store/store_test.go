@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/wasichu/go-whassup/internal/sqlite"
 	"github.com/wasichu/go-whassup/internal/wa"
 	"github.com/wasichu/go-whassup/internal/wa/watest"
 )
@@ -338,5 +339,134 @@ func TestRecorderSetRetention(t *testing.T) {
 	rec.Prune(t.Context())
 	if got, err := st.Messages(t.Context(), ada, 0); err != nil || len(got) != 1 || got[0].ID != "2" {
 		t.Errorf("after SetRetention: %v, %v", ids(got), err)
+	}
+}
+
+func TestContactNamesTitlesAndSenders(t *testing.T) {
+	st := openStore(t, "", nil)
+	ctx := t.Context()
+	g := msg(group, "g1", t0, "hello all")
+	g.IsGroup, g.Sender, g.PushName = true, bob, "bobby"
+	mustSave(t, st, msg(ada, "a1", t0, "hi"), g)
+	if err := st.SaveChats(ctx, []wa.Chat{{JID: ada, Name: "ada from history"}, {JID: group, Name: "Book club", IsGroup: true}}); err != nil {
+		t.Fatalf("SaveChats: %v", err)
+	}
+
+	title := func(jid string) string {
+		t.Helper()
+		chats, err := st.Chats(ctx)
+		if err != nil {
+			t.Fatalf("Chats: %v", err)
+		}
+		for _, c := range chats {
+			if c.JID == jid {
+				return c.Title()
+			}
+		}
+		return ""
+	}
+	if got := title(ada); got != "ada from history" {
+		t.Errorf("before contacts: %q", got)
+	}
+
+	// Address-book name wins over history's chat name; partial updates keep it.
+	if err := st.SaveContacts(ctx, []wa.Contact{{JID: ada, Name: "Ada Lovelace", PushName: "ada"}}); err != nil {
+		t.Fatalf("SaveContacts: %v", err)
+	}
+	if err := st.SaveContacts(ctx, []wa.Contact{{JID: ada, PushName: "ada 2.0"}}); err != nil {
+		t.Fatalf("SaveContacts: %v", err)
+	}
+	if got := title(ada); got != "Ada Lovelace" {
+		t.Errorf("address-book name should win, got %q", got)
+	}
+	// A contact's name never renames a group.
+	if err := st.SaveContacts(ctx, []wa.Contact{{JID: group, Name: "not the subject"}}); err != nil {
+		t.Fatalf("SaveContacts: %v", err)
+	}
+	if got := title(group); got != "Book club" {
+		t.Errorf("group title = %q", got)
+	}
+
+	// Group senders resolve to the best known name.
+	msgs, err := st.Messages(ctx, group, 0)
+	if err != nil || len(msgs) != 1 {
+		t.Fatalf("Messages: %v, %v", msgs, err)
+	}
+	if msgs[0].SenderName != "bobby" {
+		t.Errorf("sender name from message push name = %q", msgs[0].SenderName)
+	}
+	if err := st.SaveContacts(ctx, []wa.Contact{{JID: bob, Name: "Bob Builder"}}); err != nil {
+		t.Fatalf("SaveContacts: %v", err)
+	}
+	if msgs, _ := st.Messages(ctx, group, 0); msgs[0].SenderName != "Bob Builder" {
+		t.Errorf("sender name from address book = %q", msgs[0].SenderName)
+	}
+}
+
+func TestDirectory(t *testing.T) {
+	st := openStore(t, "", nil)
+	ctx := t.Context()
+	mustSave(t, st, msg(ada, "a1", t0, "hi"))
+	if err := st.SaveContacts(ctx, []wa.Contact{
+		{JID: ada, Name: "Ada"},
+		{JID: "15550000003@s.whatsapp.net", PushName: "zed"},
+		{JID: "15550000002@s.whatsapp.net", Name: "Carol"},
+	}); err != nil {
+		t.Fatalf("SaveContacts: %v", err)
+	}
+	dir, err := st.Directory(ctx)
+	if err != nil {
+		t.Fatalf("Directory: %v", err)
+	}
+	var titles []string
+	for _, c := range dir {
+		titles = append(titles, c.Title())
+	}
+	// Chats first, then contacts without a chat, alphabetically.
+	if want := []string{"Ada", "Carol", "zed"}; !slices.Equal(titles, want) {
+		t.Errorf("directory = %v, want %v", titles, want)
+	}
+	if dir[1].Messages != 0 || dir[1].JID != "15550000002@s.whatsapp.net" {
+		t.Errorf("contact entry = %+v", dir[1])
+	}
+}
+
+func TestMigrateV1ToV2KeepsData(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "messages.db")
+	db, err := sqlite.Open(path)
+	if err != nil {
+		t.Fatalf("sqlite.Open: %v", err)
+	}
+	ctx := t.Context()
+	for _, q := range []string{migrations[0], "PRAGMA user_version = 1", `INSERT INTO contacts (jid, push_name) VALUES ('` + ada + `', 'Ada')`} {
+		if _, err := db.ExecContext(ctx, q); err != nil {
+			t.Fatalf("v1 setup %q: %v", q, err)
+		}
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	st := openStore(t, path, nil)
+	if err := st.SaveContacts(ctx, []wa.Contact{{JID: ada, Name: "Ada Lovelace"}}); err != nil {
+		t.Fatalf("SaveContacts after upgrade: %v", err)
+	}
+	var name, push string
+	if err := st.db.QueryRowContext(ctx, `SELECT name, push_name FROM contacts WHERE jid = ?`, ada).Scan(&name, &push); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if name != "Ada Lovelace" || push != "Ada" {
+		t.Errorf("after upgrade name=%q push=%q", name, push)
+	}
+}
+
+func TestRecorderStoresContacts(t *testing.T) {
+	st := openStore(t, "", nil)
+	client := &watest.Client{}
+	(&Recorder{Store: st, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}).Attach(client)
+	client.Emit(wa.Contacts{List: []wa.Contact{{JID: ada, Name: "Ada"}}, Snapshot: true})
+	dir, err := st.Directory(t.Context())
+	if err != nil || len(dir) != 1 || dir[0].Name != "Ada" {
+		t.Errorf("directory = %+v, %v", dir, err)
 	}
 }
