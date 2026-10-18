@@ -1,0 +1,126 @@
+package ui
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/wasichu/go-whassup/internal/media"
+	"github.com/wasichu/go-whassup/internal/wa"
+	"github.com/wasichu/go-whassup/internal/wa/watest"
+)
+
+// seedAttachment stores an incoming document in ada's chat.
+func (h *harness) seedAttachment(id, name string) {
+	h.t.Helper()
+	m := wa.Message{ID: id, Chat: ada, Sender: ada, Timestamp: day.Add(time.Hour), Kind: wa.KindDocument, Text: name, Media: watest.SizedDocumentMedia(name, 2_500_000)}
+	if _, err := h.st.SaveMessages(h.t.Context(), []wa.Message{m}); err != nil {
+		h.t.Fatalf("seed: %v", err)
+	}
+	h.client.Emit(wa.HistorySync{})
+	h.settle()
+}
+
+func TestOpenAttachment(t *testing.T) {
+	h := newHarness(t, true)
+	h.client.DownloadData = []byte("%PDF-1.7")
+	h.seedAttachment("doc1", "report.pdf")
+	if v := ansi.Strip(h.view()); !strings.Contains(v, "report.pdf · 2.4 MB") || strings.Contains(v, "✓") {
+		t.Fatalf("attachment should show its size, not cached yet:\n%s", v)
+	}
+
+	h.key("o")
+	if h.model().screen != screenPicker || !strings.Contains(h.view(), "report.pdf") {
+		t.Fatalf("picker not shown:\n%s", h.view())
+	}
+	h.key("enter")
+	h.settle()
+	if len(h.opened) != 1 || filepath.Ext(h.opened[0]) != ".pdf" {
+		t.Fatalf("opened = %v", h.opened)
+	}
+	if data, err := os.ReadFile(h.opened[0]); err != nil || string(data) != "%PDF-1.7" {
+		t.Errorf("downloaded content = %q, %v", data, err)
+	}
+	h.key("esc")
+	if v := ansi.Strip(h.view()); !strings.Contains(v, "✓") {
+		t.Errorf("cached attachment should show ✓:\n%s", v)
+	}
+	if len(h.model().downloading) != 0 {
+		t.Error("download still marked in flight")
+	}
+}
+
+func TestOpenAttachmentProblems(t *testing.T) {
+	h := newHarness(t, true)
+	h.seedAttachment("gone", "old.pdf")
+	h.client.DownloadErr = wa.ErrMediaExpired
+	h.key("o")
+	h.key("enter")
+	h.settle()
+	if v := h.view(); !strings.Contains(v, "no longer on WhatsApp's servers") {
+		t.Errorf("expired notice missing:\n%s", v)
+	}
+
+	h2 := newHarness(t, true)
+	h2.client.DownloadData = []byte("#!/bin/sh")
+	h2.openErr = media.ErrNotOpenable
+	h2.seedAttachment("sh", "run.command")
+	h2.key("o")
+	h2.key("enter")
+	h2.settle()
+	if v := h2.view(); !strings.Contains(v, "Not opened (unrecognised file type)") {
+		t.Errorf("unrecognised-type notice missing:\n%s", v)
+	}
+
+	h3 := newHarness(t, true)
+	h3.key("o")
+	if h3.model().screen != screenMain || !strings.Contains(h3.view(), "No attachments") {
+		t.Errorf("empty picker should just say so:\n%s", h3.view())
+	}
+}
+
+func TestAttachSendsAndCaches(t *testing.T) {
+	h := newHarness(t, true)
+	src := filepath.Join(t.TempDir(), "notes.txt")
+	if err := os.WriteFile(src, []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	h.key("a")
+	if h.model().screen != screenAttach {
+		t.Fatalf("attach screen not open:\n%s", h.view())
+	}
+	h.key(src)
+	h.send(tea.KeyPressMsg{Code: tea.KeyTab})
+	h.key("for you")
+	h.key("enter")
+	h.settle()
+
+	sent := h.client.SentFiles()
+	if len(sent) != 1 || sent[0].Path != src || sent[0].Caption != "for you" || sent[0].Chat != ada {
+		t.Fatalf("sent = %+v", sent)
+	}
+	if _, ok := h.cache.Lookup(ada, "FILE1"); !ok {
+		t.Error("own attachment should be cached under its message ID")
+	}
+	if v := ansi.Strip(h.view()); !strings.Contains(v, "notes.txt") {
+		t.Errorf("sent file not shown:\n%s", v)
+	}
+}
+
+func TestAttachRejectsMissingFile(t *testing.T) {
+	h := newHarness(t, true)
+	h.key("a")
+	h.key("/nope/missing.jpg")
+	h.key("enter")
+	if h.model().screen != screenAttach || !strings.Contains(h.view(), "No such file") {
+		t.Errorf("missing file should be reported in place:\n%s", h.view())
+	}
+	if len(h.client.SentFiles()) != 0 {
+		t.Error("sent a missing file")
+	}
+}
