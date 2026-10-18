@@ -83,3 +83,12 @@ func TestMessageSummary(t *testing.T) {
 		}
 	}
 }
+
+func TestCompactQR(t *testing.T) {
+	if got := compactQR("https://wa.me/settings/linked_devices#2@ref,a,b,c,9"); got != "2@ref,a,b,c,9" {
+		t.Errorf("compactQR = %q", got)
+	}
+	if got := compactQR("2@ref,a,b,c"); got != "2@ref,a,b,c" {
+		t.Errorf("bare code changed: %q", got)
+	}
+}

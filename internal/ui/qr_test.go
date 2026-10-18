@@ -5,9 +5,10 @@ import (
 	"testing"
 )
 
-// The shape of a real whatsmeow QR payload (link prefix, ref, noise key,
-// identity key, adv secret, platform), which encodes to 65x33 cells.
-var sampleQR = "https://wa.me/settings/linked_devices#2@" + strings.Repeat("A", 100) + "," +
+// The shape of a real QR payload as wa emits it (ref, noise key, identity
+// key, adv secret, platform; link prefix stripped), which encodes to 61x31
+// cells.
+var sampleQR = "2@" + strings.Repeat("A", 100) + "," +
 	strings.Repeat("B", 44) + "," + strings.Repeat("C", 44) + "," + strings.Repeat("D", 44) + ",9"
 
 func TestQRMatrixStructure(t *testing.T) {
@@ -41,8 +42,8 @@ func TestQRMatrixStructure(t *testing.T) {
 			}
 		}
 	}
-	if n != 65 {
-		t.Errorf("realistic payload is %d modules wide, want 65 (update the layout tests if this changes)", n)
+	if n != 61 {
+		t.Errorf("realistic payload is %d modules wide, want 61 (update the layout tests if this changes)", n)
 	}
 }
 

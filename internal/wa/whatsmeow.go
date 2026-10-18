@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -272,7 +273,7 @@ func (w *WhatsApp) watchPairing(qrCh <-chan whatsmeow.QRChannelItem, forwardCode
 		switch item.Event {
 		case whatsmeow.QRChannelEventCode:
 			if forwardCodes {
-				w.emit(PairQRCode{Code: item.Code})
+				w.emit(PairQRCode{Code: compactQR(item.Code)})
 			}
 		case whatsmeow.QRChannelSuccess.Event:
 		default:
@@ -280,6 +281,14 @@ func (w *WhatsApp) watchPairing(qrCh <-chan whatsmeow.QRChannelItem, forwardCode
 		}
 	}
 }
+
+// qrLinkPrefix is the deep link whatsmeow wraps QR payloads in so a phone's
+// camera app can open WhatsApp. WhatsApp's own Linked devices scanner reads
+// the bare "2@ref,keys..." form, which Baileys still sends, and dropping
+// the prefix shrinks the code from 61 to 57 modules (65x33 -> 61x31 cells).
+const qrLinkPrefix = "https://wa.me/settings/linked_devices#"
+
+func compactQR(code string) string { return strings.TrimPrefix(code, qrLinkPrefix) }
 
 func qrFailureReason(item whatsmeow.QRChannelItem) string {
 	switch {

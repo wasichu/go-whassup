@@ -55,8 +55,8 @@ handlers (`internal/ui/keys.go`), so they can't drift.
 
 - **Not linked:** choose *phone number code* (type your number and enter the
   8-character code on the phone) or *QR code* (scan from Linked devices › Link a device).
-  - The QR is drawn black-on-white whatever your theme. It's about 65×33 cells, so the
-    window needs about 35 rows. Instructions go beside the QR when the window is wide,
+  - The QR is drawn black-on-white whatever your theme. It's about 61×31 cells, so the
+    window needs about 33 rows. Zooming out makes it physically smaller. Instructions go beside the QR when the window is wide,
     and the white border shrinks from 2 modules to 1 if that makes it fit.
   - If it still doesn't fit, the screen says exactly how many rows or columns are
     missing. Make the window bigger or zoom out (Cmd − / Ctrl −): the QR appears as soon

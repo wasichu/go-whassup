@@ -350,7 +350,7 @@ func TestQRLayoutFitsCommonWindows(t *testing.T) {
 		{"wide but short (the reported 137x37)", 137, 37, true, ""},
 		{"narrow, just tall enough", 80, 37, true, ""},
 		{"standard 80x24", 80, 24, false, "more rows"},
-		{"too narrow", 64, 50, false, "more columns"},
+		{"too narrow", 60, 50, false, "more columns"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

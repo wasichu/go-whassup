@@ -45,10 +45,17 @@ websocket gives up after about 160 s of unanswered pairing, and our wait is 3 mi
 - **History-request options** (`request_full_sync`, `full_sync_days`) are written into
   whatsmeow's process-wide `DeviceProps` at the start of each pairing, from
   `WhatsApp.SetOptions`. So Settings changes apply to the next link without a restart.
-- **Payload and size.** whatsmeow's QR payload is a link,
-  `https://wa.me/settings/linked_devices#2@<ref>,<noise>,<identity>,<adv>,<platform>`, of
-  about 280 characters. That encodes to a 61-module QR, 65×33 terminal cells with our
-  2-module border.
+- **Payload and size.** whatsmeow wraps the payload in a deep link,
+  `https://wa.me/settings/linked_devices#2@<ref>,<noise>,<identity>,<adv>,<platform>`
+  (about 280 characters), so phone camera apps can open WhatsApp. We **strip the link
+  prefix** (`wa.compactQR`) and show the bare `2@…` form, which WhatsApp's own Linked
+  devices scanner reads (Baileys still sends it). That takes the code from 61 to 57
+  modules, i.e. 65×33 → 61×31 cells with a 2-module border.
+  - **If a phone ever rejects the bare form,** revert `compactQR`; that's a one-line
+    change.
+  - **One cell per module is the floor.** Half-blocks give square modules. Quarter
+    blocks would halve the width but not the height, and distort the aspect; braille
+    leaves gaps. The physical size is set by the font, so zooming out shrinks it.
 - **Comparison with waha-tui.** It polls WAHA's `auth/qr?format=raw` endpoint every few
   seconds and renders with `@opentui/qrcode`: error-correction level M, the spec's
   4-module border, fixed black/white, scale-to-fit, and "Terminal too small for QR"
