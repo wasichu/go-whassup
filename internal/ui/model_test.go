@@ -16,6 +16,7 @@ import (
 
 	"github.com/wasichu/go-whassup/internal/config"
 	"github.com/wasichu/go-whassup/internal/store"
+	"github.com/wasichu/go-whassup/internal/termcaps"
 	"github.com/wasichu/go-whassup/internal/wa"
 	"github.com/wasichu/go-whassup/internal/wa/watest"
 )
@@ -42,7 +43,7 @@ type harness struct {
 // withGraphics simulates a true-color terminal with Kitty graphics support.
 func (h *harness) withGraphics() {
 	m := h.model()
-	m.deps.TerminalGraphics = true
+	m.deps.Graphics = termcaps.Graphics{Kitty: true}
 	h.m = m
 	h.send(tea.ColorProfileMsg{Profile: colorprofile.TrueColor})
 }
@@ -646,5 +647,33 @@ func TestInlineImagesNeedTrueColor(t *testing.T) {
 	h.settle()
 	if h.rawContains("a=T") || !strings.Contains(h.view(), "▀") {
 		t.Error("without true color, the QR should fall back to text blocks")
+	}
+}
+
+func TestTmuxHintAndWrapping(t *testing.T) {
+	h := newHarness(t, false)
+	m := h.model()
+	m.deps.Graphics = termcaps.Graphics{Hint: "enable tmux passthrough"}
+	h.m = m
+	h.client.QREvents = []wa.Event{wa.PairQRCode{Code: sampleQR}}
+	h.send(tea.WindowSizeMsg{Width: 140, Height: 45})
+	h.key("down")
+	h.key("enter")
+	h.settle()
+	if !strings.Contains(h.view(), "Tip: enable tmux passthrough") || !strings.Contains(h.view(), "▀") {
+		t.Errorf("hint with text QR expected:\n%s", h.view())
+	}
+
+	h2 := newHarness(t, false)
+	h2.withGraphics()
+	m2 := h2.model()
+	m2.deps.Graphics.Tmux = true
+	h2.m = m2
+	h2.client.QREvents = []wa.Event{wa.PairQRCode{Code: sampleQR}}
+	h2.key("down")
+	h2.key("enter")
+	h2.settle()
+	if !h2.rawContains("\x1bPtmux;") {
+		t.Error("upload not wrapped for tmux")
 	}
 }

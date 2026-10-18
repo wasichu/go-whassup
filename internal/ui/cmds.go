@@ -8,6 +8,7 @@ import (
 
 	"github.com/wasichu/go-whassup/internal/config"
 	"github.com/wasichu/go-whassup/internal/store"
+	"github.com/wasichu/go-whassup/internal/termcaps"
 	"github.com/wasichu/go-whassup/internal/wa"
 )
 
@@ -29,9 +30,9 @@ type Deps struct {
 	// (retention, pairing options). Called off the UI goroutine.
 	ApplyConfig func(context.Context, config.Config) error
 
-	// TerminalGraphics reports Kitty graphics support (SupportsKittyGraphics);
-	// inline images are used when this and Config.UI.InlineImages are set.
-	TerminalGraphics bool
+	// Graphics is the terminal's inline-image support (termcaps); images are
+	// used when it allows and Config.UI.InlineImages is set.
+	Graphics termcaps.Graphics
 }
 
 // messagesPerChat is how many recent messages the conversation pane loads.

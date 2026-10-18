@@ -17,6 +17,7 @@ import (
 	"github.com/wasichu/go-whassup/internal/logging"
 	"github.com/wasichu/go-whassup/internal/paths"
 	"github.com/wasichu/go-whassup/internal/store"
+	"github.com/wasichu/go-whassup/internal/termcaps"
 	"github.com/wasichu/go-whassup/internal/ui"
 	"github.com/wasichu/go-whassup/internal/wa"
 )
@@ -92,12 +93,12 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 	switch inv.cmd {
 	case "tui":
 		return ui.Run(ctx, ui.Deps{
-			Client:           client,
-			Store:            st,
-			Log:              log,
-			Config:           cfg,
-			ConfigPath:       p.ConfigFile,
-			TerminalGraphics: ui.SupportsKittyGraphics(os.Getenv),
+			Client:     client,
+			Store:      st,
+			Log:        log,
+			Config:     cfg,
+			ConfigPath: p.ConfigFile,
+			Graphics:   termcaps.DetectGraphics(os.Getenv, termcaps.Tmux),
 			ApplyConfig: func(ctx context.Context, c config.Config) error {
 				client.SetOptions(pairingOptions(c))
 				rec.SetRetention(retention(c))

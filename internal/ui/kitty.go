@@ -15,7 +15,8 @@ import (
 // ordinary text cells (U+10EEEE plus row/column diacritics) whose foreground
 // color encodes the image ID. Because the placement is just text, it
 // survives Bubble Tea's redraws, resizes and layout changes. Supported by
-// Ghostty and kitty.
+// Ghostty and kitty, also through tmux with passthrough (the placeholders are
+// what make tmux work: tmux only needs to forward the upload).
 
 // qrImageID identifies our QR image in the terminal. It must fit in 24 bits
 // because the placeholder's RGB foreground color encodes it.
@@ -25,23 +26,6 @@ const qrImageID = 0x77A001
 // wide, so 2:1 columns:rows is roughly square on screen; the terminal scales
 // the PNG to fill exactly this area.
 const qrImageCols, qrImageRows = 32, 16
-
-// SupportsKittyGraphics reports whether the terminal described by getenv
-// can show Kitty-protocol images with Unicode placeholders. It is
-// conservative: terminal multiplexers would need passthrough wrapping, so
-// tmux and screen are excluded.
-func SupportsKittyGraphics(getenv func(string) string) bool {
-	if getenv("TMUX") != "" || strings.HasPrefix(getenv("TERM"), "screen") {
-		return false
-	}
-	switch {
-	case getenv("TERM_PROGRAM") == "ghostty", getenv("TERM") == "xterm-ghostty":
-		return true
-	case getenv("TERM") == "xterm-kitty", getenv("KITTY_WINDOW_ID") != "":
-		return true
-	}
-	return false
-}
 
 // qrPNG encodes text as a QR PNG, including the spec's 4-module quiet zone.
 func qrPNG(text string) ([]byte, error) {
@@ -57,7 +41,7 @@ func qrPNG(text string) ([]byte, error) {
 // creates a virtual placement of cols x rows cells for placeholders to show.
 // Payloads are sent in 4096-byte base64 chunks as the protocol requires;
 // q=2 suppresses the terminal's replies so they don't arrive as input.
-func kittyTransmit(id uint32, png []byte, cols, rows int) string {
+func kittyTransmit(id uint32, png []byte, cols, rows int, tmux bool) string {
 	data := base64.StdEncoding.EncodeToString(png)
 	var b strings.Builder
 	for first := true; first || data != ""; first = false {
@@ -71,17 +55,26 @@ func kittyTransmit(id uint32, png []byte, cols, rows int) string {
 			more = 1
 		}
 		if first {
-			fmt.Fprintf(&b, "\x1b_Ga=T,U=1,f=100,t=d,q=2,i=%d,c=%d,r=%d,m=%d;%s\x1b\\", id, cols, rows, more, chunk)
+			b.WriteString(passthrough(fmt.Sprintf("\x1b_Ga=T,U=1,f=100,t=d,q=2,i=%d,c=%d,r=%d,m=%d;%s\x1b\\", id, cols, rows, more, chunk), tmux))
 		} else {
-			fmt.Fprintf(&b, "\x1b_Gm=%d;%s\x1b\\", more, chunk)
+			b.WriteString(passthrough(fmt.Sprintf("\x1b_Gm=%d;%s\x1b\\", more, chunk), tmux))
 		}
 	}
 	return b.String()
 }
 
 // kittyDelete frees image id and its placements in the terminal.
-func kittyDelete(id uint32) string {
-	return fmt.Sprintf("\x1b_Ga=d,d=I,q=2,i=%d\x1b\\", id)
+func kittyDelete(id uint32, tmux bool) string {
+	return passthrough(fmt.Sprintf("\x1b_Ga=d,d=I,q=2,i=%d\x1b\\", id), tmux)
+}
+
+// passthrough wraps an escape sequence so tmux forwards it to the outer
+// terminal (requires allow-passthrough): DCS tmux; with ESCs doubled.
+func passthrough(seq string, tmux bool) string {
+	if !tmux {
+		return seq
+	}
+	return "\x1bPtmux;" + strings.ReplaceAll(seq, "\x1b", "\x1b\x1b") + "\x1b\\"
 }
 
 // kittyPlaceholders renders the cols x rows block of placeholder cells that

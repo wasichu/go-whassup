@@ -11,29 +11,26 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-func TestSupportsKittyGraphics(t *testing.T) {
-	tests := []struct {
-		env  map[string]string
-		want bool
-	}{
-		{map[string]string{"TERM_PROGRAM": "ghostty", "TERM": "xterm-ghostty"}, true},
-		{map[string]string{"TERM": "xterm-kitty"}, true},
-		{map[string]string{"KITTY_WINDOW_ID": "3", "TERM": "xterm-256color"}, true},
-		{map[string]string{"TERM_PROGRAM": "ghostty", "TMUX": "/tmp/tmux-501/default,1,0"}, false},
-		{map[string]string{"TERM": "screen-256color", "TERM_PROGRAM": "ghostty"}, false},
-		{map[string]string{"TERM_PROGRAM": "Apple_Terminal", "TERM": "xterm-256color"}, false},
-		{map[string]string{}, false},
+func TestTmuxPassthroughWrapping(t *testing.T) {
+	plain := kittyDelete(qrImageID, false)
+	wrapped := kittyDelete(qrImageID, true)
+	want := "\x1bPtmux;\x1b\x1b_Ga=d,d=I,q=2,i=7839745\x1b\x1b\\\x1b\\"
+	if wrapped != want {
+		t.Errorf("wrapped = %q, want %q", wrapped, want)
 	}
-	for _, tt := range tests {
-		if got := SupportsKittyGraphics(func(k string) string { return tt.env[k] }); got != tt.want {
-			t.Errorf("SupportsKittyGraphics(%v) = %v, want %v", tt.env, got, tt.want)
-		}
+	if strings.Contains(plain, "tmux") {
+		t.Errorf("unwrapped sequence mentions tmux: %q", plain)
+	}
+	// Every transmit chunk is wrapped on its own.
+	seq := kittyTransmit(qrImageID, bytes.Repeat([]byte{1}, 10000), 32, 16, true)
+	if n, m := strings.Count(seq, "\x1bPtmux;"), strings.Count(seq, "\x1b\x1b_G"); n < 3 || n != m {
+		t.Errorf("%d passthrough wrappers for %d chunks", n, m)
 	}
 }
 
 func TestKittyTransmitChunksAndReassembles(t *testing.T) {
 	png := bytes.Repeat([]byte{0xAB}, 10000) // > 4096 base64 bytes: several chunks
-	seq := kittyTransmit(qrImageID, png, 32, 16)
+	seq := kittyTransmit(qrImageID, png, 32, 16, false)
 
 	re := regexp.MustCompile(`\x1b_G([^;]*);([^\x1b]*)\x1b\\`)
 	parts := re.FindAllStringSubmatch(seq, -1)

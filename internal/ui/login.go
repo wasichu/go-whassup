@@ -259,7 +259,7 @@ func (m Model) loginEvent(evt wa.Event) (Model, tea.Cmd, bool) {
 // Placeholders identify the image by their 24-bit foreground color, so a
 // downsampled color profile would show nothing: require true color.
 func (m Model) inlineImages() bool {
-	return m.deps.TerminalGraphics && m.trueColor && m.deps.Config.UI.InlineImages
+	return m.deps.Graphics.Kitty && m.trueColor && m.deps.Config.UI.InlineImages
 }
 
 // showQRImage uploads the current QR as an inline image, replacing any
@@ -274,7 +274,7 @@ func (m *Model) showQRImage() tea.Cmd {
 		return nil
 	}
 	m.login.image = true
-	return tea.Raw(kittyTransmit(qrImageID, png, qrImageCols, qrImageRows))
+	return tea.Raw(kittyTransmit(qrImageID, png, qrImageCols, qrImageRows, m.deps.Graphics.Tmux))
 }
 
 // hideQRImage frees the inline QR image, if one is loaded.
@@ -283,7 +283,7 @@ func (m Model) hideQRImage() (Model, tea.Cmd, bool) {
 		return m, nil, false
 	}
 	m.login.image = false
-	return m, tea.Raw(kittyDelete(qrImageID)), false
+	return m, tea.Raw(kittyDelete(qrImageID, m.deps.Graphics.Tmux)), false
 }
 
 func (m Model) loginView(width, height int) string {
@@ -292,7 +292,15 @@ func (m Model) loginView(width, height int) string {
 	title := paneTitleStyle.Render("Link go-whassup to WhatsApp")
 	if l.step == loginQR {
 		// The QR needs every row it can get: title, blank line, then the code.
-		return pad.Render(title + "\n\n" + m.qrView(width-2, height-2))
+		// A tip on enabling inline images costs two rows, so only when they'd
+		// actually be used (setting on) and the text QR still fits.
+		qr := m.qrView(width-2, height-2)
+		if hint := m.deps.Graphics.Hint; hint != "" && m.deps.Config.UI.InlineImages {
+			if withTip := m.qrView(width-2, height-4); !strings.Contains(withTip, "doesn't fit") || strings.Contains(qr, "doesn't fit") {
+				qr = withTip + "\n\n" + faintStyle.Render("Tip: "+hint)
+			}
+		}
+		return pad.Render(title + "\n\n" + qr)
 	}
 
 	var body []string

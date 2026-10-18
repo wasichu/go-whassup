@@ -68,10 +68,16 @@ websocket gives up after about 160 s of unanswered pairing, and our wait is 3 mi
     cells and colour through intact.
   - The image is replaced on each new code and deleted (`a=d,d=I`) when leaving the QR
     step or quitting.
-  - **Requirements:** `TERM_PROGRAM=ghostty` / `TERM=xterm-ghostty`, `TERM=xterm-kitty`
-    or `KITTY_WINDOW_ID`; **not** tmux/screen; **true colour** (the ID lives in the
-    colour, so a downsampled palette would show nothing). Otherwise we fall back to
-    text blocks.
+  - **Requirements:** a Kitty-graphics terminal (Ghostty, kitty) and **true colour**,
+    because the ID lives in the colour and a downsampled palette would show nothing.
+    Otherwise we fall back to text blocks. Detection is in `internal/termcaps`.
+  - **tmux.** `TERM`/`TERM_PROGRAM` describe tmux, so we ask tmux for the client's
+    `client_termname` and `client_termfeatures`, and for `allow-passthrough`.
+    - With an `RGB` feature and passthrough `on`/`all`, each upload chunk is wrapped in
+      `DCS tmux;` (ESCs doubled). The placeholders need no wrapping; they're text.
+    - Otherwise the QR screen shows a one-line tip (e.g. `tmux set -g
+      allow-passthrough on`). We never change tmux settings ourselves.
+    - GNU screen isn't supported.
 - **Comparison with waha-tui.** It polls WAHA's `auth/qr?format=raw` endpoint every few
   seconds and renders with `@opentui/qrcode`: error-correction level M, the spec's
   4-module border, fixed black/white, scale-to-fit, and "Terminal too small for QR"

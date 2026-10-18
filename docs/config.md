@@ -60,7 +60,7 @@ documented behavior.)
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `inline_images` | `true` | Show the login QR as a small image in terminals with Kitty graphics support (Ghostty, kitty). Requires true color and no tmux; otherwise text blocks are used regardless. `false` always uses text blocks. |
+| `inline_images` | `true` | Show the login QR as a small image in terminals with Kitty graphics support (Ghostty, kitty). Requires true color; inside tmux also `allow-passthrough on`. Otherwise text blocks are used regardless. `false` always uses text blocks. |
 
 ## Planned sections
 
