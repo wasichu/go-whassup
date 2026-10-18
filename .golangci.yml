@@ -23,6 +23,10 @@ linters:
               desc: v1 API; use charm.land/bubbletea/v2
             - pkg: github.com/charmbracelet/lipgloss
               desc: v1 API; use charm.land/lipgloss/v2
+            - pkg: github.com/charmbracelet/bubbles
+              desc: v1 API; use charm.land/bubbles/v2
+            - pkg: charm.land/bubbles$
+              desc: v1 API; use charm.land/bubbles/v2
         whatsmeow-only-in-wa:
           files: ["$all", "!**/internal/wa/**"]
           deny:

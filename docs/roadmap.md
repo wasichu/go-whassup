@@ -17,10 +17,14 @@ step lands or the plan changes.
    - `wa-tui db chats` / `db messages`;
    - `wa-tui login -relink` to unlink and pair again.
 
-## Next: step 3, minimal TUI
+## In progress: step 3, minimal TUI
 
-- Chat list | message pane | input; send text.
-- Events arrive through `wa.Subscribe` + a `tea.Cmd`; reads come from `store`.
+- [x] Sending: `wa.SendText` (emitted as an event); push name announced as
+  "unavailable" on connect.
+- [x] Chat list | message pane | input; send text; works offline from the store;
+  connection state in the status line. *(Live test pending.)*
+- [ ] Login screen, Re-link, QR choice (below).
+- [ ] Settings screen (below).
 - **Login screen:**
   - Phone-code pairing (the step-1 flow) by default.
   - When already paired: a **"Re-link"** option, the same as `login -relink` via

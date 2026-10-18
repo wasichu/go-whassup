@@ -1,7 +1,7 @@
 # Usage
 
 ```
-wa-tui [-debug]                     start the TUI (placeholder for now)
+wa-tui [-debug]                     start the TUI
 wa-tui login [-relink] [phone]      link this device with a phone-number code;
                                     -relink first unlinks the current session
 wa-tui listen [-debug]              connect and print incoming messages
@@ -26,3 +26,19 @@ wa-tui db messages [-n N] <chat>    show a stored chat's newest N messages (defa
 - `wa-tui -h` prints usage.
 - Via just: `just run login +15551234567`, `just run listen`, and `just logs` to tail
   the log.
+
+## TUI
+
+Left: chats, most recent first. Right: the selected chat's messages and an input box.
+The TUI works offline from `messages.db`, connects in the background, and shows the
+connection state in the status line. Pairing still happens via `wa-tui login` until
+the login screen lands.
+
+| Key | Chat list focused | Input focused |
+| --- | --- | --- |
+| `↑`/`↓`, `k`/`j` | select chat | (typing) |
+| `enter`, `tab`, `→`, `l` | write in this chat | send message |
+| `esc` | | back to chat list |
+| `pgup`/`pgdn` | scroll messages | scroll messages |
+| `q` | quit | (typing) |
+| `ctrl+c` | quit | quit |

@@ -51,6 +51,11 @@ There are two kinds of consumers:
   - **TUI:** a `tea.Cmd` receives the next event from `sub.C` and returns it as a
     `tea.Msg`. `Update()` handles it and re-issues the command. State changes only in
     `Update()`.
+    - On `Message`/`HistorySync`, the UI **reloads from the store** in a command. This
+      relies on `internal/app` registering the recorder *before* `ui.Run` subscribes,
+      so the row exists by the time the UI hears about it.
+    - Store reads and sends run in commands that close over values (ctx, deps, chat
+      key), never the model.
 
   `Subscribe` never blocks. If its buffer is full, events are **dropped and counted**
   (`Subscription.Dropped()`), and consumers surface the count.

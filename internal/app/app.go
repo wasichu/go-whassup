@@ -56,10 +56,6 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 	slog.SetDefault(log)
 	log.Info("starting", "cmd", inv.cmd, "data_dir", p.DataDir, "config", fmt.Sprintf("%+v", cfg))
 
-	if inv.cmd == "tui" {
-		return ui.Run(ctx)
-	}
-
 	st, err := store.Open(ctx, p.MessagesDB, nil)
 	if err != nil {
 		return err
@@ -83,7 +79,10 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 	}
 	defer closeInto(&err, client)
 
-	// Registered before any display subscription, and never lossy.
+	// The recorder must be registered before any display subscription: the
+	// UI reloads from the store when an event arrives, which only works if
+	// the recorder (an earlier handler) has already written it. It is never
+	// lossy.
 	rec := &store.Recorder{
 		Store:     st,
 		Retention: store.Retention{KeepDays: cfg.History.KeepDays, MaxPerChat: cfg.History.MaxMessagesPerChat},
@@ -93,6 +92,8 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 	rec.Attach(client)
 
 	switch inv.cmd {
+	case "tui":
+		return ui.Run(ctx, ui.Deps{Client: client, Store: st, Log: log})
 	case "login":
 		var phone string
 		if len(inv.args) > 0 {
