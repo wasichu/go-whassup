@@ -124,9 +124,11 @@ type Message struct {
 	Kind      string // "text", "image", "reaction", ... see messageKind
 	Text      string // body or caption; may be empty for media
 
-	// SenderName is the best display name for Sender (address book, then
-	// push name). Filled in by the store when reading; empty on the wire.
-	SenderName string
+	// Filled in by the store when reading; empty on the wire.
+	SenderName string          // best display name for Sender (address book, then push name)
+	Edited     bool            // the text was changed after sending
+	Deleted    bool            // deleted for everyone; Text is empty
+	Reactions  []ReactionCount // most popular first
 }
 
 // Summary renders the message for one-line display, e.g. "[image] caption".
@@ -146,6 +148,39 @@ type Chat struct {
 	Name        string // group subject or contact name; may be empty
 	IsGroup     bool
 	UnreadCount int // unread messages per the phone at sync time
+}
+
+// MessageEdited replaces the text of an earlier message.
+type MessageEdited struct {
+	Chat, ID string
+	Kind     string
+	Text     string
+	At       time.Time
+}
+
+// MessageDeleted removes an earlier message: "delete for everyone" leaves a
+// placeholder (ForMe false); "delete for me" removes it entirely.
+type MessageDeleted struct {
+	Chat, ID string
+	At       time.Time
+	ForMe    bool
+}
+
+// Reaction sets (or, with an empty Emoji, removes) Sender's reaction to a
+// message.
+type Reaction struct {
+	Chat, MessageID string
+	Sender          string
+	FromMe          bool
+	Emoji           string
+	At              time.Time
+}
+
+// ReactionCount summarises one emoji's reactions to a message.
+type ReactionCount struct {
+	Emoji string
+	Count int
+	Mine  bool // the user is one of the reactors
 }
 
 // ChatRead reports that the user read a chat on another device, up to At.
@@ -176,16 +211,20 @@ type Contacts struct {
 type HistorySync struct {
 	Chats     []Chat
 	Messages  []Message
+	Reactions []Reaction        // attached to messages in the batch
 	PushNames map[string]string // user key -> push name
 }
 
-func (Connected) isEvent()    {}
-func (Disconnected) isEvent() {}
-func (LoggedOut) isEvent()    {}
-func (PairSuccess) isEvent()  {}
-func (PairFailed) isEvent()   {}
-func (PairQRCode) isEvent()   {}
-func (Message) isEvent()      {}
-func (HistorySync) isEvent()  {}
-func (Contacts) isEvent()     {}
-func (ChatRead) isEvent()     {}
+func (Connected) isEvent()      {}
+func (Disconnected) isEvent()   {}
+func (LoggedOut) isEvent()      {}
+func (PairSuccess) isEvent()    {}
+func (PairFailed) isEvent()     {}
+func (PairQRCode) isEvent()     {}
+func (Message) isEvent()        {}
+func (HistorySync) isEvent()    {}
+func (Contacts) isEvent()       {}
+func (ChatRead) isEvent()       {}
+func (MessageEdited) isEvent()  {}
+func (MessageDeleted) isEvent() {}
+func (Reaction) isEvent()       {}

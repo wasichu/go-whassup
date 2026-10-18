@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -53,7 +54,7 @@ func TestHandleEventMessage(t *testing.T) {
 		Kind:      KindText,
 		Text:      "hello",
 	}
-	if len(*got) != 1 || (*got)[0] != want {
+	if len(*got) != 1 || !reflect.DeepEqual((*got)[0], want) {
 		t.Fatalf("events = %#v, want [%#v]", *got, want)
 	}
 }
@@ -82,7 +83,7 @@ func TestHandleEventConnectionLifecycle(t *testing.T) {
 		t.Fatalf("events = %#v, want %#v", *got, want)
 	}
 	for i := range want {
-		if (*got)[i] != want[i] {
+		if !reflect.DeepEqual((*got)[i], want[i]) {
 			t.Errorf("event %d = %#v, want %#v", i, (*got)[i], want[i])
 		}
 	}

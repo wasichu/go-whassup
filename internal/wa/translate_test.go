@@ -2,6 +2,7 @@ package wa
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -228,5 +229,67 @@ func TestContactsFromStore(t *testing.T) {
 	}
 	if got[0].PushName == "" {
 		t.Error("merged contact lost its push name")
+	}
+}
+
+func protoEvent(src types.MessageSource, msg *waE2E.Message) *events.Message {
+	return &events.Message{
+		Info:    types.MessageInfo{MessageSource: src, ID: "P1", Timestamp: time.Unix(1700000100, 0)},
+		Message: msg,
+	}
+}
+
+func TestClassifyMessage(t *testing.T) {
+	dm := types.MessageSource{Chat: pnAda, Sender: pnAda}
+	target := &waCommon.MessageKey{ID: proto.String("T1")}
+	tests := []struct {
+		name string
+		msg  *waE2E.Message
+		want Event
+	}{
+		{"plain message", &waE2E.Message{Conversation: proto.String("hi")},
+			Message{ID: "P1", Chat: pnAda.String(), Sender: pnAda.String(), Timestamp: time.Unix(1700000100, 0), Kind: KindText, Text: "hi"}},
+		{"reaction", &waE2E.Message{ReactionMessage: &waE2E.ReactionMessage{Key: target, Text: proto.String("👍"), SenderTimestampMS: proto.Int64(1700000200000)}},
+			Reaction{Chat: pnAda.String(), MessageID: "T1", Sender: pnAda.String(), Emoji: "👍", At: time.UnixMilli(1700000200000)}},
+		{"reaction removed", &waE2E.Message{ReactionMessage: &waE2E.ReactionMessage{Key: target, Text: proto.String("")}},
+			Reaction{Chat: pnAda.String(), MessageID: "T1", Sender: pnAda.String(), At: time.Unix(1700000100, 0)}},
+		{"revoke", &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{Type: waE2E.ProtocolMessage_REVOKE.Enum(), Key: target}},
+			MessageDeleted{Chat: pnAda.String(), ID: "T1", At: time.Unix(1700000100, 0)}},
+		{"edit", &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{
+			Type: waE2E.ProtocolMessage_MESSAGE_EDIT.Enum(), Key: target, TimestampMS: proto.Int64(1700000300000),
+			EditedMessage: &waE2E.Message{Conversation: proto.String("hi (fixed)")},
+		}}, MessageEdited{Chat: pnAda.String(), ID: "T1", Kind: KindText, Text: "hi (fixed)", At: time.UnixMilli(1700000300000)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := classifyMessage(protoEvent(dm, tt.msg), stubResolver)
+			if !ok {
+				t.Fatal("not classified")
+			}
+			if fmt.Sprintf("%#v", got) != fmt.Sprintf("%#v", tt.want) {
+				t.Errorf("got  %#v\nwant %#v", got, tt.want)
+			}
+		})
+	}
+	if _, ok := classifyMessage(protoEvent(dm, &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{Type: waE2E.ProtocolMessage_EPHEMERAL_SETTING.Enum()}}), stubResolver); ok {
+		t.Error("other protocol messages should be skipped")
+	}
+}
+
+func TestHistoryReactions(t *testing.T) {
+	web := webMsg("H1", "great news", false)
+	web.Message.Reactions = []*waWeb.Reaction{
+		{Key: &waCommon.MessageKey{FromMe: proto.Bool(true)}, Text: proto.String("🎉"), SenderTimestampMS: proto.Int64(1700000400000)},
+	}
+	data := &waHistorySync.HistorySync{
+		SyncType:      waHistorySync.HistorySync_RECENT.Enum(),
+		Conversations: []*waHistorySync.Conversation{{ID: proto.String(pnAda.String()), Messages: []*waHistorySync.HistorySyncMsg{web}}},
+	}
+	h, ok := historyFromProto(data, stubParser, stubResolver, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if !ok || len(h.Reactions) != 1 {
+		t.Fatalf("reactions = %+v", h.Reactions)
+	}
+	if r := h.Reactions[0]; r.MessageID != "H1" || r.Emoji != "🎉" || !r.FromMe || r.Chat != pnAda.String() {
+		t.Errorf("reaction = %+v", r)
 	}
 }

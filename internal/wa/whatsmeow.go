@@ -500,9 +500,12 @@ func (w *WhatsApp) handleEvent(evt any) {
 	case *events.PairSuccess:
 		w.emit(PairSuccess{JID: v.ID.ToNonAD().String()})
 	case *events.Message:
-		if msg, ok := messageFromEvent(v, w.resolveKey); ok {
-			w.emit(msg)
+		if e, ok := classifyMessage(v, w.resolveKey); ok {
+			w.emit(e)
 		}
+	case *events.DeleteForMe:
+		alt := types.EmptyJID
+		w.emit(MessageDeleted{Chat: w.resolveKey(v.ChatJID, alt), ID: v.MessageID, At: v.Timestamp, ForMe: true})
 	case *events.HistorySync:
 		if h, ok := historyFromProto(v.Data, w.client().ParseWebMessage, w.resolveKey, w.log); ok {
 			w.log.Info("history sync", "type", v.Data.GetSyncType().String(),

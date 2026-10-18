@@ -3,6 +3,9 @@ package wa
 import (
 	"log/slog"
 	"slices"
+	"time"
+
+	"go.mau.fi/whatsmeow/proto/waE2E"
 
 	"go.mau.fi/whatsmeow/proto/waHistorySync"
 	"go.mau.fi/whatsmeow/proto/waWeb"
@@ -25,11 +28,59 @@ func messageFromEvent(evt *events.Message, resolve keyResolver) (Message, bool) 
 		return Message{}, false
 	}
 	kind, text, ok := messageContent(evt.Message)
-	if !ok {
-		return Message{}, false
+	if !ok || kind == KindReaction {
+		return Message{}, false // reactions are Reaction events, not messages
 	}
-	// In a LID-addressed DM the phone-number form of the chat is the other
-	// party's: the recipient for our own messages, the sender otherwise.
+	m, _ := messageFromEventBase(evt, resolve)
+	m.Kind, m.Text = kind, text
+	return m, true
+}
+
+// classifyMessage turns a whatsmeow message into the event it represents:
+// a Message, or an edit, revoke or reaction referring to an earlier one.
+func classifyMessage(evt *events.Message, resolve keyResolver) (Event, bool) {
+	if evt.Info.Chat == types.StatusBroadcastJID {
+		return nil, false
+	}
+	base, _ := messageFromEventBase(evt, resolve)
+	if r := evt.Message.GetReactionMessage(); r != nil && r.GetKey().GetID() != "" {
+		at := base.Timestamp
+		if ms := r.GetSenderTimestampMS(); ms > 0 {
+			at = time.UnixMilli(ms)
+		}
+		return Reaction{
+			Chat: base.Chat, MessageID: r.GetKey().GetID(),
+			Sender: base.Sender, FromMe: base.FromMe, Emoji: r.GetText(), At: at,
+		}, true
+	}
+	if p := evt.Message.GetProtocolMessage(); p != nil {
+		// Type's zero value is REVOKE, so only trust a type that came with a
+		// target message.
+		if p.Type == nil || p.GetKey().GetID() == "" {
+			return nil, false
+		}
+		switch p.GetType() {
+		case waE2E.ProtocolMessage_REVOKE:
+			return MessageDeleted{Chat: base.Chat, ID: p.GetKey().GetID(), At: base.Timestamp}, true
+		case waE2E.ProtocolMessage_MESSAGE_EDIT:
+			kind, text, ok := messageContent(p.GetEditedMessage())
+			if !ok {
+				return nil, false
+			}
+			at := base.Timestamp
+			if ms := p.GetTimestampMS(); ms > 0 {
+				at = time.UnixMilli(ms)
+			}
+			return MessageEdited{Chat: base.Chat, ID: p.GetKey().GetID(), Kind: kind, Text: text, At: at}, true
+		}
+		return nil, false
+	}
+	return messageFromEvent(evt, resolve)
+}
+
+// messageFromEventBase fills the addressing fields shared by every kind of
+// message, without looking at the content.
+func messageFromEventBase(evt *events.Message, resolve keyResolver) (Message, bool) {
 	chatAlt := evt.Info.SenderAlt
 	if evt.Info.IsFromMe {
 		chatAlt = evt.Info.RecipientAlt
@@ -45,8 +96,6 @@ func messageFromEvent(evt *events.Message, resolve keyResolver) (Message, bool) 
 		Timestamp: evt.Info.Timestamp,
 		FromMe:    evt.Info.IsFromMe,
 		IsGroup:   evt.Info.IsGroup,
-		Kind:      kind,
-		Text:      text,
 	}, true
 }
 
@@ -95,7 +144,20 @@ func historyFromProto(data *waHistorySync.HistorySync, parse webMessageParser, r
 		})
 
 		for _, hm := range conv.GetMessages() {
-			evt, err := parse(chatJID, hm.GetMessage())
+			web := hm.GetMessage()
+			for _, r := range web.GetReactions() {
+				sender := chatJID // in DMs the reactor is the other party unless it's us
+				fromMe := r.GetKey().GetFromMe()
+				if p, err := types.ParseJID(r.GetKey().GetParticipant()); err == nil && !p.IsEmpty() {
+					sender = p
+				}
+				h.Reactions = append(h.Reactions, Reaction{
+					Chat: chatKey, MessageID: web.GetKey().GetID(),
+					Sender: resolve(sender, types.EmptyJID), FromMe: fromMe,
+					Emoji: r.GetText(), At: time.UnixMilli(r.GetSenderTimestampMS()),
+				})
+			}
+			evt, err := parse(chatJID, web)
 			if err != nil {
 				log.Debug("skipping unparseable history message", "chat", chatKey, "err", err)
 				continue
@@ -108,7 +170,7 @@ func historyFromProto(data *waHistorySync.HistorySync, parse webMessageParser, r
 			h.Messages = append(h.Messages, msg)
 		}
 	}
-	empty := len(h.Chats) == 0 && len(h.Messages) == 0 && len(h.PushNames) == 0
+	empty := len(h.Chats) == 0 && len(h.Messages) == 0 && len(h.PushNames) == 0 && len(h.Reactions) == 0
 	return h, !empty
 }
 
