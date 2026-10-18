@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/wasichu/go-whassup/internal/store"
 	"github.com/wasichu/go-whassup/internal/wa"
 )
 
@@ -60,5 +62,24 @@ func TestSearchJumpsToOlderMessage(t *testing.T) {
 	h.settle()
 	if v := ansi.Strip(h.view()); !strings.Contains(v, "the needle") {
 		t.Errorf("should scroll to the hit:\n%s", v)
+	}
+}
+
+// encryptedStore is a store whose search is off, as while encrypted.
+type encryptedStore struct{ Store }
+
+func (encryptedStore) Search(context.Context, string, int) ([]store.SearchHit, error) {
+	return nil, store.ErrSearchUnavailable
+}
+
+func TestSearchUnavailableShownOnOpen(t *testing.T) {
+	h := newHarness(t, true)
+	m := h.model()
+	m.deps.Store = encryptedStore{m.deps.Store}
+	h.m = m
+	h.key("s")
+	h.settle()
+	if v := ansi.Strip(h.view()); !strings.Contains(v, "unavailable while encryption is on") {
+		t.Fatalf("unavailable not shown before typing:\n%s", v)
 	}
 }

@@ -39,6 +39,18 @@ func runSearch(ctx context.Context, st Store, query string, seq int) tea.Cmd {
 	}
 }
 
+// probeSearch asks the store whether search works at all (it doesn't
+// while messages are encrypted), so the page can say so before anything
+// is typed. It reports only that: results for the empty query are none.
+func probeSearch(ctx context.Context, st Store) tea.Cmd {
+	return func() tea.Msg {
+		if _, err := st.Search(ctx, "", 1); errors.Is(err, store.ErrSearchUnavailable) {
+			return searchResultsMsg{seq: 0, err: err} // dropped if a query was typed meanwhile
+		}
+		return nil
+	}
+}
+
 func (m Model) openSearch() (Model, tea.Cmd) {
 	in := textinput.New()
 	in.Prompt = "Search: "
@@ -47,7 +59,7 @@ func (m Model) openSearch() (Model, tea.Cmd) {
 	in.CharLimit = 200
 	in.SetWidth(max(m.width-12, 10))
 	m.screen, m.search = screenSearch, search{input: in}
-	cmd := m.search.input.Focus() // evaluate before m is copied into the return
+	cmd := tea.Batch(m.search.input.Focus(), probeSearch(m.ctx, m.deps.Store)) // evaluate before m is copied into the return
 	return m, cmd
 }
 
