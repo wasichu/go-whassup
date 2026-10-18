@@ -13,7 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func TestMediaOfStripsQuotedContextAndKeepsType(t *testing.T) {
+func TestMediaOfStripsQuotedContextKeepsTypeAndThumbnail(t *testing.T) {
 	msg := &waE2E.Message{ImageMessage: &waE2E.ImageMessage{
 		Caption: proto.String("cat"), Mimetype: proto.String("image/jpeg"), FileLength: proto.Uint64(1234),
 		DirectPath: proto.String("/v/t62/abc"), MediaKey: []byte("key"),
@@ -24,8 +24,18 @@ func TestMediaOfStripsQuotedContextAndKeepsType(t *testing.T) {
 	if m == nil || m.Mime != "image/jpeg" || m.Size != 1234 {
 		t.Fatalf("media = %+v", m)
 	}
-	if bytes.Contains(m.Data, []byte("someone else's text")) || bytes.Contains(m.Data, []byte("thumb")) {
-		t.Error("quoted context or thumbnail kept in stored media")
+	if bytes.Contains(m.Data, []byte("someone else's text")) {
+		t.Error("quoted context kept in stored media")
+	}
+	if string(m.Thumbnail) != "thumb" {
+		t.Errorf("thumbnail = %q", m.Thumbnail)
+	}
+	if parsed, err := ParseMedia(m.Data); err != nil || string(parsed.Thumbnail) != "thumb" {
+		t.Errorf("thumbnail lost when stored and parsed back: %v, %v", parsed, err)
+	}
+	big := mediaOf(&waE2E.Message{ImageMessage: &waE2E.ImageMessage{JPEGThumbnail: make([]byte, maxThumbnail+1)}})
+	if big.Thumbnail != nil || len(big.Data) > maxThumbnail {
+		t.Error("an oversized thumbnail should be dropped")
 	}
 	d, err := downloadable(*m)
 	if err != nil {

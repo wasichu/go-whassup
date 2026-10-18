@@ -25,7 +25,14 @@ type Media struct {
 	Mime     string
 	FileName string // documents only
 	Size     int64
+	// Thumbnail is the small JPEG preview WhatsApp embeds in photo, video
+	// and document messages (kept in Data; nil for older stored messages).
+	Thumbnail []byte
 }
+
+// maxThumbnail drops unusually large embedded thumbnails rather than store
+// them (they're normally a few KB).
+const maxThumbnail = 64 << 10
 
 var (
 	// ErrMediaExpired means WhatsApp no longer has the file (404/410).
@@ -44,24 +51,25 @@ func mediaOf(msg *waE2E.Message) *Media {
 		wrapped        *waE2E.Message
 		mimeType, name string
 		size           uint64
+		thumb          []byte
 	)
 	switch {
 	case msg.GetImageMessage() != nil:
 		m := proto.Clone(msg.GetImageMessage()).(*waE2E.ImageMessage)
-		m.ContextInfo, m.JPEGThumbnail = nil, nil
-		wrapped, mimeType, size = &waE2E.Message{ImageMessage: m}, m.GetMimetype(), m.GetFileLength()
+		m.ContextInfo, m.JPEGThumbnail = nil, keepThumbnail(m.JPEGThumbnail)
+		wrapped, mimeType, size, thumb = &waE2E.Message{ImageMessage: m}, m.GetMimetype(), m.GetFileLength(), m.JPEGThumbnail
 	case msg.GetVideoMessage() != nil:
 		m := proto.Clone(msg.GetVideoMessage()).(*waE2E.VideoMessage)
-		m.ContextInfo, m.JPEGThumbnail = nil, nil
-		wrapped, mimeType, size = &waE2E.Message{VideoMessage: m}, m.GetMimetype(), m.GetFileLength()
+		m.ContextInfo, m.JPEGThumbnail = nil, keepThumbnail(m.JPEGThumbnail)
+		wrapped, mimeType, size, thumb = &waE2E.Message{VideoMessage: m}, m.GetMimetype(), m.GetFileLength(), m.JPEGThumbnail
 	case msg.GetAudioMessage() != nil:
 		m := proto.Clone(msg.GetAudioMessage()).(*waE2E.AudioMessage)
 		m.ContextInfo = nil
 		wrapped, mimeType, size = &waE2E.Message{AudioMessage: m}, m.GetMimetype(), m.GetFileLength()
 	case msg.GetDocumentMessage() != nil:
 		m := proto.Clone(msg.GetDocumentMessage()).(*waE2E.DocumentMessage)
-		m.ContextInfo, m.JPEGThumbnail = nil, nil
-		wrapped, mimeType, size, name = &waE2E.Message{DocumentMessage: m}, m.GetMimetype(), m.GetFileLength(), m.GetFileName()
+		m.ContextInfo, m.JPEGThumbnail = nil, keepThumbnail(m.JPEGThumbnail)
+		wrapped, mimeType, size, name, thumb = &waE2E.Message{DocumentMessage: m}, m.GetMimetype(), m.GetFileLength(), m.GetFileName(), m.JPEGThumbnail
 	case msg.GetStickerMessage() != nil:
 		m := proto.Clone(msg.GetStickerMessage()).(*waE2E.StickerMessage)
 		m.ContextInfo, m.PngThumbnail = nil, nil
@@ -73,7 +81,15 @@ func mediaOf(msg *waE2E.Message) *Media {
 	if err != nil {
 		return nil // can't happen for a message we just unmarshalled
 	}
-	return &Media{Data: data, Mime: mimeType, FileName: name, Size: int64(size)}
+	return &Media{Data: data, Mime: mimeType, FileName: name, Size: int64(size), Thumbnail: thumb}
+}
+
+// keepThumbnail keeps an embedded thumbnail unless it's oversized.
+func keepThumbnail(t []byte) []byte {
+	if len(t) > maxThumbnail {
+		return nil
+	}
+	return t
 }
 
 // ParseMedia rebuilds a Media from its Data (as stored), recovering the

@@ -40,7 +40,7 @@ whatsmeow does **not** persist message content, so we do.
 | Table | Columns |
 | --- | --- |
 | `chats` | `jid` PK, `name`, `is_group`, `last_message_at`, `last_read_at` (unix s; v3; chats existing at upgrade count as read), `muted_until` (unix s, 0 = not muted; v12; from history sync and mute changes on other devices) |
-| `messages` | PK `(chat_jid, id)`, `sender_jid`, `push_name`, `ts` (unix s), `from_me`, `kind`, `body` BLOB, `codec` |
+| `messages` | PK `(chat_jid, id)`, `sender_jid`, `push_name`, `ts` (unix s), `from_me`, `kind`, `body` BLOB, `codec`, `media` BLOB + `media_codec` (the attachment's message, sealed like text: media key, path, type, size, and WhatsApp's embedded JPEG thumbnail, ≤64 KB, kept since 2026-10-18 for previews), `edited_at`, `deleted` |
 | `contacts` | `jid` PK, `name` (your address-book name for them), `push_name` (the name they chose), `business_name`. Filled by contact snapshots/updates, history sync and incoming messages. v2 added `name` and `business_name`. |
 
 **Behaviour:**
@@ -148,11 +148,11 @@ migration (implemented in `internal/store/codec.go`):
 - `internal/crypt`: AES-256-GCM with associated data, envelope wrapping, and Argon2id.
 - `internal/keysource`: keyring, command and prompt.
 - `internal/store/keys.go`: the keys table and the re-seal.
-- `internal/app/encryption.go`: the startup sequence.
+- `internal/app/encryptor.go`: startup and live changes (`encryption.go`: keys and sources).
 
 **What's encrypted.**
 - Message text, **reactions** (they're content: what people thought of a message), and
-  attachment keys.
+  attachment keys (with their thumbnails).
 - Each value is bound to its message and column, and for reactions to the sender, via
   GCM associated data, so values can't be swapped between rows.
 - The per-row `codec` columns hold the **key ID** (0 = plaintext), and the algorithm is
