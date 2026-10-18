@@ -47,8 +47,8 @@ the status line. If the device isn't linked, it opens the **login screen** inste
 | `pgup`/`pgdn` | scroll messages | scroll messages |
 | `/` | find a chat or contact (new chats too) | (typed) |
 | `s` | search message text | (typed) |
-| `ctrl+o` | | this chat's attachments: open (downloads if needed) |
-| `ctrl+t` | | send a file to this chat |
+| `ctrl+o` | | view attachments: open (downloads if needed), save a copy |
+| `ctrl+t` | | attach file: send one to this chat |
 | `i` | chat info: number, or a group's topic and members | (typed) |
 | `L` | login screen: link, or re-link | (typed) |
 | `,` | settings | (typed) |

@@ -27,8 +27,8 @@ var keys = struct {
 	Quit:      key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 	Find:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "find a chat or contact")),
 	Search:    key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "search messages")),
-	Media:     key.NewBinding(key.WithKeys("ctrl+o"), key.WithHelp("ctrl+o", "this chat's attachments")),
-	Attach:    key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "send a file")),
+	Media:     key.NewBinding(key.WithKeys("ctrl+o"), key.WithHelp("ctrl+o", "view attachments")),
+	Attach:    key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "attach file")),
 	Info:      key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "chat info")),
 	Login:     key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "link or re-link")),
 	Settings:  key.NewBinding(key.WithKeys(","), key.WithHelp(",", "settings")),
@@ -54,7 +54,7 @@ var (
 		hint(keys.Open, "write"), hint(keys.Find, "find"), hint(keys.Search, "search"), keys.Help, keys.Quit,
 	}
 	inputHelp = []key.Binding{
-		keys.Send, hint(keys.Blur, "chats"), hint(keys.Media, "attachments"), hint(keys.Attach, "send file"),
+		keys.Send, hint(keys.Blur, "chats"), keys.Media, keys.Attach,
 		key.NewBinding(key.WithKeys("pgup", "pgdown"), key.WithHelp("pgup/pgdn", "scroll")),
 	}
 	menuHelp   = []key.Binding{keys.Up, keys.Down, keys.Select, keys.Back}
