@@ -116,9 +116,6 @@ func runTUI() error {
 }
 
 func runLogin(ctx context.Context, e env, phone string) error {
-	ctx, cancel := context.WithTimeout(ctx, pairTimeout)
-	defer cancel()
-
 	client, err := e.openClient(ctx)
 	if err != nil {
 		return err
@@ -138,6 +135,8 @@ func runLogin(ctx context.Context, e env, phone string) error {
 	}
 
 	events := subscribe(client, e.log)
+	// ctx (not a timeout ctx) goes to Pair: it bounds the connection's whole
+	// lifetime, and we keep the connection open after linking.
 	code, err := client.Pair(ctx, phone)
 	if err != nil {
 		return fmt.Errorf("pairing: %w", err)
@@ -146,22 +145,38 @@ func runLogin(ctx context.Context, e env, phone string) error {
 	fmt.Fprintln(os.Stdout, "On your phone: WhatsApp > Settings > Linked devices > Link a device >")
 	fmt.Fprintln(os.Stdout, "\"Link with phone number instead\", then enter the code above.")
 
-	for {
+	deadline := time.NewTimer(pairTimeout)
+	defer deadline.Stop()
+	for linked := false; !linked; {
 		select {
 		case evt := <-events:
 			switch v := evt.(type) {
 			case wa.PairSuccess:
 				fmt.Fprintf(os.Stdout, "Linked as %s. Finishing setup...\n", v.JID)
 			case wa.Connected:
-				fmt.Fprintln(os.Stdout, "Connected. Session saved; run `wa-tui listen` or `wa-tui`.")
-				return nil
+				linked = true
 			case wa.PairFailed:
 				return fmt.Errorf("pairing failed: %s", v.Reason)
 			case wa.LoggedOut:
 				return fmt.Errorf("logged out during pairing: %s", v.Reason)
 			}
+		case <-deadline.C:
+			return errors.New("timed out waiting for the pairing code to be entered")
 		case <-ctx.Done():
 			return fmt.Errorf("waiting for pairing: %w", ctx.Err())
+		}
+	}
+
+	// The phone pushes app-state keys and history sync right after linking;
+	// stay connected so that initial sync can complete.
+	fmt.Fprintln(os.Stdout, "Connected and session saved. Staying online for the initial sync;")
+	fmt.Fprintln(os.Stdout, "Ctrl-C when you're done (then use `wa-tui listen`).")
+	for {
+		select {
+		case evt := <-events:
+			printEvent(e, evt)
+		case <-ctx.Done():
+			return nil
 		}
 	}
 }
@@ -173,21 +188,7 @@ func runListen(ctx context.Context, e env) error {
 	}
 	defer closeClient(client, e.log)
 
-	client.SetEventHandler(func(evt wa.Event) {
-		switch v := evt.(type) {
-		case wa.Message:
-			e.log.Info("message", "id", v.ID, "chat", v.Chat, "sender", v.Sender,
-				"push_name", v.PushName, "from_me", v.FromMe, "group", v.IsGroup, "text", v.Text)
-			fmt.Fprintf(os.Stdout, "%s  %s  %s: %s\n",
-				v.Timestamp.Local().Format("15:04:05"), v.Chat, senderLabel(v), v.Text)
-		case wa.LoggedOut:
-			e.log.Warn("logged out", "reason", v.Reason)
-			fmt.Fprintf(os.Stdout, "Logged out (%s). Run `wa-tui login` to pair again.\n", v.Reason)
-		default:
-			e.log.Info("connection event", "type", fmt.Sprintf("%T", evt))
-			fmt.Fprintf(os.Stdout, "-- %T\n", evt)
-		}
-	})
+	client.SetEventHandler(func(evt wa.Event) { printEvent(e, evt) })
 
 	if err := client.Connect(ctx); err != nil {
 		if errors.Is(err, wa.ErrNotPaired) {
@@ -198,6 +199,24 @@ func runListen(ctx context.Context, e env) error {
 	fmt.Fprintf(os.Stdout, "Listening (Ctrl-C to stop). Also logging to %s\n", e.paths.LogFile)
 	<-ctx.Done()
 	return nil
+}
+
+// printEvent is the headless output for login/listen. Message text is logged
+// at debug only, to keep chat content out of the default log.
+func printEvent(e env, evt wa.Event) {
+	switch v := evt.(type) {
+	case wa.Message:
+		e.log.Info("message", "id", v.ID, "chat", v.Chat, "sender", v.Sender, "from_me", v.FromMe, "group", v.IsGroup)
+		e.log.Debug("message text", "id", v.ID, "push_name", v.PushName, "text", v.Text)
+		fmt.Fprintf(os.Stdout, "%s  %s  %s: %s\n",
+			v.Timestamp.Local().Format("15:04:05"), v.Chat, senderLabel(v), v.Text)
+	case wa.LoggedOut:
+		e.log.Warn("logged out", "reason", v.Reason)
+		fmt.Fprintf(os.Stdout, "Logged out (%s). Run `wa-tui login` to pair again.\n", v.Reason)
+	default:
+		e.log.Info("connection event", "type", fmt.Sprintf("%T", evt))
+		fmt.Fprintf(os.Stdout, "-- %T\n", evt)
+	}
 }
 
 func senderLabel(m wa.Message) string {

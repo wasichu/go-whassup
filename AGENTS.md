@@ -19,7 +19,7 @@ nothing else to install or run.
 | --- | --- |
 | `just check` | fmt-check + build + vet + lint + test. **Run before declaring any change done.** |
 | `just build` | Builds `bin/wa-tui` |
-| `just run` | Builds and launches the TUI (needs a real terminal) |
+| `just run [args]` | Builds and runs: no args = TUI (needs a real terminal); `login [phone]` = pair via phone code; `listen` = headless, prints incoming messages. Flags (`-debug`) go *after* the subcommand. |
 | `just test [flags]` | `go test ./...` with extra flags, e.g. `just test -run TestX -v` |
 | `just lint [flags]` | golangci-lint. `.golangci.yml` enforces import boundaries, bans cgo sqlite and Bubble Tea v1, and forbids printing to the terminal and discarding errors. Fix the code; don't weaken the config. |
 | `just fmt` / `just tidy` | gofmt / `go mod tidy` |
@@ -62,7 +62,7 @@ invocations in docs.
 ## Layout
 
 ```
-cmd/wa-tui/      main: wiring only (paths, logging, construct and run)
+cmd/wa-tui/      main: wiring + headless subcommands (`login`, `listen`); no business logic
 internal/paths/  XDG runtime locations
 internal/wa/     whatsmeow adapter: interface + typed events. ONLY package importing whatsmeow.
 internal/store/  OUR chat/message schema. whatsmeow does NOT persist message content.
