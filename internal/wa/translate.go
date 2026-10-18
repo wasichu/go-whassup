@@ -49,59 +49,76 @@ func classifyMessage(evt *events.Message, resolve keyResolver, decrypt secretDec
 	}
 	base, _ := messageFromEventBase(evt, resolve)
 	if sem := evt.Message.GetSecretEncryptedMessage(); sem != nil {
-		// Newer clients send edits encrypted with the original message's
-		// secret. Anything else secret-encrypted (poll/event edits) isn't
-		// shown, and is never a message in its own right.
-		if sem.GetSecretEncType() != waE2E.SecretEncryptedMessage_MESSAGE_EDIT || sem.GetTargetMessageKey().GetID() == "" {
-			return nil, false
-		}
-		plain, err := decrypt(evt)
-		if err != nil {
-			return nil, false
-		}
-		edited := plain
-		if p := plain.GetProtocolMessage(); p.GetEditedMessage() != nil {
-			edited = p.GetEditedMessage()
-		}
-		kind, text, ok := messageContent(edited)
+		return classifySecretEdit(evt, sem, base, decrypt)
+	}
+	if r := evt.Message.GetReactionMessage(); r != nil && r.GetKey().GetID() != "" {
+		return classifyReaction(r, base), true
+	}
+	if p := evt.Message.GetProtocolMessage(); p != nil {
+		return classifyProtocol(p, base)
+	}
+	return messageFromEvent(evt, resolve)
+}
+
+// classifySecretEdit handles secret-encrypted messages. Newer clients send
+// edits encrypted with the original message's secret; anything else
+// secret-encrypted (poll/event edits) isn't shown and is never a message
+// in its own right.
+func classifySecretEdit(evt *events.Message, sem *waE2E.SecretEncryptedMessage, base Message, decrypt secretDecrypter) (Event, bool) {
+	target := sem.GetTargetMessageKey().GetID()
+	if sem.GetSecretEncType() != waE2E.SecretEncryptedMessage_MESSAGE_EDIT || target == "" {
+		return nil, false
+	}
+	plain, err := decrypt(evt)
+	if err != nil {
+		return nil, false
+	}
+	edited := plain
+	if p := plain.GetProtocolMessage(); p.GetEditedMessage() != nil {
+		edited = p.GetEditedMessage()
+	}
+	kind, text, ok := messageContent(edited)
+	if !ok {
+		return nil, false
+	}
+	return MessageEdited{Chat: base.Chat, ID: target, Kind: kind, Text: text, At: base.Timestamp}, true
+}
+
+func classifyReaction(r *waE2E.ReactionMessage, base Message) Reaction {
+	return Reaction{
+		Chat: base.Chat, MessageID: r.GetKey().GetID(),
+		Sender: base.Sender, FromMe: base.FromMe, Emoji: r.GetText(),
+		At: atOr(r.GetSenderTimestampMS(), base.Timestamp),
+	}
+}
+
+// classifyProtocol handles revokes and plain (unencrypted) edits.
+func classifyProtocol(p *waE2E.ProtocolMessage, base Message) (Event, bool) {
+	// Type's zero value is REVOKE, so only trust a type that came with a
+	// target message.
+	target := p.GetKey().GetID()
+	if p.Type == nil || target == "" {
+		return nil, false
+	}
+	switch p.GetType() {
+	case waE2E.ProtocolMessage_REVOKE:
+		return MessageDeleted{Chat: base.Chat, ID: target, At: base.Timestamp}, true
+	case waE2E.ProtocolMessage_MESSAGE_EDIT:
+		kind, text, ok := messageContent(p.GetEditedMessage())
 		if !ok {
 			return nil, false
 		}
-		return MessageEdited{Chat: base.Chat, ID: sem.GetTargetMessageKey().GetID(), Kind: kind, Text: text, At: base.Timestamp}, true
+		return MessageEdited{Chat: base.Chat, ID: target, Kind: kind, Text: text, At: atOr(p.GetTimestampMS(), base.Timestamp)}, true
 	}
-	if r := evt.Message.GetReactionMessage(); r != nil && r.GetKey().GetID() != "" {
-		at := base.Timestamp
-		if ms := r.GetSenderTimestampMS(); ms > 0 {
-			at = time.UnixMilli(ms)
-		}
-		return Reaction{
-			Chat: base.Chat, MessageID: r.GetKey().GetID(),
-			Sender: base.Sender, FromMe: base.FromMe, Emoji: r.GetText(), At: at,
-		}, true
+	return nil, false
+}
+
+// atOr is the sender's timestamp (milliseconds) if set, else fallback.
+func atOr(ms int64, fallback time.Time) time.Time {
+	if ms > 0 {
+		return time.UnixMilli(ms)
 	}
-	if p := evt.Message.GetProtocolMessage(); p != nil {
-		// Type's zero value is REVOKE, so only trust a type that came with a
-		// target message.
-		if p.Type == nil || p.GetKey().GetID() == "" {
-			return nil, false
-		}
-		switch p.GetType() {
-		case waE2E.ProtocolMessage_REVOKE:
-			return MessageDeleted{Chat: base.Chat, ID: p.GetKey().GetID(), At: base.Timestamp}, true
-		case waE2E.ProtocolMessage_MESSAGE_EDIT:
-			kind, text, ok := messageContent(p.GetEditedMessage())
-			if !ok {
-				return nil, false
-			}
-			at := base.Timestamp
-			if ms := p.GetTimestampMS(); ms > 0 {
-				at = time.UnixMilli(ms)
-			}
-			return MessageEdited{Chat: base.Chat, ID: p.GetKey().GetID(), Kind: kind, Text: text, At: at}, true
-		}
-		return nil, false
-	}
-	return messageFromEvent(evt, resolve)
+	return fallback
 }
 
 // messageFromEventBase fills the addressing fields shared by every kind of
@@ -134,70 +151,83 @@ func historyFromProto(data *waHistorySync.HistorySync, parse webMessageParser, r
 	if data == nil || data.GetSyncType() == waHistorySync.HistorySync_INITIAL_STATUS_V3 {
 		return HistorySync{}, false
 	}
-	var h HistorySync
-	if names := data.GetPushnames(); len(names) > 0 {
-		h.PushNames = make(map[string]string, len(names))
-		for _, pn := range names {
-			jid, err := types.ParseJID(pn.GetID())
-			if err != nil || pn.GetPushname() == "" {
-				continue
-			}
-			h.PushNames[resolve(jid, types.EmptyJID)] = pn.GetPushname()
-		}
-	}
-
+	h := HistorySync{PushNames: historyPushNames(data.GetPushnames(), resolve)}
 	for _, conv := range data.GetConversations() {
-		chatJID, err := types.ParseJID(conv.GetID())
-		if err != nil {
-			log.Debug("skipping history conversation with bad id", "id", conv.GetID(), "err", err)
-			continue
-		}
-		if chatJID == types.StatusBroadcastJID {
-			continue
-		}
-		var pnAlt types.JID
-		if pn, err := types.ParseJID(conv.GetPnJID()); err == nil {
-			pnAlt = pn
-		}
-		chatKey := resolve(chatJID, pnAlt)
-		name := conv.GetName()
-		if name == "" {
-			name = conv.GetDisplayName()
-		}
-		h.Chats = append(h.Chats, Chat{
-			JID: chatKey, Name: name, IsGroup: chatJID.Server == types.GroupServer,
-			UnreadCount: int(conv.GetUnreadCount()),
-		})
+		addConversation(&h, conv, parse, resolve, log)
+	}
+	empty := len(h.Chats) == 0 && len(h.Messages) == 0 && len(h.PushNames) == 0 && len(h.Reactions) == 0
+	return h, !empty
+}
 
-		for _, hm := range conv.GetMessages() {
-			web := hm.GetMessage()
-			for _, r := range web.GetReactions() {
-				sender := chatJID // in DMs the reactor is the other party unless it's us
-				fromMe := r.GetKey().GetFromMe()
-				if p, err := types.ParseJID(r.GetKey().GetParticipant()); err == nil && !p.IsEmpty() {
-					sender = p
-				}
-				h.Reactions = append(h.Reactions, Reaction{
-					Chat: chatKey, MessageID: web.GetKey().GetID(),
-					Sender: resolve(sender, types.EmptyJID), FromMe: fromMe,
-					Emoji: r.GetText(), At: time.UnixMilli(r.GetSenderTimestampMS()),
-				})
-			}
-			evt, err := parse(chatJID, web)
-			if err != nil {
-				log.Debug("skipping unparseable history message", "chat", chatKey, "err", err)
-				continue
-			}
-			msg, ok := messageFromEvent(evt, resolve)
-			if !ok {
-				continue
-			}
+func historyPushNames(names []*waHistorySync.Pushname, resolve keyResolver) map[string]string {
+	if len(names) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(names))
+	for _, pn := range names {
+		jid, err := types.ParseJID(pn.GetID())
+		if err != nil || pn.GetPushname() == "" {
+			continue
+		}
+		out[resolve(jid, types.EmptyJID)] = pn.GetPushname()
+	}
+	return out
+}
+
+// addConversation adds one history conversation's chat, messages and
+// reactions to h.
+func addConversation(h *HistorySync, conv *waHistorySync.Conversation, parse webMessageParser, resolve keyResolver, log *slog.Logger) {
+	chatJID, err := types.ParseJID(conv.GetID())
+	if err != nil {
+		log.Debug("skipping history conversation with bad id", "id", conv.GetID(), "err", err)
+		return
+	}
+	if chatJID == types.StatusBroadcastJID {
+		return
+	}
+	var pnAlt types.JID
+	if pn, err := types.ParseJID(conv.GetPnJID()); err == nil {
+		pnAlt = pn
+	}
+	chatKey := resolve(chatJID, pnAlt)
+	name := conv.GetName()
+	if name == "" {
+		name = conv.GetDisplayName()
+	}
+	h.Chats = append(h.Chats, Chat{
+		JID: chatKey, Name: name, IsGroup: chatJID.Server == types.GroupServer,
+		UnreadCount: int(conv.GetUnreadCount()),
+	})
+	for _, hm := range conv.GetMessages() {
+		web := hm.GetMessage()
+		h.Reactions = append(h.Reactions, historyReactions(web, chatJID, chatKey, resolve)...)
+		evt, err := parse(chatJID, web)
+		if err != nil {
+			log.Debug("skipping unparseable history message", "chat", chatKey, "err", err)
+			continue
+		}
+		if msg, ok := messageFromEvent(evt, resolve); ok {
 			msg.Chat = chatKey // the conversation's key is authoritative
 			h.Messages = append(h.Messages, msg)
 		}
 	}
-	empty := len(h.Chats) == 0 && len(h.Messages) == 0 && len(h.PushNames) == 0 && len(h.Reactions) == 0
-	return h, !empty
+}
+
+// historyReactions translates the reactions attached to a history message.
+func historyReactions(web *waWeb.WebMessageInfo, chatJID types.JID, chatKey string, resolve keyResolver) []Reaction {
+	var out []Reaction
+	for _, r := range web.GetReactions() {
+		sender := chatJID // in DMs the reactor is the other party unless it's us
+		if p, err := types.ParseJID(r.GetKey().GetParticipant()); err == nil && !p.IsEmpty() {
+			sender = p
+		}
+		out = append(out, Reaction{
+			Chat: chatKey, MessageID: web.GetKey().GetID(),
+			Sender: resolve(sender, types.EmptyJID), FromMe: r.GetKey().GetFromMe(),
+			Emoji: r.GetText(), At: time.UnixMilli(r.GetSenderTimestampMS()),
+		})
+	}
+	return out
 }
 
 // contactsFromStore translates whatsmeow's contact store snapshot, merging
