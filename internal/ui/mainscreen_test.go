@@ -133,7 +133,7 @@ func TestHelpOverlay(t *testing.T) {
 	h := newHarness(t, true)
 	h.key("?")
 	v := h.view()
-	for _, want := range []string{"Keys", "link/re-link", "send", "scroll up"} {
+	for _, want := range []string{"Keys", "Chat list", "Writing a message", "link or re-link", "send", "scroll up"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("help missing %q:\n%s", want, v)
 		}
@@ -265,8 +265,8 @@ func TestAttachmentKeysLiveInTheMessageBox(t *testing.T) {
 		return " " + strings.Join(out, " ") + " "
 	}
 	h := newHarness(t, true)
-	if got := keysOf(h.model().contextHelp()); strings.Contains(got, "ctrl+o") || strings.Contains(got, " o ") || !strings.Contains(got, " i ") {
-		t.Errorf("chat list hints %q: info yes, attachments no", got)
+	if got := keysOf(h.model().contextHelp()); strings.Contains(got, "ctrl+o") || strings.Contains(got, " o ") || !strings.Contains(got, " ? ") {
+		t.Errorf("chat list hints %q: no attachments, and ? for all keys", got)
 	}
 	h.key("o") // no longer a list shortcut
 	if h.model().screen != screenMain {

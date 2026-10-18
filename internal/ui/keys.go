@@ -17,20 +17,20 @@ var keys = struct {
 	// Everywhere.
 	ForceQuit key.Binding
 }{
-	Up:        key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "previous")),
-	Down:      key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "next")),
-	Open:      key.NewBinding(key.WithKeys("enter", "tab", "right", "l"), key.WithHelp("enter", "write")),
+	Up:        key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "previous chat")),
+	Down:      key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "next chat")),
+	Open:      key.NewBinding(key.WithKeys("enter", "tab", "right", "l"), key.WithHelp("enter", "write a message")),
 	Quit:      key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
-	Find:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "find/new chat")),
+	Find:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "find a chat or contact")),
 	Search:    key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "search messages")),
-	Media:     key.NewBinding(key.WithKeys("ctrl+o"), key.WithHelp("ctrl+o", "attachments")),
-	Attach:    key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "send file")),
+	Media:     key.NewBinding(key.WithKeys("ctrl+o"), key.WithHelp("ctrl+o", "this chat's attachments")),
+	Attach:    key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "send a file")),
 	Info:      key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "chat info")),
-	Login:     key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "link/re-link")),
+	Login:     key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "link or re-link")),
 	Settings:  key.NewBinding(key.WithKeys(","), key.WithHelp(",", "settings")),
-	Help:      key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+	Help:      key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "all keys")),
 	Send:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "send")),
-	Blur:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "chats")),
+	Blur:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back to chats")),
 	PageUp:    key.NewBinding(key.WithKeys("pgup"), key.WithHelp("pgup", "scroll up")),
 	PageDown:  key.NewBinding(key.WithKeys("pgdown"), key.WithHelp("pgdn", "scroll down")),
 	Select:    key.NewBinding(key.WithKeys("enter", "space"), key.WithHelp("enter", "select")),
@@ -38,13 +38,21 @@ var keys = struct {
 	Edit:      key.NewBinding(key.WithKeys("enter", "space"), key.WithHelp("enter", "change")),
 	Submit:    key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "continue")),
 	Cancel:    key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
-	ForceQuit: key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "quit")),
+	ForceQuit: key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "quit, from anywhere")),
 }
 
 // Binding sets per context, rendered with help.ShortHelpView/FullHelpView.
 var (
-	listHelp   = []key.Binding{keys.Up, keys.Down, keys.Open, keys.Find, keys.Search, keys.Info, keys.Login, keys.Settings, keys.Help, keys.Quit}
-	inputHelp  = []key.Binding{keys.Send, keys.Blur, keys.Media, keys.Attach, keys.PageUp, keys.PageDown}
+	// The status line shows a few essentials (short descriptions); ? shows
+	// every key, by section (mainHelpSections).
+	listHelp = []key.Binding{
+		key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "chats")),
+		hint(keys.Open, "write"), hint(keys.Find, "find"), hint(keys.Search, "search"), keys.Help, keys.Quit,
+	}
+	inputHelp = []key.Binding{
+		keys.Send, hint(keys.Blur, "chats"), hint(keys.Media, "attachments"), hint(keys.Attach, "send file"),
+		key.NewBinding(key.WithKeys("pgup", "pgdown"), key.WithHelp("pgup/pgdn", "scroll")),
+	}
 	menuHelp   = []key.Binding{keys.Up, keys.Down, keys.Select, keys.Back}
 	formHelp   = []key.Binding{keys.Submit, keys.Back}
 	waitHelp   = []key.Binding{keys.Cancel}
@@ -72,10 +80,21 @@ var (
 		key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "type a path")),
 		keys.Back,
 	}
-	settingsHelp = []key.Binding{keys.Up, keys.Down, keys.Edit, settingsPrev, keys.Back}
-	fullMainHelp = [][]key.Binding{
-		{keys.Up, keys.Down, keys.Open, keys.Find, keys.Search, keys.Info, keys.Quit},
-		{keys.Send, keys.Blur, keys.Media, keys.Attach, keys.PageUp, keys.PageDown},
-		{keys.Login, keys.Settings, keys.Help, keys.ForceQuit},
+	settingsHelp     = []key.Binding{keys.Up, keys.Down, keys.Edit, settingsPrev, keys.Back}
+	mainHelpSections = []helpSection{
+		{"Chat list", []key.Binding{keys.Up, keys.Down, keys.Open, keys.Find, keys.Search, keys.Info, keys.Login, keys.Settings, keys.Help, keys.Quit}},
+		{"Writing a message", []key.Binding{keys.Send, keys.Blur, keys.Media, keys.Attach, keys.PageUp, keys.PageDown}},
+		{"Anywhere", []key.Binding{keys.ForceQuit}},
 	}
 )
+
+// helpSection is a titled group of keys in the ? overlay.
+type helpSection struct {
+	title string
+	keys  []key.Binding
+}
+
+// hint is b with a shorter description, for the status line.
+func hint(b key.Binding, desc string) key.Binding {
+	return key.NewBinding(key.WithKeys(b.Keys()...), key.WithHelp(b.Help().Key, desc))
+}

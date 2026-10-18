@@ -9,10 +9,31 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+// helpView is the ? overlay: every main-screen key, by section, side by
+// side when there's room.
 func (m Model) helpView(height int) string {
-	content := paneTitleStyle.Render("Keys") + "\n\n" + m.help.FullHelpView(fullMainHelp) +
-		"\n\n" + faintStyle.Render("q / s i , ? and L only act from the chat list; in the message box they're typed. ctrl+o and ctrl+t work while writing. Press any key to close.")
-	return pageStyle(m.width, height).Render(content)
+	list := renderHelpSection(mainHelpSections[0])
+	rest := renderHelpSection(mainHelpSections[1]) + "\n\n" + renderHelpSection(mainHelpSections[2])
+	body := list + "\n\n" + rest
+	if lipgloss.Width(list)+lipgloss.Width(rest)+6 <= m.width-2 {
+		body = lipgloss.JoinHorizontal(lipgloss.Top, list, "      ", rest)
+	}
+	note := faintStyle.Render("Letter keys work on the chat list; in the message box they're typed. Press any key to close.")
+	return pageStyle(m.width, height).Render(paneTitleStyle.Render("Keys") + "\n\n" + body + "\n\n" + note)
+}
+
+// renderHelpSection lists a section's keys under its title, aligned.
+func renderHelpSection(s helpSection) string {
+	keyW := 0
+	for _, b := range s.keys {
+		keyW = max(keyW, lipgloss.Width(b.Help().Key))
+	}
+	lines := []string{senderStyle.Render(s.title)}
+	for _, b := range s.keys {
+		k := b.Help().Key
+		lines = append(lines, "  "+fromMeStyle.Render(k)+strings.Repeat(" ", keyW-lipgloss.Width(k))+"  "+b.Help().Desc)
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m Model) statusLine() string {
