@@ -160,3 +160,21 @@ func TestSaveAttachmentCopy(t *testing.T) {
 		t.Errorf("downloads = %d; the second save should use the cached file", h.client.Downloads())
 	}
 }
+
+func TestOpenedNoticeIsShortAndClearsOnMove(t *testing.T) {
+	h := newHarness(t, true)
+	h.client.DownloadData = []byte("%PDF-1.7")
+	h.seedAttachment("doc1", "report.pdf")
+	h.seedAttachment("doc2", "notes.pdf")
+	h.key("enter") // into the message box
+	h.key("ctrl+o")
+	h.key("enter") // open the newest
+	h.settle()
+	if n := h.model().notice; n != "File opened." {
+		t.Fatalf("notice = %q, want just \"File opened.\" (no cache file name)", n)
+	}
+	h.key("down")
+	if n := h.model().notice; n != "" {
+		t.Errorf("moving to another attachment should clear the notice, got %q", n)
+	}
+}

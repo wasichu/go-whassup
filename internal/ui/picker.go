@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -82,6 +81,7 @@ func (p *picker) move(r rootAPI, delta int) tea.Cmd {
 		return nil
 	}
 	p.selected = next
+	r.notify("") // an outcome ("File opened.") was about the previous attachment
 	return p.highlightChanged(r.inlineImages())
 }
 
@@ -196,7 +196,8 @@ func (m Model) mediaOpened(msg mediaOpenedMsg) (Model, tea.Cmd) {
 	case msg.err != nil:
 		m.setError("opening attachment", msg.err)
 	default:
-		m.notice, m.noticeIsErr = "Opened "+filepath.Base(msg.path), false
+		// The cached file's name is a hash: nothing worth showing.
+		m.notice, m.noticeIsErr = "File opened.", false
 	}
 	if msg.chat == m.conv.chat.JID {
 		return m, loadMessages(m.ctx, m.deps, msg.chat) // refresh the ✓
