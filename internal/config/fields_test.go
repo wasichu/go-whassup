@@ -80,8 +80,8 @@ func TestEncryptionFields(t *testing.T) {
 	}
 	on, ok1 := byName["encryption.enabled"].ConfirmationFor("true")
 	off, ok2 := byName["encryption.enabled"].ConfirmationFor("false")
-	if !ok1 || !ok2 || on.Question != "Turn on encryption?" || on.Yes != "Encrypt at next start" ||
-		off.Question != "Turn off encryption?" || off.Yes != "Decrypt at next start" || off.No != "Keep them encrypted" {
+	if !ok1 || !ok2 || on.Question != "Turn on encryption?" || on.Yes != "Encrypt now" ||
+		off.Question != "Turn off encryption?" || off.Yes != "Decrypt now" || off.No != "Keep them encrypted" {
 		t.Errorf("confirmations: on %+v, off %+v", on, off)
 	}
 	if _, ask := byName["ui.inline_images"].ConfirmationFor("false"); ask {

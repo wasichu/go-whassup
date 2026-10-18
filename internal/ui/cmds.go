@@ -47,6 +47,9 @@ type Deps struct {
 	// ApplyConfig makes a saved config take effect in the running app
 	// (retention, pairing options). Called off the UI goroutine.
 	ApplyConfig func(context.Context, config.Config) error
+	// Encryption turns at-rest encryption on and off live. Optional:
+	// without it, a change in Settings takes effect at the next start.
+	Encryption Encryption
 
 	// Graphics is the terminal's inline-image support (termcaps); images are
 	// used when it allows and Config.UI.InlineImages is set.

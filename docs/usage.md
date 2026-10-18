@@ -74,12 +74,15 @@ handlers (`internal/ui/keys.go`), so they can't drift.
 Turn on `[encryption] enabled` in Settings (`,`). It asks first, because it **encrypts
 message text, reactions and attachment keys only: who you talk to, when, and contact
 names stay readable on disk.**
-- On the next start, stored messages are encrypted in the background; the status line
-  says so.
-- **Turning it off** asks separately (`y` decrypt at next start, `n` keep them
-  encrypted). On the next start the key is unlocked one last time, messages are
-  decrypted back in the background, then the key is forgotten and search returns. A
-  keychain entry, if you used one, is left in place.
+- **It starts right away:** stored messages are encrypted in the background while you
+  keep using go-whassup, and the status line says when it's done. With `key_source =
+  prompt` you choose the passphrase there first (typed twice, hidden).
+- **Turning it off** asks separately (`y` decrypt now, `n` keep them encrypted). No
+  passphrase is needed (the key is already unlocked); messages are decrypted back in the
+  background, then the key is forgotten and search returns. A keychain entry, if you
+  used one, is left in place.
+- Changing your mind mid-way is fine: turning it back on while decrypting reuses the
+  same key, and quitting mid-way resumes at the next start.
 - **Key sources** (`key_source`):
   - `keyring`: your OS keychain; no prompt.
   - `password-command`: e.g. `pass show whatsapp`.

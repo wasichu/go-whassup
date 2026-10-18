@@ -79,14 +79,21 @@ receipt, so WhatsApp's servers learn *when* you read chats, though not what.
 
 ### `[encryption]`
 
-Changes take effect at the next start of `go-whassup`, `listen` or `login`; `db` commands
-never start or reverse encryption. To change `key_source` while encryption is on, turn
-encryption off, let it finish, then turn it on with the new source.
+Toggling `enabled` in Settings takes effect **immediately**: stored messages are encrypted
+or decrypted in the background while go-whassup keeps working, and the config is saved
+only once the change has started (if the key can't be set up, nothing changes). Editing
+the file by hand takes effect at the next start of `go-whassup`, `listen` or `login`; `db`
+commands never start or reverse encryption. To change `key_source` while encryption is on,
+turn encryption off, let it finish, then turn it on with the new source.
+
+With `password-command`, the command runs while the TUI owns the terminal, so it must not
+need the terminal itself: GUI pinentries (e.g. `pinentry-mac`) and `pass` with a GUI
+agent are fine, a curses pinentry is not.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `enabled` | `false` | Encrypt message text, reactions and attachment keys in `messages.db`. **Encrypts message text only: who you talk to, when, and contact names stay readable on disk.** Message search is off while it's on. Turning it on re-encrypts stored messages; turning it off decrypts them back. The Settings toggle asks first, with its own question each way (encrypt / decrypt at next start). |
-| `key_source` | `"keyring"` | `keyring` (OS keychain, no prompt), `password-command` (runs `password_command`; its output is the passphrase), or `prompt` (asks at startup). |
+| `key_source` | `"keyring"` | `keyring` (OS keychain, no prompt), `password-command` (runs `password_command`; its output is the passphrase), or `prompt` (asks for a passphrase at startup; turning encryption on in Settings asks for the new one there, twice). |
 | `password_command` | `""` | Shell command that prints the passphrase, e.g. `pass show whatsapp`. Required with `key_source = password-command` (even while encryption is off), and only listed in Settings then; choosing that source asks for it. |
 
 ### `[notifications]`

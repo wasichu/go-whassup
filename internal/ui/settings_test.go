@@ -89,7 +89,7 @@ func TestSettingsConfirmsEncryptionToggle(t *testing.T) {
 	h.key("enter")
 	v := ansi.Strip(h.view())
 	if !strings.Contains(v, "Turn on encryption?") || !strings.Contains(v, "who you talk to") ||
-		!strings.Contains(v, "y  Encrypt at next start") || !strings.Contains(v, "n  Cancel") {
+		!strings.Contains(v, "y  Encrypt now") || !strings.Contains(v, "n  Cancel") {
 		t.Fatalf("confirmation with metadata warning missing:\n%s", v)
 	}
 	if len(h.applied) != 0 {
@@ -109,8 +109,8 @@ func TestSettingsConfirmsEncryptionToggle(t *testing.T) {
 	// Turning it off asks its own question, with choices that say what happens.
 	h.key("enter")
 	v = ansi.Strip(h.view())
-	if !strings.Contains(v, "Turn off encryption?") || !strings.Contains(v, "decrypts stored messages") ||
-		!strings.Contains(v, "y  Decrypt at next start") || !strings.Contains(v, "n  Keep them encrypted") ||
+	if !strings.Contains(v, "Turn off encryption?") || !strings.Contains(v, "decrypted back to plain text") ||
+		!strings.Contains(v, "y  Decrypt now") || !strings.Contains(v, "n  Keep them encrypted") ||
 		strings.Contains(v, "Turn on encryption?") {
 		t.Fatalf("turning off should ask about decrypting:\n%s", v)
 	}

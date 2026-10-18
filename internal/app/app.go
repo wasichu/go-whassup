@@ -161,7 +161,7 @@ func runOnline(ctx context.Context, e env) (err error) {
 
 	switch e.inv.cmd {
 	case "tui":
-		deps := tuiDeps(e.cfg, e.p, client, e.st, rec, e.cache, e.log)
+		deps := tuiDeps(e.cfg, e.p, client, e.st, rec, e.crypto, e.log)
 		deps.Notice = encryptionNotice(e.enc)
 		return ui.Run(ctx, deps)
 	case "login":
@@ -202,7 +202,7 @@ func encryptionNotice(e encryption) string {
 // tuiDeps wires the TUI's collaborators. It's a separate function so a test
 // can check every field is set: the UI's own tests inject their own deps and
 // would not notice a field the app forgot.
-func tuiDeps(cfg config.Config, p paths.Paths, client *wa.WhatsApp, st *store.Store, rec *store.Recorder, cache *media.Switchable, log *slog.Logger) ui.Deps {
+func tuiDeps(cfg config.Config, p paths.Paths, client *wa.WhatsApp, st *store.Store, rec *store.Recorder, crypto *encryptor, log *slog.Logger) ui.Deps {
 	return ui.Deps{
 		Client:     client,
 		Store:      st,
@@ -215,11 +215,12 @@ func tuiDeps(cfg config.Config, p paths.Paths, client *wa.WhatsApp, st *store.St
 			rec.Prune(ctx)
 			return nil
 		},
-		Graphics:  termcaps.DetectGraphics(os.Getenv, termcaps.Tmux),
-		FocusHint: termcaps.FocusHint(os.Getenv, termcaps.Tmux),
-		Notify:    termcaps.DetectNotify(os.Getenv, termcaps.Tmux),
-		Media:     cache,
-		OpenFile:  media.Open,
+		Graphics:   termcaps.DetectGraphics(os.Getenv, termcaps.Tmux),
+		FocusHint:  termcaps.FocusHint(os.Getenv, termcaps.Tmux),
+		Notify:     termcaps.DetectNotify(os.Getenv, termcaps.Tmux),
+		Media:      crypto.cache,
+		Encryption: crypto,
+		OpenFile:   media.Open,
 	}
 }
 

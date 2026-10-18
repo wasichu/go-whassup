@@ -28,6 +28,8 @@ type settings struct {
 	staged     *config.Config
 	stagedFrom int
 	input      textinput.Model
+	pass       *passphrase // asking for a new passphrase (encryption, key source prompt)
+	busy       string      // what's being applied, until configSavedMsg
 	err        string
 	saved      string // last confirmation
 }
@@ -45,6 +47,9 @@ type configSavedMsg struct {
 	cfg   config.Config
 	saved bool // the file was written (err may still report an apply failure)
 	err   error
+	// encryption, if set, is a re-seal the change started (see Encryption).
+	encryption   <-chan error
+	encryptionOn bool
 }
 
 // saveConfig writes cfg and applies it to the running app. Both happen off
@@ -74,19 +79,61 @@ func (s *settings) update(r rootAPI, msg tea.Msg) (bool, tea.Cmd) {
 	case configSavedMsg:
 		s.savedResult(r, msg)
 		return false, nil
+	case passphraseCheckedMsg:
+		return false, s.passphraseChecked(r, msg)
 	case tea.KeyPressMsg:
+		if s.pass != nil {
+			return false, s.passphraseKey(r, msg)
+		}
 		return s.key(r, msg)
 	}
-	if !s.editing {
-		return false, nil
-	}
 	var cmd tea.Cmd
-	s.input, cmd = s.input.Update(msg)
+	switch {
+	case s.pass != nil:
+		s.pass.input, cmd = s.pass.input.Update(msg)
+	case s.editing:
+		s.input, cmd = s.input.Update(msg)
+	}
 	return false, cmd
 }
 
+// passphraseChecked continues turning encryption on or off once it's known
+// whether a passphrase must be typed first.
+func (s *settings) passphraseChecked(r rootAPI, msg passphraseCheckedMsg) tea.Cmd {
+	switch {
+	case msg.err != nil:
+		s.busy, s.err = "", msg.err.Error()
+		return nil
+	case msg.needed:
+		s.busy, s.pass = "", newPassphrase(msg.cfg)
+		return s.pass.input.Focus()
+	}
+	return s.applyEncryption(r, msg.cfg, nil)
+}
+
+func (s *settings) passphraseKey(r rootAPI, msg tea.KeyPressMsg) tea.Cmd {
+	pass, ok, cancel, cmd := s.pass.key(msg)
+	switch {
+	case cancel:
+		s.pass = nil
+	case ok:
+		next := s.pass.next
+		s.pass = nil
+		return s.applyEncryption(r, next, pass)
+	}
+	return cmd
+}
+
+func (s *settings) applyEncryption(r rootAPI, next config.Config, pass []byte) tea.Cmd {
+	s.busy = "Decrypting…"
+	if next.Encryption.Enabled {
+		s.busy = "Setting up encryption (your keychain may ask for permission)…"
+	}
+	return applyEncryption(r.ctx(), r.deps(), next, pass)
+}
+
 func (s *settings) help() []key.Binding {
-	if s.editing {
+	if s.editing || s.pass != nil {
 		return formHelp
 	}
 	return settingsHelp
@@ -224,12 +271,17 @@ func (s *settings) commit(r rootAPI, next config.Config) tea.Cmd {
 	}
 	s.editing, s.err, s.saved = false, "", ""
 	s.input.Blur()
+	if enc := r.deps().Encryption; enc != nil && encryptionChanged(s.cfg, next) {
+		s.busy = "…"
+		return checkPassphrase(r.ctx(), enc, next)
+	}
 	return saveConfig(r.ctx(), r.deps(), next)
 }
 
 // savedResult shows the outcome of a save. (The root adopts the saved
 // config even if this page has closed meanwhile.)
 func (s *settings) savedResult(r rootAPI, msg configSavedMsg) {
+	s.busy = ""
 	staged := s.staged != nil
 	s.staged = nil
 	if !msg.saved {
@@ -249,6 +301,9 @@ func (s *settings) savedResult(r rootAPI, msg configSavedMsg) {
 }
 
 func (s *settings) view(r rootAPI, width, height int) string {
+	if s.pass != nil {
+		return s.pass.view(width, height)
+	}
 	fields := s.shown().Fields()
 	if s.pending != nil {
 		// A confirmation gets the whole screen so it fits small terminals.
@@ -293,9 +348,12 @@ func (s *settings) view(r rootAPI, width, height int) string {
 			b.WriteString(faintStyle.Render("Applies the next time you link (L › Re-link).") + "\n")
 		}
 	}
-	if s.err != "" {
+	switch {
+	case s.err != "":
 		b.WriteString("\n" + errorStyle.Render(s.err) + "\n")
-	} else if s.saved != "" {
+	case s.busy != "":
+		b.WriteString("\n" + faintStyle.Render(s.busy) + "\n")
+	case s.saved != "":
 		b.WriteString("\n" + onlineStyle.Render(s.saved) + "\n")
 	}
 	return pageStyle(width, height).Render(b.String())

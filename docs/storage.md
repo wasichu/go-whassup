@@ -181,7 +181,10 @@ migration (implemented in `internal/store/codec.go`):
 4. Re-seal in batches of 500 in the background, checkpointing the WAL after every batch.
 5. `VACUUM`.
 
-It resumes on the next start if interrupted, including a crash after the last batch but
+It runs at startup (when the config changed while closed) or straight from Settings
+(`internal/app/encryptor.go`; both use the same steps). A change while one is running
+stops it first; re-enabling during a decrypt reuses the unlocked key instead of creating
+another. It resumes on the next start if interrupted, including a crash after the last batch but
 before compaction: `keys.finished_at` (v11) is only set once compaction completes. A value that can't be opened stops
 re-sealing (`ResealError`) rather than retrying forever.
 

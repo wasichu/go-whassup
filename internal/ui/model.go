@@ -85,6 +85,7 @@ type Model struct {
 	interacted  bool                 // a key was pressed; nothing is read on launch alone
 	readSeq     int                  // generation of the pending read timer (see scheduleRead)
 	notified    map[string]time.Time // last desktop notification per chat (see notify)
+	encSeq      int                  // generation of the encryption change being waited for
 	help        help.Model
 }
 
@@ -116,6 +117,11 @@ func (m Model) Init() tea.Cmd {
 	if m.conn == connConnecting {
 		cmds = append(cmds, connect(m.ctx, m.deps.Client))
 	}
+	if m.deps.Encryption != nil {
+		if done := m.deps.Encryption.Running(); done != nil { // resumed or started at launch
+			cmds = append(cmds, waitEncryption(done, m.encSeq, m.deps.Config.Encryption.Enabled))
+		}
+	}
 	return tea.Batch(cmds...)
 }
 
@@ -143,6 +149,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleEvent(msg.evt)
 	case readTickMsg:
 		return m.readTick(msg)
+	case encryptionDoneMsg:
+		return m.encryptionDone(msg)
 	case pairCodeMsg, pairQRStartedMsg, logoutMsg:
 		return m.loginResult(msg)
 	case configSavedMsg:
@@ -186,8 +194,12 @@ func (m Model) configSaved(msg configSavedMsg) (Model, tea.Cmd) {
 		m.deps.Config = msg.cfg
 		reload = loadChats(m.ctx, m.deps.Store) // retention may have pruned messages
 	}
+	var started tea.Cmd
+	if msg.encryption != nil {
+		started = m.encryptionStarted(msg.encryption, msg.encryptionOn)
+	}
 	m, cmd, _ := m.updatePage(msg)
-	return m, tea.Batch(reload, cmd)
+	return m, tea.Batch(reload, started, cmd)
 }
 
 // actionDone reports the outcome of a send, file send or mark-read.
