@@ -12,10 +12,9 @@ import (
 // higher score is a better match: consecutive runs and word starts earn
 // bonuses, and shorter targets win ties. ok is false if it doesn't match.
 func fuzzyScore(query, target string) (score int, ok bool) {
-	q := []rune(strings.ToLower(query))
 	t := []rune(strings.ToLower(target))
 	ti, last := 0, -2
-	for _, qr := range q {
+	for _, qr := range strings.ToLower(query) {
 		found := false
 		for ; ti < len(t); ti++ {
 			if t[ti] != qr {
