@@ -6,7 +6,7 @@ nothing else to install or run.
 
 ## Toolchain (pinned via mise)
 
-- `mise.toml` is the source of truth for tool versions (Go, just, gopls) and sets
+- `mise.toml` is the source of truth for tool versions (Go, just, gopls, golangci-lint) and sets
   `GOTOOLCHAIN=local` and `CGO_ENABLED=0`. Don't change these without being asked.
 - `go.mod`'s `go` directive is the *minimum* language version (1.26, required by
   whatsmeow), not the pinned toolchain.
@@ -17,10 +17,11 @@ nothing else to install or run.
 
 | Command | What it does |
 | --- | --- |
-| `just check` | fmt-check + build + vet + test. **Run before declaring any change done.** |
+| `just check` | fmt-check + build + vet + lint + test. **Run before declaring any change done.** |
 | `just build` | Builds `bin/wa-tui` |
 | `just run` | Builds and launches the TUI (needs a real terminal) |
 | `just test [flags]` | `go test ./...` with extra flags, e.g. `just test -run TestX -v` |
+| `just lint [flags]` | golangci-lint. `.golangci.yml` enforces import boundaries, bans cgo sqlite and Bubble Tea v1, and forbids printing to the terminal and discarding errors. Fix the code; don't weaken the config. |
 | `just fmt` / `just tidy` | gofmt / `go mod tidy` |
 | `just logs` | Tails the app log |
 | `just index` | Rebuilds the graft context graph |

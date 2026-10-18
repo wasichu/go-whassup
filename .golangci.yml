@@ -1,0 +1,52 @@
+version: "2"
+
+linters:
+  # standard set (errcheck, govet, ineffassign, staticcheck, unused) plus
+  # linters that mechanically enforce AGENTS.md invariants.
+  enable:
+    - depguard   # architecture boundaries + banned modules
+    - errorlint  # %w wrapping, errors.Is/As
+    - forbidigo  # Bubble Tea owns the terminal
+    - misspell
+  settings:
+    errcheck:
+      # AGENTS.md: no `_ =` error discards.
+      check-blank: true
+    depguard:
+      rules:
+        no-cgo-sqlite:
+          files: ["$all"]
+          deny:
+            - pkg: github.com/mattn/go-sqlite3
+              desc: needs cgo; use modernc.org/sqlite
+            - pkg: github.com/charmbracelet/bubbletea
+              desc: v1 API; use charm.land/bubbletea/v2
+            - pkg: github.com/charmbracelet/lipgloss
+              desc: v1 API; use charm.land/lipgloss/v2
+        whatsmeow-only-in-wa:
+          files: ["$all", "!**/internal/wa/**"]
+          deny:
+            - pkg: go.mau.fi/whatsmeow
+              desc: only internal/wa may import whatsmeow
+    forbidigo:
+      forbid:
+        - pattern: ^(fmt\.Print(f|ln)?|print|println)$
+          msg: Bubble Tea owns stdout; log via slog to the log file
+        - pattern: ^log\.(Print|Fatal|Panic)(f|ln)?$
+          msg: use log/slog (configured to write to the log file)
+  exclusions:
+    presets:
+      - std-error-handling
+    rules:
+      # deferred Close on read paths / log files is fine to ignore
+      - linters: [errcheck]
+        source: "^\\s*defer .*\\.Close\\(\\)"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/wasichu/go-whassup

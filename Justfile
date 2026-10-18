@@ -22,6 +22,10 @@ test *args:
 vet:
     {{go}} vet ./...
 
+# Lint (config in .golangci.yml enforces the AGENTS.md invariants)
+lint *args:
+    mise exec -- golangci-lint run ./... {{args}}
+
 # Format all Go code
 fmt:
     {{go}} fmt ./...
@@ -37,7 +41,7 @@ tidy:
     {{go}} mod tidy
 
 # Everything that must pass before a commit
-check: fmt-check build vet test
+check: fmt-check build vet lint test
 
 # Follow the app log (the TUI owns the terminal, so logs go here)
 logs:
