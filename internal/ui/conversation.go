@@ -38,13 +38,16 @@ func (c *conversation) resize(width, height int) {
 	c.render(true)
 }
 
-// setChat switches to a chat, clearing what was shown.
+// setChat switches to a chat, clearing what was shown. Re-setting the same
+// chat (e.g. after a chat list reload) only refreshes its metadata and keeps
+// the scroll position unless the user was already at the bottom.
 func (c *conversation) setChat(chat store.ChatSummary) {
-	if chat.JID != c.chat.JID {
+	switched := chat.JID != c.chat.JID
+	if switched {
 		c.msgs = nil
 	}
 	c.chat = chat
-	c.render(true)
+	c.render(switched || c.viewport.AtBottom())
 }
 
 // setMessages shows msgs. The view follows new messages only if the user

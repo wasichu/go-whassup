@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -281,5 +282,31 @@ func TestRenderMessagesDaySeparatorsAndNames(t *testing.T) {
 	}
 	if n := strings.Count(out, "──"); n < 4 { // two day separators, each with two rules
 		t.Errorf("expected two day separators:\n%s", out)
+	}
+}
+
+func TestScrollPositionSurvivesOtherChatActivity(t *testing.T) {
+	h := newHarness(t, true)
+	var msgs []wa.Message
+	for i := range 60 { // enough to scroll
+		msgs = append(msgs, wa.Message{ID: fmt.Sprintf("x%d", i), Chat: ada, Sender: ada, Timestamp: day.Add(time.Duration(i) * time.Minute), Kind: wa.KindText, Text: fmt.Sprintf("line %d", i)})
+	}
+	if _, err := h.st.SaveMessages(t.Context(), msgs); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	h.client.Emit(wa.HistorySync{}) // trigger a reload of the open chat
+	h.settle()
+	h.send(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	m := h.model()
+	before := m.conv.viewport.YOffset()
+	if m.conv.viewport.AtBottom() {
+		t.Fatal("setup: expected to be scrolled up")
+	}
+
+	h.client.Emit(wa.Message{ID: "b2", Chat: bob, Sender: bob, Timestamp: day.Add(2 * time.Hour), Kind: wa.KindText, Text: "elsewhere"})
+	h.settle()
+	m = h.model()
+	if after := m.conv.viewport.YOffset(); after != before {
+		t.Errorf("scroll moved from %d to %d after activity in another chat", before, after)
 	}
 }
