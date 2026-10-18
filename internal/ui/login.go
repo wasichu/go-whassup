@@ -251,12 +251,17 @@ func (m Model) loginEvent(evt wa.Event) (Model, bool) {
 
 func (m Model) loginView(width, height int) string {
 	l := m.login
+	pad := lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Padding(0, 1)
 	title := paneTitleStyle.Render("Link go-whassup to WhatsApp")
-	var body []string
-	if l.notice != "" {
-		body = append(body, faintStyle.Render(l.notice), "")
+	if l.step == loginQR {
+		// The QR needs every row it can get: title, blank line, then the code.
+		return pad.Render(title + "\n\n" + m.qrView(width-2, height-2))
 	}
 
+	var body []string
+	if l.notice != "" && (l.step == loginChoose || l.step == loginConfirm) {
+		body = append(body, faintStyle.Render(l.notice), "")
+	}
 	switch l.step {
 	case loginChoose:
 		paired := m.deps.Client.IsPaired()
@@ -270,6 +275,9 @@ func (m Model) loginView(width, height int) string {
 			}
 			body = append(body, line)
 		}
+		if !paired {
+			body = append(body, "", faintStyle.Render("A QR code needs a fairly large window (about 35 rows)."))
+		}
 	case loginConfirm:
 		body = append(body,
 			"Re-link removes go-whassup from your phone's Linked devices and deletes",
@@ -280,6 +288,9 @@ func (m Model) loginView(width, height int) string {
 		body = append(body, "Unlinking…")
 	case loginPhone:
 		body = append(body, "Your WhatsApp number, with country code:", "", l.phone.View())
+		if l.err != "" {
+			body = append(body, "", errorStyle.Render(l.err))
+		}
 	case loginRequesting:
 		body = append(body, "Requesting a pairing code…")
 	case loginCode:
@@ -288,39 +299,67 @@ func (m Model) loginView(width, height int) string {
 			"“Link with phone number instead”, then enter:", "",
 			codeStyle.Render(spaced(l.code)), "",
 			faintStyle.Render("The code expires in about 3 minutes."))
-	case loginQR:
-		body = append(body, m.qrView(width, height-4)...)
 	case loginFinishing:
 		body = append(body, onlineStyle.Render("Linked as "+l.jid), "Finishing setup…")
 	case loginFailed:
 		body = append(body, errorStyle.Render("Pairing failed: "+l.err), "", "Press enter to try again.")
 	}
-	if l.err != "" && l.step == loginPhone {
-		body = append(body, "", errorStyle.Render(l.err))
-	}
-	content := title + "\n\n" + strings.Join(body, "\n")
-	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Padding(0, 1).Render(content)
+	return pad.Render(title + "\n\n" + strings.Join(body, "\n"))
 }
 
-func (m Model) qrView(width, height int) []string {
+// qrInstructions sit beside the QR when there's room, above it otherwise.
+var qrInstructions = []string{
+	"On your phone:",
+	"Settings › Linked devices ›",
+	"Link a device, then scan.",
+	"",
+	"The code refreshes every",
+	"~20 seconds; keep this open.",
+}
+
+// qrView lays out the current QR in width x height: beside the instructions
+// if the window is wide enough, else below a one-line instruction. It tries
+// a smaller quiet zone before giving up, and then says exactly what's short.
+func (m Model) qrView(width, height int) string {
 	l := m.login
 	if l.qr == "" {
-		return []string{"Generating a QR code…"}
+		return "Generating a QR code…"
 	}
-	qr, w, h, err := renderQR(l.qr)
-	if err != nil {
-		return []string{errorStyle.Render(err.Error())}
-	}
-	if w > width-2 || h+2 > height {
-		return []string{
-			errorStyle.Render(fmt.Sprintf("The QR code needs a %dx%d terminal; this one is %dx%d.", w+4, h+8, m.width, m.height)),
-			"Enlarge the window, or press esc and link with a phone number code.",
+	const gap = 3
+	side := strings.Join(qrInstructions, "\n")
+	sideW := lipgloss.Width(side)
+	var w, h int
+	for _, quiet := range qrQuietZones {
+		qr, qw, qh, err := renderQR(l.qr, quiet)
+		if err != nil {
+			return errorStyle.Render(err.Error())
+		}
+		w, h = qw, qh
+		if qw+gap+sideW <= width && qh <= height {
+			return lipgloss.JoinHorizontal(lipgloss.Top, qr, strings.Repeat(" ", gap), side)
+		}
+		if qw <= width && qh+2 <= height {
+			return "On your phone: Settings › Linked devices › Link a device, then scan:\n\n" + qr
 		}
 	}
-	return []string{
-		"On your phone: Settings › Linked devices › Link a device, then scan:", "",
-		qr,
+
+	// Doesn't fit even with the smallest border: say exactly what's short.
+	var short []string
+	if rows := h - height; rows > 0 {
+		short = append(short, fmt.Sprintf("%d more rows", rows))
 	}
+	if cols := w - width; cols > 0 {
+		short = append(short, fmt.Sprintf("%d more columns", cols))
+	}
+	return strings.Join([]string{
+		errorStyle.Render("The QR code doesn't fit: it needs " + strings.Join(short, " and ") + "."),
+		"",
+		"Make the window bigger or zoom out (Cmd − on macOS, Ctrl − on most",
+		"Linux terminals). The code appears as soon as it fits; pairing keeps",
+		"running meanwhile.",
+		"",
+		faintStyle.Render("Or press esc and link with a phone number code instead."),
+	}, "\n")
 }
 
 // spaced renders "ABCD-EFGH" as "A B C D - E F G H" for easier reading.

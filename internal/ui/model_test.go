@@ -340,15 +340,50 @@ func TestQRPairingAndCancel(t *testing.T) {
 	}
 }
 
-func TestQRNeedsBiggerTerminal(t *testing.T) {
+func TestQRLayoutFitsCommonWindows(t *testing.T) {
+	tests := []struct {
+		name          string
+		width, height int
+		wantFit       bool
+		wantShort     string
+	}{
+		{"wide but short (the reported 137x37)", 137, 37, true, ""},
+		{"narrow, just tall enough", 80, 37, true, ""},
+		{"standard 80x24", 80, 24, false, "more rows"},
+		{"too narrow", 64, 50, false, "more columns"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t, false)
+			h.client.QREvents = []wa.Event{wa.PairQRCode{Code: sampleQR}}
+			h.send(tea.WindowSizeMsg{Width: tt.width, Height: tt.height})
+			h.key("down")
+			h.key("enter")
+			h.settle()
+			v := h.view()
+			if got := strings.Contains(v, "▀"); got != tt.wantFit {
+				t.Fatalf("QR shown = %v, want %v:\n%s", got, tt.wantFit, v)
+			}
+			if tt.wantShort != "" && !strings.Contains(v, tt.wantShort) {
+				t.Errorf("hint should mention %q:\n%s", tt.wantShort, v)
+			}
+			if lines := strings.Count(v, "\n") + 1; lines > tt.height {
+				t.Errorf("view is %d lines in a %d-line terminal", lines, tt.height)
+			}
+		})
+	}
+}
+
+func TestQRAppearsAfterResize(t *testing.T) {
 	h := newHarness(t, false)
 	h.client.QREvents = []wa.Event{wa.PairQRCode{Code: sampleQR}}
 	h.send(tea.WindowSizeMsg{Width: 80, Height: 24})
 	h.key("down")
 	h.key("enter")
 	h.settle()
-	if !strings.Contains(h.view(), "The QR code needs a") {
-		t.Errorf("size hint missing:\n%s", h.view())
+	h.send(tea.WindowSizeMsg{Width: 140, Height: 40}) // user zooms out
+	if !strings.Contains(h.view(), "▀") {
+		t.Errorf("QR should appear once it fits:\n%s", h.view())
 	}
 }
 

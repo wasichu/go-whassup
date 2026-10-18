@@ -8,10 +8,10 @@ import (
 	"rsc.io/qr"
 )
 
-// qrQuiet is the white border around the code, in modules. The spec asks for
-// 4; 2 scans reliably on phones and keeps the code small enough for common
-// terminal sizes.
-const qrQuiet = 2
+// qrQuietZones are the white borders tried, in modules, largest first. The
+// spec asks for 4; phones scan 2 reliably and usually 1, and each module of
+// border costs a whole terminal column and half a row on every side.
+var qrQuietZones = []int{2, 1}
 
 // QR colors are fixed, not themed: scanners need dark modules on a light
 // background, and terminal themes remap ANSI black/white.
@@ -20,9 +20,10 @@ var (
 	qrLight = lipgloss.Color("#ffffff")
 )
 
-// qrMatrix encodes text and returns its modules (true = dark) including the
-// quiet zone. It uses the lowest error-correction level for the smallest code.
-func qrMatrix(text string) ([][]bool, error) {
+// qrMatrix encodes text and returns its modules (true = dark) including a
+// quiet zone of the given width. It uses the lowest error-correction level
+// for the smallest code.
+func qrMatrix(text string, qrQuiet int) ([][]bool, error) {
 	code, err := qr.Encode(text, qr.L)
 	if err != nil {
 		return nil, fmt.Errorf("encoding QR: %w", err)
@@ -72,8 +73,8 @@ func halfBlocks(m [][]bool) string {
 }
 
 // renderQR returns the QR for text and its size in cells.
-func renderQR(text string) (out string, width, height int, err error) {
-	m, err := qrMatrix(text)
+func renderQR(text string, quiet int) (out string, width, height int, err error) {
+	m, err := qrMatrix(text, quiet)
 	if err != nil {
 		return "", 0, 0, err
 	}

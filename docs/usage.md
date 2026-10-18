@@ -55,8 +55,12 @@ handlers (`internal/ui/keys.go`), so they can't drift.
 
 - **Not linked:** choose *phone number code* (type your number and enter the
   8-character code on the phone) or *QR code* (scan from Linked devices › Link a device).
-  - The QR is drawn black-on-white whatever your theme, and needs roughly a 61×37
-    terminal. If the window is smaller, the screen says so; use the phone code instead.
+  - The QR is drawn black-on-white whatever your theme. It's about 65×33 cells, so the
+    window needs about 35 rows. Instructions go beside the QR when the window is wide,
+    and the white border shrinks from 2 modules to 1 if that makes it fit.
+  - If it still doesn't fit, the screen says exactly how many rows or columns are
+    missing. Make the window bigger or zoom out (Cmd − / Ctrl −): the QR appears as soon
+    as it fits, and pairing keeps running meanwhile. Or use the phone code.
 - **Linked:** *Re-link*, after a y/n confirmation. It does the same as
   `wa-tui login -relink`.
 - **Esc:** while waiting for the code or a scan, cancels pairing; otherwise goes back.

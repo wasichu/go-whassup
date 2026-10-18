@@ -45,6 +45,15 @@ websocket gives up after about 160 s of unanswered pairing, and our wait is 3 mi
 - **History-request options** (`request_full_sync`, `full_sync_days`) are written into
   whatsmeow's process-wide `DeviceProps` at the start of each pairing, from
   `WhatsApp.SetOptions`. So Settings changes apply to the next link without a restart.
+- **Payload and size.** whatsmeow's QR payload is a link,
+  `https://wa.me/settings/linked_devices#2@<ref>,<noise>,<identity>,<adv>,<platform>`, of
+  about 280 characters. That encodes to a 61-module QR, 65×33 terminal cells with our
+  2-module border.
+- **Comparison with waha-tui.** It polls WAHA's `auth/qr?format=raw` endpoint every few
+  seconds and renders with `@opentui/qrcode`: error-correction level M, the spec's
+  4-module border, fixed black/white, scale-to-fit, and "Terminal too small for QR"
+  below about 72×39. We get codes pushed as events, and use level L plus a 2→1 border to
+  stay smaller.
 - **Not supported:** WhatsApp's newer *passkey* pairing prompt (whatsmeow emits
   `passkey-request` items). If it appears, pairing reports it as a failure.
 

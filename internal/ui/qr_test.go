@@ -5,11 +5,14 @@ import (
 	"testing"
 )
 
-// A realistic WhatsApp QR payload length (ref, noise key, identity key, adv secret).
-var sampleQR = "2@" + strings.Repeat("A", 70) + "," + strings.Repeat("B", 44) + "," + strings.Repeat("C", 44) + "," + strings.Repeat("D", 44)
+// The shape of a real whatsmeow QR payload (link prefix, ref, noise key,
+// identity key, adv secret, platform), which encodes to 65x33 cells.
+var sampleQR = "https://wa.me/settings/linked_devices#2@" + strings.Repeat("A", 100) + "," +
+	strings.Repeat("B", 44) + "," + strings.Repeat("C", 44) + "," + strings.Repeat("D", 44) + ",9"
 
 func TestQRMatrixStructure(t *testing.T) {
-	m, err := qrMatrix(sampleQR)
+	const qrQuiet = 2
+	m, err := qrMatrix(sampleQR, qrQuiet)
 	if err != nil {
 		t.Fatalf("qrMatrix: %v", err)
 	}
@@ -38,13 +41,13 @@ func TestQRMatrixStructure(t *testing.T) {
 			}
 		}
 	}
-	if n > 70 {
-		t.Errorf("QR is %d modules wide; too big for common terminals", n)
+	if n != 65 {
+		t.Errorf("realistic payload is %d modules wide, want 65 (update the layout tests if this changes)", n)
 	}
 }
 
 func TestRenderQRSize(t *testing.T) {
-	out, w, h, err := renderQR(sampleQR)
+	out, w, h, err := renderQR(sampleQR, 2)
 	if err != nil {
 		t.Fatalf("renderQR: %v", err)
 	}
