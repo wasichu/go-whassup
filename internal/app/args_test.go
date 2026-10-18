@@ -1,6 +1,9 @@
-package main
+package app
 
 import (
+	"errors"
+	"flag"
+	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -25,7 +28,7 @@ func TestParseArgs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(strings.Join(tt.args, " "), func(t *testing.T) {
-			got, err := parseArgs(tt.args)
+			got, err := parseArgs(tt.args, io.Discard)
 			if tt.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
 					t.Fatalf("err = %v, want containing %q", err, tt.wantErr)
@@ -39,5 +42,16 @@ func TestParseArgs(t *testing.T) {
 				t.Errorf("parseArgs(%q) = %+v, want %+v", tt.args, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseArgsHelp(t *testing.T) {
+	var out strings.Builder
+	_, err := parseArgs([]string{"-h"}, &out)
+	if !errors.Is(err, flag.ErrHelp) {
+		t.Fatalf("err = %v, want flag.ErrHelp", err)
+	}
+	if !strings.Contains(out.String(), "wa-tui login") {
+		t.Errorf("usage missing commands:\n%s", out.String())
 	}
 }

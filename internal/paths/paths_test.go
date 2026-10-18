@@ -17,6 +17,9 @@ func TestResolveUsesXDGEnv(t *testing.T) {
 	if want := "/tmp/xdg-data/go-whassup"; p.DataDir != want {
 		t.Errorf("DataDir = %q, want %q", p.DataDir, want)
 	}
+	if want := "/tmp/xdg-data/go-whassup/session.db"; p.SessionDB != want {
+		t.Errorf("SessionDB = %q, want %q", p.SessionDB, want)
+	}
 	if want := "/tmp/xdg-state/go-whassup/wa.log"; p.LogFile != want {
 		t.Errorf("LogFile = %q, want %q", p.LogFile, want)
 	}

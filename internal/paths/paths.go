@@ -15,9 +15,10 @@ const appName = "go-whassup"
 
 // Paths holds the resolved runtime directories and files.
 type Paths struct {
-	DataDir  string // session + message databases
-	StateDir string // logs and other disposable state
-	LogFile  string
+	DataDir   string // session + message databases
+	StateDir  string // logs and other disposable state
+	SessionDB string // whatsmeow's store: device identity and Signal keys
+	LogFile   string
 }
 
 // Resolve computes the runtime paths from the environment. It does not touch
@@ -33,6 +34,7 @@ func Resolve() (Paths, error) {
 		DataDir:  filepath.Join(data, appName),
 		StateDir: filepath.Join(state, appName),
 	}
+	p.SessionDB = filepath.Join(p.DataDir, "session.db")
 	p.LogFile = filepath.Join(p.StateDir, "wa.log")
 	return p, nil
 }

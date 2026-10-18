@@ -71,19 +71,33 @@ invocations in docs.
 ## Layout
 
 ```
-cmd/wa-tui/      main: wiring + headless subcommands (`login`, `listen`); no business logic
-internal/paths/  XDG runtime locations
-internal/wa/     whatsmeow adapter: interface + typed events. ONLY package importing whatsmeow.
-internal/store/  OUR chat/message schema. whatsmeow does NOT persist message content.
-internal/ui/     Bubble Tea models. Imports internal/wa interfaces, never whatsmeow.
+cmd/wa-tui/          main.go only: signal ctx -> app.Run -> exit code. Keep it ~20 lines.
+internal/app/        composition root: args, paths, logging, wiring. No business logic.
+internal/paths/      XDG runtime locations (DataDir, SessionDB, LogFile)
+internal/logging/    slog file logger
+internal/wa/         whatsmeow adapter: Client interface, Event types, Subscribe.
+                     ONLY package importing whatsmeow.
+internal/wa/watest/  fake wa.Client shared by all tests
+internal/headless/   login/listen commands (Console: In/Out/Log)
+internal/store/      OUR chat/message schema (step 2). whatsmeow does NOT persist messages.
+internal/ui/         Bubble Tea models + Run. Imports internal/wa, never whatsmeow.
 ```
+
+- **Keep `main.go` short and put logic in `internal/*`.** Add packages as real
+  concerns appear, organized by concern.
+- **Reuse before adding.** Extend the package that owns a concern, and reuse
+  existing abstractions (`wa.Subscribe`, `watest.Client`, `Console`, `paths.Paths`)
+  rather than parallel ones. When you add a package, update this block and
+  `docs/architecture.md`.
 
 ## Invariants
 
 - **TEA:** mutate model state only in `Update()`. Async work returns a `tea.Msg` from a `tea.Cmd`.
-- **Goroutines:** whatsmeow event handlers run on background goroutines. Forward them to
-  the program with `p.Send(...)` as plain values. Never render or touch UI state off
-  the UI goroutine.
+- **Goroutines:** whatsmeow event handlers run on background goroutines. Consume events
+  via `wa.Subscribe`. In the TUI, a `tea.Cmd` receives the next event from `sub.C` and
+  returns it as a `tea.Msg`; don't use `p.Send`. Never render or touch UI state off the
+  UI goroutine. Subscriptions drop events when full, so data that must not be lost
+  (the message store) needs its own non-lossy handler.
 - **Terminal ownership:** Bubble Tea owns stdout/stderr while running. All logging,
   including whatsmeow's logger, goes to `$XDG_STATE_HOME/go-whassup/wa.log` via `slog`.
   No `fmt.Print*` or `log.Print*` to the terminal once the program starts.
