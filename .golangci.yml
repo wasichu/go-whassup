@@ -63,7 +63,6 @@ linters:
       - {path: internal/app/app\.go, linters: [gocognit, funlen], text: "`Run`|'Run'"}
       - {path: internal/app/encryption\.go, linters: [gocognit], text: "func `setUpEncryption`"}
       - {path: internal/app/encryption\.go, linters: [nestif], text: "source == config.KeySourceKeyring"}
-      - {path: internal/store/recorder\.go, linters: [gocognit], text: "Handle"}
       - {path: internal/ui/cmds\.go, linters: [gocognit], text: "loadMessages"}
       - {path: internal/ui/conversation\.go, linters: [gocognit], text: "renderMessages"}
       - {path: internal/ui/info\.go, linters: [gocognit, nestif], text: "infoView|d.IsGroup"}

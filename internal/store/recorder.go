@@ -49,59 +49,63 @@ func (r *Recorder) Handle(evt wa.Event) {
 	ctx := context.Background()
 	switch v := evt.(type) {
 	case wa.Message:
-		r.saveMessages(ctx, []wa.Message{v})
-		if v.FromMe {
-			// Replying means you've read the chat, as on the phone.
-			r.markRead(ctx, v.Chat, v.Timestamp)
-		}
+		r.onMessage(ctx, v)
 	case wa.ChatRead:
 		r.markRead(ctx, v.Chat, v.At)
 	case wa.MessageEdited:
-		found, err := r.Store.EditMessage(ctx, v)
-		switch {
-		case err != nil:
-			r.Log.Error("recording edit", "id", v.ID, "err", err)
-		case !found:
-			// IDs only: never log message text by default.
-			r.Log.Info("edit for a message we don't have (or an older edit)", "chat", v.Chat, "id", v.ID)
-		default:
-			r.Log.Info("applied edit", "chat", v.Chat, "id", v.ID)
-		}
+		r.onEdit(ctx, v)
 	case wa.MessageDeleted:
-		if err := r.Store.DeleteMessage(ctx, v); err != nil {
-			r.Log.Error("recording delete", "id", v.ID, "err", err)
-		}
+		r.logIf(r.Store.DeleteMessage(ctx, v), "recording delete", "id", v.ID)
 		r.removeMedia(v.Chat, v.ID)
 	case wa.Reaction:
-		if err := r.Store.SaveReactions(ctx, []wa.Reaction{v}); err != nil {
-			r.Log.Error("recording reaction", "id", v.MessageID, "err", err)
-		}
+		r.logIf(r.Store.SaveReactions(ctx, []wa.Reaction{v}), "recording reaction", "id", v.MessageID)
 	case wa.Groups:
-		if err := r.Store.SaveGroups(ctx, v.List); err != nil {
-			r.Log.Error("recording groups", "count", len(v.List), "err", err)
-		}
+		r.logIf(r.Store.SaveGroups(ctx, v.List), "recording groups", "count", len(v.List))
 	case wa.Contacts:
-		if err := r.Store.SaveContacts(ctx, v.List); err != nil {
-			r.Log.Error("recording contacts", "count", len(v.List), "err", err)
-		}
+		r.logIf(r.Store.SaveContacts(ctx, v.List), "recording contacts", "count", len(v.List))
 	case wa.HistorySync:
-		if err := r.Store.SaveChats(ctx, v.Chats); err != nil {
-			r.Log.Error("recording history chats", "err", err)
-		}
-		if err := r.Store.SavePushNames(ctx, v.PushNames); err != nil {
-			r.Log.Error("recording push names", "err", err)
-		}
-		r.saveMessages(ctx, v.Messages)
-		if err := r.Store.SaveReactions(ctx, v.Reactions); err != nil {
-			r.Log.Error("recording history reactions", "err", err)
-		}
-		for _, c := range v.Chats {
-			if err := r.Store.SetUnreadFromPhone(ctx, c.JID, c.UnreadCount); err != nil {
-				r.Log.Error("recording unread count", "chat", c.JID, "err", err)
-			}
-		}
-		r.Prune(ctx)
+		r.onHistory(ctx, v)
 	}
+}
+
+// logIf logs err, if any: on whatsmeow's goroutine there's no caller to
+// return it to.
+func (r *Recorder) logIf(err error, what string, attrs ...any) {
+	if err != nil {
+		r.Log.Error(what, append(attrs, "err", err)...)
+	}
+}
+
+func (r *Recorder) onMessage(ctx context.Context, m wa.Message) {
+	r.saveMessages(ctx, []wa.Message{m})
+	if m.FromMe {
+		// Replying means you've read the chat, as on the phone.
+		r.markRead(ctx, m.Chat, m.Timestamp)
+	}
+}
+
+func (r *Recorder) onEdit(ctx context.Context, e wa.MessageEdited) {
+	found, err := r.Store.EditMessage(ctx, e)
+	switch {
+	case err != nil:
+		r.Log.Error("recording edit", "id", e.ID, "err", err)
+	case !found:
+		// IDs only: never log message text by default.
+		r.Log.Info("edit for a message we don't have (or an older edit)", "chat", e.Chat, "id", e.ID)
+	default:
+		r.Log.Info("applied edit", "chat", e.Chat, "id", e.ID)
+	}
+}
+
+func (r *Recorder) onHistory(ctx context.Context, h wa.HistorySync) {
+	r.logIf(r.Store.SaveChats(ctx, h.Chats), "recording history chats")
+	r.logIf(r.Store.SavePushNames(ctx, h.PushNames), "recording push names")
+	r.saveMessages(ctx, h.Messages)
+	r.logIf(r.Store.SaveReactions(ctx, h.Reactions), "recording history reactions")
+	for _, c := range h.Chats {
+		r.logIf(r.Store.SetUnreadFromPhone(ctx, c.JID, c.UnreadCount), "recording unread count", "chat", c.JID)
+	}
+	r.Prune(ctx)
 }
 
 // Prune applies the retention policy now.
