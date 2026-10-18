@@ -98,20 +98,7 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 
 	switch inv.cmd {
 	case "tui":
-		return ui.Run(ctx, ui.Deps{
-			Client:     client,
-			Store:      st,
-			Log:        log,
-			Config:     cfg,
-			ConfigPath: p.ConfigFile,
-			Graphics:   termcaps.DetectGraphics(os.Getenv, termcaps.Tmux),
-			ApplyConfig: func(ctx context.Context, c config.Config) error {
-				client.SetOptions(pairingOptions(c))
-				rec.SetRetention(retention(c))
-				rec.Prune(ctx)
-				return nil
-			},
-		})
+		return ui.Run(ctx, tuiDeps(cfg, p, client, st, rec, cache, log))
 	case "login":
 		var phone string
 		if len(inv.args) > 0 {
@@ -132,6 +119,29 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 		return console.Follow(ctx, sub)
 	default: // "listen"; parseArgs rejects anything else
 		return console.Listen(ctx, client)
+	}
+}
+
+// tuiDeps wires the TUI's collaborators. It's a separate function so a test
+// can check every field is set: the UI's own tests inject their own deps and
+// would not notice a field the app forgot.
+func tuiDeps(cfg config.Config, p paths.Paths, client *wa.WhatsApp, st *store.Store, rec *store.Recorder, cache media.Cache, log *slog.Logger) ui.Deps {
+	return ui.Deps{
+		Client:     client,
+		Store:      st,
+		Log:        log,
+		Config:     cfg,
+		ConfigPath: p.ConfigFile,
+		ApplyConfig: func(ctx context.Context, c config.Config) error {
+			client.SetOptions(pairingOptions(c))
+			rec.SetRetention(retention(c))
+			rec.Prune(ctx)
+			return nil
+		},
+		Graphics:  termcaps.DetectGraphics(os.Getenv, termcaps.Tmux),
+		FocusHint: termcaps.FocusHint(os.Getenv, termcaps.Tmux),
+		Media:     cache,
+		OpenFile:  media.Open,
 	}
 }
 
