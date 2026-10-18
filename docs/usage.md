@@ -60,7 +60,8 @@ handlers (`internal/ui/keys.go`), so they can't drift.
 - A contact you've never messaged is marked **new chat**. Opening it starts a draft:
   type and send, and it becomes a regular chat in the list.
 - Chat titles follow the phone: your address-book name for a person, then the name they
-  chose; a group's subject. In groups, each sender shows the same way.
+  chose, then their number (`+1555…`); a group's subject. The chat with yourself reads
+  `… (You)`, as on WhatsApp Web, and typing `you` in the finder finds it. In groups, each sender shows the same way.
 
 ### Login screen
 

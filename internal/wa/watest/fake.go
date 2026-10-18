@@ -15,6 +15,8 @@ import (
 type Client struct {
 	wa.Handlers // AddEventHandler and Emit
 
+	Own string // OwnJID while paired
+
 	Paired     bool
 	PairCode   string
 	PairErr    error
@@ -142,6 +144,14 @@ func (c *Client) SentMessages() []wa.Message {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return slices.Clone(c.Sent)
+}
+
+// OwnJID returns Own while paired.
+func (c *Client) OwnJID() string {
+	if !c.Paired {
+		return ""
+	}
+	return c.Own
 }
 
 func (c *Client) IsPaired() bool { return c.Paired }

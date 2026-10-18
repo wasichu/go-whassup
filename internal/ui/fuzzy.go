@@ -49,9 +49,10 @@ func digitsOnly(s string) string {
 	}, s)
 }
 
-// filterDirectory ranks entries against query by name, or by phone number
-// when the query is mostly digits. An empty query keeps the given order.
-func filterDirectory(entries []store.ChatSummary, query string) []store.ChatSummary {
+// filterDirectory ranks entries against query by title (so "you" finds the
+// chat with yourself), or by phone number when the query is mostly digits.
+// An empty query keeps the given order.
+func filterDirectory(entries []store.ChatSummary, query, own string) []store.ChatSummary {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return entries
@@ -72,7 +73,7 @@ func filterDirectory(entries []store.ChatSummary, query string) []store.ChatSumm
 				score, ok = 1000-len(user), true
 			}
 		} else {
-			score, ok = fuzzyScore(query, c.Title())
+			score, ok = fuzzyScore(query, chatTitle(c, own))
 		}
 		if ok {
 			hits = append(hits, scored{c, score})

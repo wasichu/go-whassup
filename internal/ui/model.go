@@ -68,6 +68,7 @@ type Model struct {
 	settings settings
 	finder   finder
 	draft    string // JID of an open chat that has no messages yet
+	ownJID   string // the linked account, for labelling the chat with yourself
 	help     help.Model
 }
 
@@ -78,7 +79,7 @@ func New(ctx context.Context, deps Deps, sub *wa.Subscription) Model {
 	h := help.New()
 	h.Styles.ShortKey, h.Styles.FullKey = statusStyle.Bold(true), senderStyle
 	h.Styles.ShortDesc, h.Styles.ShortSeparator = statusStyle, statusStyle
-	m := Model{ctx: ctx, deps: deps, sub: sub, conv: newConversation(), login: newLogin(), conn: connConnecting, help: h}
+	m := Model{ctx: ctx, deps: deps, sub: sub, conv: newConversation(), login: newLogin(), conn: connConnecting, help: h, ownJID: deps.Client.OwnJID()}
 	if !deps.Client.IsPaired() {
 		m.conn = connNotPaired
 		m = m.openLogin("")
@@ -283,6 +284,7 @@ func (m Model) handleEvent(evt wa.Event) (tea.Model, tea.Cmd) {
 	switch v := evt.(type) {
 	case wa.Connected:
 		m.conn = connOnline
+		m.ownJID = m.deps.Client.OwnJID() // may be new after (re-)linking
 		return m, tea.Batch(next, loadChats(m.ctx, m.deps.Store))
 	case wa.Disconnected:
 		m.conn = connOffline
@@ -347,9 +349,9 @@ func (m Model) render() string {
 	case m.screen == screenFinder:
 		body = m.finderView(m.width, bodyH)
 	default:
-		left := m.chats.view(m.listWidth(), bodyH, m.focus == focusList)
+		left := m.chats.view(m.listWidth(), bodyH, m.focus == focusList, m.ownJID)
 		sep := separatorStyle.Render(strings.TrimSuffix(strings.Repeat("│\n", bodyH), "\n"))
-		right := m.conv.view(m.width-m.listWidth()-1, bodyH)
+		right := m.conv.view(m.width-m.listWidth()-1, bodyH, m.ownJID)
 		body = lipgloss.JoinHorizontal(lipgloss.Top, left, sep, right)
 	}
 	return body + "\n" + m.statusLine()

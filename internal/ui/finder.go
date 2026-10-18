@@ -20,6 +20,7 @@ type finder struct {
 	matches  []store.ChatSummary
 	selected int
 	loaded   bool
+	own      string // the linked account, labelled "(You)"
 }
 
 func newFinder() finder {
@@ -46,6 +47,7 @@ func loadDirectory(ctx context.Context, st Store) tea.Cmd {
 func (m Model) openFinder() (Model, tea.Cmd) {
 	m.screen = screenFinder
 	m.finder = newFinder()
+	m.finder.own = m.ownJID
 	m.finder.input.SetWidth(max(m.width-12, 10))
 	return m, tea.Batch(m.finder.input.Focus(), loadDirectory(m.ctx, m.deps.Store))
 }
@@ -61,7 +63,7 @@ func (m Model) finderLoaded(msg directoryLoadedMsg) (Model, tea.Cmd) {
 }
 
 func (f *finder) refilter() {
-	f.matches = filterDirectory(f.all, f.input.Value())
+	f.matches = filterDirectory(f.all, f.input.Value(), f.own)
 	f.selected = min(f.selected, max(len(f.matches)-1, 0))
 }
 
@@ -136,9 +138,10 @@ func (m Model) finderView(width, height int) string {
 		default:
 			tag = "+" + user
 		}
-		label := fmt.Sprintf("%s  %s", c.Title(), faintStyle.Render(tag))
+		title := chatTitle(c, f.own)
+		label := fmt.Sprintf("%s  %s", title, faintStyle.Render(tag))
 		if i == f.selected {
-			label = activeSelStyle.Render("› "+c.Title()) + "  " + faintStyle.Render(tag)
+			label = activeSelStyle.Render("› "+title) + "  " + faintStyle.Render(tag)
 		} else {
 			label = "  " + label
 		}

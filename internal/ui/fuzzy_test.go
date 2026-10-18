@@ -40,16 +40,25 @@ func TestFilterDirectory(t *testing.T) {
 		}
 		return out
 	}
-	if got := titles(filterDirectory(dir, "")); !slices.Equal(got, titles(dir)) {
+	if got := titles(filterDirectory(dir, "", "")); !slices.Equal(got, titles(dir)) {
 		t.Errorf("empty query reordered: %v", got)
 	}
-	if got := titles(filterDirectory(dir, "ada")); !slices.Equal(got, []string{"Ada Lovelace", "Canada Dry"}) {
+	if got := titles(filterDirectory(dir, "ada", "")); !slices.Equal(got, []string{"Ada Lovelace", "Canada Dry"}) {
 		t.Errorf("ada = %v", got)
 	}
-	if got := titles(filterDirectory(dir, "bo")); len(got) != 2 || got[0] != "Bob" {
+	if got := titles(filterDirectory(dir, "bo", "")); len(got) != 2 || got[0] != "Bob" {
 		t.Errorf("bo = %v", got)
 	}
-	if got := titles(filterDirectory(dir, "+1 555-987")); !slices.Equal(got, []string{"Bob"}) {
+	if got := titles(filterDirectory(dir, "+1 555-987", "")); !slices.Equal(got, []string{"Bob"}) {
 		t.Errorf("number search = %v", got)
+	}
+}
+
+func TestFilterDirectoryFindsYourself(t *testing.T) {
+	own := "12025550100@s.whatsapp.net"
+	dir := []store.ChatSummary{{JID: "15551234567@s.whatsapp.net", Name: "Ada"}, {JID: own}}
+	got := filterDirectory(dir, "you", own)
+	if len(got) != 1 || got[0].JID != own {
+		t.Errorf("you = %+v", got)
 	}
 }

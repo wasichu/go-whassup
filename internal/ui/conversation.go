@@ -70,11 +70,11 @@ func (c *conversation) render(follow bool) {
 	}
 }
 
-func (c *conversation) view(width, height int) string {
+func (c *conversation) view(width, height int, own string) string {
 	if c.chat.JID == "" {
 		return lipgloss.NewStyle().Width(width).Height(height).Render(faintStyle.Render("Select a chat"))
 	}
-	header := paneTitleStyle.Render(c.chat.Title())
+	header := paneTitleStyle.Render(chatTitle(c.chat, own))
 	if c.chat.Name != "" {
 		header += "  " + faintStyle.Render(c.chat.JID)
 	}

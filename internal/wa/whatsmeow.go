@@ -158,6 +158,13 @@ func (w *WhatsApp) remoteLogout(ctx context.Context, cli *whatsmeow.Client) bool
 	return true
 }
 
+func (w *WhatsApp) OwnJID() string {
+	if id := w.client().Store.ID; id != nil {
+		return id.ToNonAD().String()
+	}
+	return ""
+}
+
 func (w *WhatsApp) IsPaired() bool { return w.client().Store.ID != nil }
 
 func (w *WhatsApp) Connect(ctx context.Context) error {

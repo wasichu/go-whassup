@@ -63,7 +63,7 @@ func (l *chatList) move(delta int) bool {
 
 // view renders the list into width x height, scrolling to keep the
 // selection visible. active marks the pane as focused.
-func (l *chatList) view(width, height int, active bool) string {
+func (l *chatList) view(width, height int, active bool, own string) string {
 	rows := height - 1 // title line
 	if rows < 1 {
 		return ""
@@ -83,7 +83,7 @@ func (l *chatList) view(width, height int, active bool) string {
 	line := lipgloss.NewStyle().Width(width).MaxWidth(width)
 	for i := l.offset; i < len(l.chats) && i < l.offset+rows; i++ {
 		c := l.chats[i]
-		label := " " + c.Title()
+		label := " " + chatTitle(c, own)
 		style := line
 		if i == l.selected {
 			style = line.Inherit(selectedStyle)
@@ -94,4 +94,13 @@ func (l *chatList) view(width, height int, active bool) string {
 		b.WriteString("\n" + style.Render(label))
 	}
 	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Render(b.String())
+}
+
+// chatTitle is how a chat is labelled everywhere in the UI: the store's
+// title, marked "(You)" for the chat with yourself, as WhatsApp Web does.
+func chatTitle(c store.ChatSummary, own string) string {
+	if own != "" && c.JID == own {
+		return c.Title() + " (You)"
+	}
+	return c.Title()
 }

@@ -760,3 +760,23 @@ func TestContactsEventRefreshesNames(t *testing.T) {
 		t.Errorf("chat list should show the address-book name:\n%s", h.view())
 	}
 }
+
+func TestOwnChatLabelledYou(t *testing.T) {
+	own := "12025550100@s.whatsapp.net"
+	h := newHarness(t, true)
+	h.client.Own = own
+	if _, err := h.st.SaveMessages(t.Context(), []wa.Message{
+		{ID: "s1", Chat: own, Sender: own, FromMe: true, Timestamp: day.Add(2 * time.Hour), Kind: wa.KindText, Text: "note to self"},
+	}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	h.client.Emit(wa.Connected{}) // the UI re-reads its own JID on connect
+	h.settle()
+	v := h.view()
+	if !strings.Contains(v, "+12025550100 (You)") {
+		t.Errorf("own chat should read \"+12025550100 (You)\":\n%s", v)
+	}
+	if strings.Contains(v, "@s.whatsapp.net (You)") {
+		t.Error("raw JID shown")
+	}
+}

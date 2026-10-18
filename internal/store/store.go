@@ -155,6 +155,10 @@ func (c ChatSummary) Title() string {
 	if c.Name != "" {
 		return c.Name
 	}
+	// Someone not in the address book: show their number, like the phone.
+	if user, ok := strings.CutSuffix(c.JID, "@s.whatsapp.net"); ok {
+		return "+" + user
+	}
 	return c.JID
 }
 

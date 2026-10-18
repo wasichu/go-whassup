@@ -120,8 +120,8 @@ func TestChatsOrderNamesAndCounts(t *testing.T) {
 	for _, c := range chats {
 		titles = append(titles, c.Title())
 	}
-	// bob (no name: JID), Book club, Ada (push name fallback)
-	if want := []string{bob, "Book club", "Ada"}; !slices.Equal(titles, want) {
+	// bob (no name: his number), Book club, Ada (push name fallback)
+	if want := []string{"+15559876543", "Book club", "Ada"}; !slices.Equal(titles, want) {
 		t.Errorf("titles = %v, want %v", titles, want)
 	}
 	if !chats[1].IsGroup || chats[1].Messages != 1 {

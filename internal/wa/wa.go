@@ -59,6 +59,10 @@ type Client interface {
 	// ErrNotPaired before pairing, and an error while disconnected.
 	SendText(ctx context.Context, chat, text string) error
 
+	// OwnJID is the linked account's chat key (e.g. for the chat with
+	// yourself), or "" before pairing.
+	OwnJID() string
+
 	// IsPaired reports whether a session exists in the store.
 	IsPaired() bool
 
