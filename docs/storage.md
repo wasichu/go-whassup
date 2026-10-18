@@ -97,6 +97,38 @@ migration (implemented in `internal/store/codec.go`):
 - **Crypto:** AES-GCM from the standard library or XChaCha20-Poly1305 from
   `x/crypto` (already in the module graph). No new dependency for the cipher itself.
 
+### Encryption decisions (2026-10-18)
+
+- **Turning it on** re-encrypts existing rows (resumable, in the background, with
+  progress shown). New messages are sealed immediately.
+- **Turning it off** is allowed, after a confirmation. It decrypts all rows back to
+  plaintext.
+- **Key unavailable at startup** (keyring entry missing, wrong passphrase, failing
+  `password_command`):
+  1. refuse to open messages and ask for the key;
+  2. the only way past that is an explicit, confirmed **reset**: delete `messages.db`
+     and re-link to backfill. History older than the phone's sync is lost; the confirm
+     says so.
+- **Logging:** while encryption is on, message text is **never** logged, even with
+  `-debug`.
+- **Metadata stays plaintext:** who you talk to and when, chat/contact names, and
+  `session.db`. The TUI must say this **wherever encryption is offered or enabled**:
+  - in the Settings description;
+  - in the enable confirmation;
+  - on the unlock screen's help line.
+
+  The wording: "Encrypts message text only. Who you talk to, when, and contact names
+  stay readable on disk."
+- **Technical defaults:**
+  - Envelope keys: a random data key in a `keys` table, wrapped by the keyring or
+    passphrase key, so a passphrase change rewraps one key.
+  - AES-256-GCM (stdlib).
+  - Argon2id for passphrases (`x/crypto`), salt stored with the wrapped key.
+  - `secure_delete` plus `VACUUM` and a WAL checkpoint after re-encryption, so old
+    plaintext pages are really gone.
+  - Unlock screen in the TUI; `listen` and `db` prompt or use `password_command` /
+    keyring.
+
 ### Where the key would come from
 
 This is the real complexity; the cipher is easy. Planned sources, in order of preference:

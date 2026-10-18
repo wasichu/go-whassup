@@ -63,8 +63,12 @@ step lands or the plan changes.
    - an `[encryption]` config section (on/off, key source);
    - key sources in order: OS keyring, then a pianobar-style `password_command`, then a
      prompt;
-   - turning it on re-encrypts existing rows (decided);
-   - see `storage.md`.
+   - decisions recorded in `storage.md` › "Encryption decisions":
+     - on re-encrypts existing rows;
+     - off decrypts, after a confirmation;
+     - a missing key blocks, with a confirmed reset as the escape hatch;
+     - message text is never logged while encrypted;
+     - a metadata warning wherever encryption is offered.
 8. **Read receipts** (opt-in; never automatic, because of ban risk) and **desktop
    notifications**.
 9. Surface the "code rejected" pairing failure immediately (needs a whatsmeow hook;
