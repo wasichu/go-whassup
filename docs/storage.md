@@ -35,11 +35,11 @@ Relative `XDG_*` values are ignored, as the XDG spec requires.
 
 whatsmeow does **not** persist message content, so we do.
 
-**Schema (v3; migrations in `schema.go`, tracked by `PRAGMA user_version`, append-only):**
+**Schema (v12; migrations in `schema.go`, tracked by `PRAGMA user_version`, append-only):**
 
 | Table | Columns |
 | --- | --- |
-| `chats` | `jid` PK, `name`, `is_group`, `last_message_at`, `last_read_at` (unix s; v3; chats existing at upgrade count as read) |
+| `chats` | `jid` PK, `name`, `is_group`, `last_message_at`, `last_read_at` (unix s; v3; chats existing at upgrade count as read), `muted_until` (unix s, 0 = not muted; v12; from history sync and mute changes on other devices) |
 | `messages` | PK `(chat_jid, id)`, `sender_jid`, `push_name`, `ts` (unix s), `from_me`, `kind`, `body` BLOB, `codec` |
 | `contacts` | `jid` PK, `name` (your address-book name for them), `push_name` (the name they chose), `business_name`. Filled by contact snapshots/updates, history sync and incoming messages. v2 added `name` and `business_name`. |
 

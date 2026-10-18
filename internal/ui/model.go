@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -80,9 +81,10 @@ type Model struct {
 
 	downloading map[string]bool // attachment downloads in flight, by message ID
 
-	termFocused bool // terminal window has focus; reads only count while it does
-	interacted  bool // a key was pressed; nothing is read on launch alone
-	readSeq     int  // generation of the pending read timer (see scheduleRead)
+	termFocused bool                 // terminal window has focus; reads only count while it does
+	interacted  bool                 // a key was pressed; nothing is read on launch alone
+	readSeq     int                  // generation of the pending read timer (see scheduleRead)
+	notified    map[string]time.Time // last desktop notification per chat (see notify)
 	help        help.Model
 }
 
@@ -93,12 +95,14 @@ func New(ctx context.Context, deps Deps, sub *wa.Subscription) Model {
 	h := help.New()
 	h.Styles.ShortKey, h.Styles.FullKey = statusStyle.Bold(true), senderStyle
 	h.Styles.ShortDesc, h.Styles.ShortSeparator = statusStyle, statusStyle
-	m := Model{ctx: ctx, deps: deps, sub: sub, conv: newConversation(), login: newLogin(), conn: connConnecting, help: h, ownJID: deps.Client.OwnJID(), termFocused: true, downloading: map[string]bool{}}
+	m := Model{ctx: ctx, deps: deps, sub: sub, conv: newConversation(), login: newLogin(), conn: connConnecting, help: h, ownJID: deps.Client.OwnJID(), termFocused: true, downloading: map[string]bool{}, notified: map[string]time.Time{}}
 	switch {
 	case deps.Notice != "":
 		m.notice = deps.Notice
 	case deps.FocusHint != "":
 		m.notice = deps.FocusHint
+	case deps.Notify.Hint != "" && deps.Config.Notifications.Enabled:
+		m.notice = deps.Notify.Hint
 	}
 	if !deps.Client.IsPaired() {
 		m.conn = connNotPaired
@@ -124,6 +128,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.FocusMsg:
 		m.termFocused = true
+		clear(m.notified)       // you're back; the next message away notifies again
 		cmd := m.scheduleRead() // evaluate before m is copied into the return
 		return m, cmd
 	case tea.BlurMsg:
@@ -407,7 +412,7 @@ func (m Model) handleEvent(evt wa.Event) (tea.Model, tea.Cmd) {
 		m = m.openLogin("Logged out by WhatsApp (" + v.Reason + "). Link again to keep receiving messages.")
 	case wa.Message:
 		// The recorder stored it before this event reached us; reload.
-		cmds := []tea.Cmd{next, loadChats(m.ctx, m.deps.Store)}
+		cmds := []tea.Cmd{next, loadChats(m.ctx, m.deps.Store), m.notify(v, time.Now())}
 		if v.Chat == m.conv.chat.JID {
 			cmds = append(cmds, loadMessages(m.ctx, m.deps, v.Chat))
 		}
@@ -418,6 +423,8 @@ func (m Model) handleEvent(evt wa.Event) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, loadMessages(m.ctx, m.deps, m.conv.chat.JID))
 		}
 		return m, tea.Batch(cmds...)
+	case wa.ChatMuted:
+		return m, tea.Batch(next, loadChats(m.ctx, m.deps.Store)) // badge colour
 	case wa.HistorySync, wa.Contacts, wa.Groups:
 		// New names or history: refresh titles and the open chat's senders.
 		cmds := []tea.Cmd{next, loadChats(m.ctx, m.deps.Store)}

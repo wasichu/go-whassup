@@ -43,6 +43,7 @@ func TestTUIDepsFullyWired(t *testing.T) {
 	mayBeEmpty := map[string]bool{
 		"Graphics":  true, // depends on the terminal
 		"FocusHint": true, // only set inside tmux with focus-events off
+		"Notify":    true, // depends on the terminal
 		"Notice":    true, // set by Run only while re-sealing
 	}
 	v := reflect.ValueOf(deps)

@@ -51,6 +51,9 @@ type Deps struct {
 	// Graphics is the terminal's inline-image support (termcaps); images are
 	// used when it allows and Config.UI.InlineImages is set.
 	Graphics termcaps.Graphics
+	// Notify is how to raise desktop notifications through the terminal
+	// (termcaps); its Hint explains when they can't get through.
+	Notify termcaps.Notify
 	// Media is the attachment cache; OpenFile hands a file to the system
 	// viewer (media.Open). Both optional: without them media can't be opened.
 	Media    MediaCache

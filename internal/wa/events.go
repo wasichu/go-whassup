@@ -139,6 +139,15 @@ func (w *WhatsApp) peopleEvent(evt any) bool {
 		w.emit(Contacts{List: []Contact{{JID: w.resolveKey(v.JID, v.JIDAlt), PushName: v.NewPushName}}})
 	case *events.BusinessName:
 		w.emit(Contacts{List: []Contact{{JID: w.resolveKey(v.JID, types.EmptyJID), BusinessName: v.NewBusinessName}}})
+	case *events.Mute:
+		until := time.Time{}
+		if v.Action.GetMuted() {
+			until = muteEnd(v.Action.GetMuteEndTimestamp())
+			if until.IsZero() {
+				until = MutedForever // muted with no end given
+			}
+		}
+		w.emit(ChatMuted{Chat: w.resolveKey(v.JID, types.EmptyJID), Until: until})
 	case *events.MarkChatAsRead:
 		if v.Action.GetRead() {
 			w.emit(ChatRead{Chat: w.resolveKey(v.JID, types.EmptyJID), At: v.Timestamp})

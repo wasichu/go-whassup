@@ -88,7 +88,9 @@ step lands or the plan changes.
      - a missing key blocks, with a confirmed reset as the escape hatch;
      - message text is never logged while encrypted;
      - a metadata warning wherever encryption is offered.
-8. **Desktop notifications.** (Read receipts shipped as `mark_read = "read-receipts-on"`, opt-in.)
+8. [x] **Desktop notifications** through the terminal (OSC 777/99/9, tmux passthrough),
+   only while unfocused, never for muted chats; `[notifications]` preview levels.
+   (Read receipts shipped as `mark_read = "read-receipts-on"`, opt-in.)
 9. Surface the "code rejected" pairing failure immediately (needs a whatsmeow hook;
    see `pairing.md`).
 

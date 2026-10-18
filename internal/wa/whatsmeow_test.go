@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"go.mau.fi/whatsmeow/proto/waE2E"
+	"go.mau.fi/whatsmeow/proto/waSyncAction"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
@@ -206,5 +207,38 @@ func TestHandleEventChatRead(t *testing.T) {
 	want := ChatRead{Chat: chat.String(), At: at}
 	if len(*got) != 1 || (*got)[0] != want {
 		t.Errorf("events = %#v, want [%#v]", *got, want)
+	}
+}
+
+func TestHandleEventMute(t *testing.T) {
+	w, got := newTestWhatsApp(t)
+	chat := types.NewJID("120363000000000000", types.GroupServer)
+	mute := func(muted bool, end int64) *events.Mute {
+		return &events.Mute{JID: chat, Action: &waSyncAction.MuteAction{Muted: new(muted), MuteEndTimestamp: new(end)}}
+	}
+	w.handleEvent(mute(true, 1700000000123)) // milliseconds, as whatsmeow writes them
+	w.handleEvent(mute(true, -1))            // "Always"
+	w.handleEvent(mute(true, 0))             // muted, no end given
+	w.handleEvent(mute(false, 1700000000123))
+	want := []Event{
+		ChatMuted{Chat: chat.String(), Until: time.UnixMilli(1700000000123)},
+		ChatMuted{Chat: chat.String(), Until: MutedForever},
+		ChatMuted{Chat: chat.String(), Until: MutedForever},
+		ChatMuted{Chat: chat.String()},
+	}
+	if !reflect.DeepEqual(*got, want) {
+		t.Errorf("events = %#v\nwant %#v", *got, want)
+	}
+}
+
+func TestMuteEndUnits(t *testing.T) {
+	if got := muteEnd(1700000000); !got.Equal(time.Unix(1700000000, 0)) {
+		t.Errorf("seconds: %v", got)
+	}
+	if got := muteEnd(1700000000000); !got.Equal(time.Unix(1700000000, 0)) {
+		t.Errorf("milliseconds: %v", got)
+	}
+	if !muteEnd(0).IsZero() || muteEnd(-1) != MutedForever {
+		t.Error("0 must be unmuted and negative forever")
 	}
 }

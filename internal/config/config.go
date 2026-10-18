@@ -23,6 +23,22 @@ type Config struct {
 	UI         UI         `toml:"ui" comment:"How the terminal interface looks and behaves."`
 	Privacy    Privacy    `toml:"privacy" comment:"What go-whassup tells WhatsApp about you."`
 	Encryption Encryption `toml:"encryption" comment:"Encryption of stored messages at rest. See docs/storage.md."`
+	// Last, so existing settings keep their place in the Settings list.
+	Notifications Notifications `toml:"notifications" comment:"Desktop notifications for new messages. See docs/usage.md."`
+}
+
+// Preview modes for Notifications.Preview.
+const (
+	PreviewFull   = "full"   // chat, sender and message text
+	PreviewSender = "sender" // who wrote, not what
+	PreviewNone   = "none"   // just that something arrived
+)
+
+// Notifications controls desktop notifications, raised through the
+// terminal while its window isn't focused.
+type Notifications struct {
+	Enabled bool   `toml:"enabled" comment:"Raise a desktop notification for new messages while the terminal isn't focused.\nMuted chats never notify."`
+	Preview string `toml:"preview" choices:"full,sender,none" comment:"What a notification shows: full = chat, sender and message text;\nsender = who wrote, not what; none = only that a message arrived.\nYour OS may keep notifications (and their text) in its notification history."`
 }
 
 // Key sources for Encryption.KeySource.
@@ -69,9 +85,10 @@ type History struct {
 // everything the phone sends.
 func Default() Config {
 	return Config{
-		UI:         UI{InlineImages: true},
-		Privacy:    Privacy{MarkRead: MarkReadLocalOnly},
-		Encryption: Encryption{KeySource: KeySourceKeyring},
+		UI:            UI{InlineImages: true},
+		Privacy:       Privacy{MarkRead: MarkReadLocalOnly},
+		Encryption:    Encryption{KeySource: KeySourceKeyring},
+		Notifications: Notifications{Enabled: true, Preview: PreviewFull},
 	}
 }
 
@@ -90,6 +107,11 @@ func (c Config) Validate() error {
 	case MarkReadLocalOnly, MarkReadReceiptsOff, MarkReadReceiptsOn:
 	default:
 		errs = append(errs, fmt.Errorf("privacy.mark_read must be %s, got %q", markReadChoicesForError, c.Privacy.MarkRead))
+	}
+	switch c.Notifications.Preview {
+	case PreviewFull, PreviewSender, PreviewNone:
+	default:
+		errs = append(errs, fmt.Errorf("notifications.preview must be full, sender or none, got %q", c.Notifications.Preview))
 	}
 	switch c.Encryption.KeySource {
 	case KeySourceKeyring, KeySourcePasswordCommand, KeySourcePrompt:

@@ -157,7 +157,8 @@ type Chat struct {
 	JID         string // stable chat key
 	Name        string // group subject or contact name; may be empty
 	IsGroup     bool
-	UnreadCount int // unread messages per the phone at sync time
+	UnreadCount int       // unread messages per the phone at sync time
+	MutedUntil  time.Time // zero = not muted; MutedForever = until unmuted
 }
 
 // MessageEdited replaces the text of an earlier message.
@@ -214,6 +215,31 @@ type Groups struct {
 	Snapshot bool
 }
 
+// ChatMuted reports a chat's mute setting, changed on another device (or
+// synced after linking). Until is zero when unmuted.
+type ChatMuted struct {
+	Chat  string
+	Until time.Time // MutedForever = until unmuted
+}
+
+// MutedForever is the Until of a chat muted with no end ("Always").
+var MutedForever = time.Date(9999, 12, 31, 0, 0, 0, 0, time.UTC)
+
+// muteEnd interprets WhatsApp's mute end: negative means forever, and
+// newer clients send milliseconds where older data has seconds (told
+// apart by size: 1e12 seconds is tens of millennia away).
+func muteEnd(v int64) time.Time {
+	switch {
+	case v < 0:
+		return MutedForever
+	case v == 0:
+		return time.Time{}
+	case v >= 1e12:
+		return time.UnixMilli(v)
+	}
+	return time.Unix(v, 0)
+}
+
 // ChatRead reports that the user read a chat on another device, up to At.
 type ChatRead struct {
 	Chat string
@@ -260,3 +286,4 @@ func (MessageEdited) isEvent()  {}
 func (MessageDeleted) isEvent() {}
 func (Reaction) isEvent()       {}
 func (Groups) isEvent()         {}
+func (ChatMuted) isEvent()      {}

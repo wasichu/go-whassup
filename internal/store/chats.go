@@ -11,16 +11,38 @@ import (
 	"github.com/wasichu/go-whassup/internal/wa"
 )
 
+// SetMuted records a chat's mute setting (zero until = not muted). Chats
+// not stored yet are skipped rather than created: app-state sync reports
+// mutes for chats long gone quiet, and history sync carries the mute of
+// any chat it does bring.
+func (s *Store) SetMuted(ctx context.Context, chat string, until time.Time) error {
+	if _, err := s.db.ExecContext(ctx, `UPDATE chats SET muted_until = ? WHERE jid = ?`,
+		unixOrZero(until), chat); err != nil {
+		return fmt.Errorf("saving mute for %s: %w", chat, err)
+	}
+	return nil
+}
+
+// unixOrZero stores a zero time as 0 rather than year 1's negative seconds.
+func unixOrZero(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.Unix()
+}
+
 // SaveChats records chat metadata. An empty name never overwrites a known one.
 func (s *Store) SaveChats(ctx context.Context, chats []wa.Chat) error {
 	return s.inTx(ctx, "saving chats", func(tx *sql.Tx) error {
 		for _, c := range chats {
 			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO chats (jid, name, is_group) VALUES (?, ?, ?)
+				INSERT INTO chats (jid, name, is_group, muted_until) VALUES (?, ?, ?, ?)
 				ON CONFLICT (jid) DO UPDATE SET
 					name = CASE WHEN excluded.name != '' THEN excluded.name ELSE name END,
-					is_group = excluded.is_group`,
-				c.JID, c.Name, c.IsGroup); err != nil {
+					is_group = excluded.is_group,
+					-- history only knows mutes; an unmute arrives as an app-state event
+					muted_until = CASE WHEN excluded.muted_until != 0 THEN excluded.muted_until ELSE muted_until END`,
+				c.JID, c.Name, c.IsGroup, unixOrZero(c.MutedUntil)); err != nil {
 				return fmt.Errorf("chat %s: %w", c.JID, err)
 			}
 		}
@@ -37,9 +59,13 @@ type ChatSummary struct {
 	LastMessageAt time.Time
 	LastReadAt    time.Time
 	Messages      int
-	Unread        int // incoming messages newer than LastReadAt
-	MemberCount   int // group participants, if known
+	Unread        int       // incoming messages newer than LastReadAt
+	MemberCount   int       // group participants, if known
+	MutedUntil    time.Time // zero = not muted; see wa.MutedForever
 }
+
+// Muted reports whether the chat is muted at now.
+func (c ChatSummary) Muted(now time.Time) bool { return c.MutedUntil.After(now) }
 
 // Title is the best available label for the chat.
 func (c ChatSummary) Title() string {
@@ -63,7 +89,8 @@ const chatSummaryQuery = `
 	SELECT c.jid, ` + titleSQL + `, c.is_group, c.last_message_at, c.last_read_at,
 	       (SELECT count(*) FROM messages m WHERE m.chat_jid = c.jid),
 	       (SELECT count(*) FROM messages m WHERE m.chat_jid = c.jid AND m.from_me = 0 AND m.deleted = 0 AND m.ts > c.last_read_at),
-	       (SELECT count(*) FROM group_participants gp WHERE gp.group_jid = c.jid)
+	       (SELECT count(*) FROM group_participants gp WHERE gp.group_jid = c.jid),
+	       c.muted_until
 	FROM chats c LEFT JOIN contacts ct ON ct.jid = c.jid`
 
 // Chats lists chats, most recently active first.
@@ -76,11 +103,14 @@ func (s *Store) Chats(ctx context.Context) ([]ChatSummary, error) {
 	var chats []ChatSummary
 	for rows.Next() {
 		var c ChatSummary
-		var last, read int64
-		if err := rows.Scan(&c.JID, &c.Name, &c.IsGroup, &last, &read, &c.Messages, &c.Unread, &c.MemberCount); err != nil {
+		var last, read, muted int64
+		if err := rows.Scan(&c.JID, &c.Name, &c.IsGroup, &last, &read, &c.Messages, &c.Unread, &c.MemberCount, &muted); err != nil {
 			return nil, fmt.Errorf("listing chats: %w", err)
 		}
 		c.LastMessageAt, c.LastReadAt = time.Unix(last, 0), time.Unix(read, 0)
+		if muted != 0 {
+			c.MutedUntil = time.Unix(muted, 0)
+		}
 		chats = append(chats, c)
 	}
 	if err := rows.Err(); err != nil {

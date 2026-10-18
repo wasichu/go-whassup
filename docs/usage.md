@@ -145,10 +145,31 @@ names stay readable on disk.**
     your phone's setting is respected. (Groups whose members are addressed by privacy ID
     are untested with `read-receipts-on`.)
 - **In tmux**, focus tracking needs `tmux set -g focus-events on` (add it to
-  `~/.tmux.conf`). Without it, the status line shows a tip at launch, and chats count as
-  read even while you're in another window.
+  `~/.tmux.conf`). Without it, the status line shows a tip at launch, chats count as
+  read even while you're in another window, and notifications never fire.
 - When you link, the phone's unread counts are adopted. Chats that existed before this
   feature start out read.
+- **Muted chats** (muted on your phone) show a grey badge instead of a green one.
+
+### Desktop notifications
+
+- A new message raises a desktop notification **while the terminal isn't focused**. When
+  it's focused, the chat list shows it instead. Clicking the notification brings your
+  terminal forward.
+- **Never for muted chats**, your own messages, or backlog that arrives on reconnect
+  (messages more than 2 minutes old). A burst from one chat raises one notification a
+  minute at most; coming back to the terminal resets that.
+- Notifications go through the terminal, which shows them natively, so there's nothing
+  to install and message text never appears on a command line. go-whassup picks the
+  terminal's protocol: OSC 777 (Ghostty, foot, urxvt), OSC 99 (kitty), otherwise OSC 9
+  (iTerm2, WezTerm, Windows Terminal; terminals without support ignore it). Some
+  terminals need notifications enabled in their own settings.
+- **In tmux**, notifications need `tmux set -g allow-passthrough on` (to reach the
+  terminal) and `focus-events on` (to know you're away); the status line says so at
+  launch if they're off.
+- `[notifications]` in Settings: `enabled`, and `preview` (`full` shows chat, sender and
+  text; `sender` hides the text; `none` hides both). Your OS may keep notifications in
+  its history, so with encryption on you may want `sender` or `none`.
 
 ### Finder (`/`)
 

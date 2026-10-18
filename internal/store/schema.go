@@ -132,6 +132,11 @@ ALTER TABLE reactions_v10 RENAME TO reactions;
 	`
 ALTER TABLE keys ADD COLUMN finished_at INTEGER NOT NULL DEFAULT 0;
 `,
+	// 12: chat mute setting (unix seconds; 0 = not muted), so notifications
+	// can skip muted chats.
+	`
+ALTER TABLE chats ADD COLUMN muted_until INTEGER NOT NULL DEFAULT 0;
+`,
 }
 
 // migrate brings the schema up to date inside one transaction.

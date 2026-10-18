@@ -1023,3 +1023,51 @@ func TestMigrateV7ToV8IndexesExisting(t *testing.T) {
 		t.Errorf("existing messages should be indexed on upgrade: %v", got)
 	}
 }
+
+func TestRecorderTracksMutes(t *testing.T) {
+	st := openStore(t, "", nil)
+	client := &watest.Client{Paired: true}
+	(&Recorder{Store: st, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}).Attach(client)
+	mutedUntil := func(jid string) time.Time {
+		t.Helper()
+		chats, err := st.Chats(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range chats {
+			if c.JID == jid {
+				return c.MutedUntil
+			}
+		}
+		t.Fatalf("chat %s not stored", jid)
+		return time.Time{}
+	}
+	until := t0.Add(8 * time.Hour)
+
+	client.Emit(wa.ChatMuted{Chat: ada, Until: until}) // not stored yet: skipped, not created
+	if chats, err := st.Chats(t.Context()); err != nil || len(chats) != 0 {
+		t.Fatalf("mute created a chat: %v, %v", chats, err)
+	}
+	client.Emit(wa.HistorySync{Chats: []wa.Chat{{JID: ada, MutedUntil: until}, {JID: bob}}})
+	if got := mutedUntil(ada); !got.Equal(until) {
+		t.Errorf("history mute = %v, want %v", got, until)
+	}
+	client.Emit(wa.HistorySync{Chats: []wa.Chat{{JID: ada}}}) // history doesn't know unmutes
+	if got := mutedUntil(ada); !got.Equal(until) {
+		t.Errorf("history without a mute cleared it: %v", got)
+	}
+	client.Emit(wa.ChatMuted{Chat: ada})
+	if got := mutedUntil(ada); !got.IsZero() {
+		t.Errorf("unmute = %v, want zero", got)
+	}
+	client.Emit(wa.ChatMuted{Chat: bob, Until: wa.MutedForever})
+	chats, err := st.Chats(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range chats {
+		if want := c.JID == bob; c.Muted(t0) != want {
+			t.Errorf("%s muted = %v, want %v", c.JID, c.Muted(t0), want)
+		}
+	}
+}

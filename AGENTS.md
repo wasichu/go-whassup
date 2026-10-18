@@ -83,7 +83,7 @@ internal/wa/         whatsmeow adapter: Client interface, Event types, Subscribe
                      ONLY package importing whatsmeow.
 internal/wa/watest/  fake wa.Client shared by all tests
 internal/headless/   login/listen/db commands (Console: In/Out/Log)
-internal/termcaps/   terminal capability detection (Kitty graphics, incl. via tmux); read-only
+internal/termcaps/   terminal capability detection (Kitty graphics, notifications; incl. via tmux); read-only
 internal/sqlite/     the only place that opens SQLite (driver, DSN, 0600)
 internal/store/      OUR messages.db + Recorder. whatsmeow does NOT persist messages.
                      Message text and media keys go through Codec only (seal/open).

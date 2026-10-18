@@ -75,3 +75,45 @@ func TestFocusHint(t *testing.T) {
 		t.Errorf("focus-events off: %q", h)
 	}
 }
+
+func TestDetectNotify(t *testing.T) {
+	vars := func(kv ...string) func(string) string {
+		m := map[string]string{}
+		for i := 0; i+1 < len(kv); i += 2 {
+			m[kv[i]] = kv[i+1]
+		}
+		return func(k string) string { return m[k] }
+	}
+	tmux := func(passthrough, outer string) Runner {
+		return func(args ...string) (string, error) {
+			if args[0] == "show-options" {
+				return passthrough, nil
+			}
+			return outer, nil
+		}
+	}
+	noRun := func(...string) (string, error) { t.Fatal("tmux asked outside tmux"); return "", nil }
+	for _, tt := range []struct {
+		name string
+		env  func(string) string
+		run  Runner
+		want Notify
+	}{
+		{"ghostty", vars("TERM", "xterm-ghostty"), noRun, Notify{Protocol: NotifyOSC777}},
+		{"ghostty by program", vars("TERM", "xterm-256color", "TERM_PROGRAM", "ghostty"), noRun, Notify{Protocol: NotifyOSC777}},
+		{"kitty", vars("TERM", "xterm-kitty"), noRun, Notify{Protocol: NotifyOSC99}},
+		{"foot", vars("TERM", "foot"), noRun, Notify{Protocol: NotifyOSC777}},
+		{"iterm/unknown", vars("TERM", "xterm-256color", "TERM_PROGRAM", "iTerm.app"), noRun, Notify{Protocol: NotifyOSC9}},
+		{"screen", vars("TERM", "screen-256color"), noRun, Notify{}},
+		{"tmux in ghostty", vars("TMUX", "/tmp/t", "TERM", "tmux-256color"), tmux("on", "xterm-ghostty"), Notify{Protocol: NotifyOSC777, Tmux: true}},
+		{"tmux unknown outer", vars("TMUX", "/tmp/t"), tmux("all", "xterm-256color"), Notify{Protocol: NotifyOSC9, Tmux: true}},
+	} {
+		if got := DetectNotify(tt.env, tt.run); got != tt.want {
+			t.Errorf("%s: got %+v, want %+v", tt.name, got, tt.want)
+		}
+	}
+	got := DetectNotify(vars("TMUX", "/tmp/t"), tmux("off", "xterm-ghostty"))
+	if got.Protocol != NotifyNone || !strings.Contains(got.Hint, "allow-passthrough on") {
+		t.Errorf("passthrough off: %+v", got)
+	}
+}

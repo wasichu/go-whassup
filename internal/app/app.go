@@ -237,6 +237,7 @@ func tuiDeps(cfg config.Config, p paths.Paths, client *wa.WhatsApp, st *store.St
 		},
 		Graphics:  termcaps.DetectGraphics(os.Getenv, termcaps.Tmux),
 		FocusHint: termcaps.FocusHint(os.Getenv, termcaps.Tmux),
+		Notify:    termcaps.DetectNotify(os.Getenv, termcaps.Tmux),
 		Media:     cache,
 		OpenFile:  media.Open,
 	}

@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 
@@ -50,6 +51,16 @@ func (l *chatList) selectJID(jid string) bool {
 		}
 	}
 	return false
+}
+
+// find returns the listed chat with jid.
+func (l *chatList) find(jid string) (store.ChatSummary, bool) {
+	for _, c := range l.chats {
+		if c.JID == jid {
+			return c, true
+		}
+	}
+	return store.ChatSummary{}, false
 }
 
 // move changes the selection by delta, clamped, and reports whether it moved.
@@ -104,7 +115,11 @@ func (l *chatList) view(width, height int, active bool, own string) string {
 		}
 		row := style.Render(label)
 		if badge != "" {
-			row = lipgloss.NewStyle().Width(width-lipgloss.Width(badge)).MaxWidth(width-lipgloss.Width(badge)).Render(row) + unreadBadgeStyle.Render(badge)
+			bs := unreadBadgeStyle
+			if c.Muted(time.Now()) {
+				bs = mutedBadgeStyle // grey, like the phone
+			}
+			row = lipgloss.NewStyle().Width(width-lipgloss.Width(badge)).MaxWidth(width-lipgloss.Width(badge)).Render(row) + bs.Render(badge)
 		}
 		b.WriteString("\n" + row)
 	}

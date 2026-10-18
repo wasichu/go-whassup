@@ -87,6 +87,13 @@ encryption off, let it finish, then turn it on with the new source.
 | `key_source` | `"keyring"` | `keyring` (OS keychain, no prompt), `password-command` (runs `password_command`; its output is the passphrase), or `prompt` (asks at startup). |
 | `password_command` | `""` | Shell command that prints the passphrase, e.g. `pass show whatsapp`. Required with `key_source = password-command` (even while encryption is off), and only listed in Settings then; choosing that source asks for it. |
 
+### `[notifications]`
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `true` | Raise a desktop notification for new messages while the terminal isn't focused (not for muted chats). See `usage.md` › "Desktop notifications". |
+| `preview` | `"full"` | What a notification shows: `full` = chat, sender and text; `sender` = who wrote, not what; `none` = only that a message arrived. Your OS may keep notifications in its history. |
+
 ## Planned sections
 
 - More `[ui]` settings: theme and keybindings, as the TUI grows.

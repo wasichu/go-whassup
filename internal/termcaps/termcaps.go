@@ -78,7 +78,7 @@ func hasFeature(list, want string) bool {
 
 // FocusHint returns advice if the terminal can't report focus changes to
 // us, which go-whassup uses to avoid marking chats read while you're in
-// another window. Only tmux needs it (focus-events is off by default);
+// another window, and to notify only then. Only tmux needs it (focus-events is off by default);
 // "" means focus reporting should work.
 func FocusHint(getenv func(string) string, run Runner) string {
 	if getenv("TMUX") == "" {
@@ -88,5 +88,5 @@ func FocusHint(getenv func(string) string, run Runner) string {
 	if err != nil || v == "on" {
 		return ""
 	}
-	return "tmux isn't passing focus changes, so chats open here count as read even while you're in another window: tmux set -g focus-events on"
+	return "tmux isn't passing focus changes, so chats open here count as read and notifications never fire while you're in another window: tmux set -g focus-events on"
 }

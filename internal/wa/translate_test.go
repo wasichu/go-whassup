@@ -132,7 +132,8 @@ func TestHistoryFromProto(t *testing.T) {
 			},
 			{
 				ID: proto.String(group.String()), Name: proto.String("Book club"),
-				Messages: []*waHistorySync.HistorySyncMsg{webMsg("G1", "chapter 3?", true)},
+				MuteEndTime: proto.Uint64(1700000000), // history carries seconds
+				Messages:    []*waHistorySync.HistorySyncMsg{webMsg("G1", "chapter 3?", true)},
 			},
 			{ID: proto.String(types.StatusBroadcastJID.String()), Messages: []*waHistorySync.HistorySyncMsg{webMsg("S1", "story", false)}},
 		},
@@ -144,7 +145,7 @@ func TestHistoryFromProto(t *testing.T) {
 	}
 	wantChats := []Chat{
 		{JID: pnAda.String(), Name: "Ada L"},
-		{JID: group.String(), Name: "Book club", IsGroup: true},
+		{JID: group.String(), Name: "Book club", IsGroup: true, MutedUntil: time.Unix(1700000000, 0)},
 	}
 	if len(h.Chats) != len(wantChats) {
 		t.Fatalf("chats = %+v, want %+v", h.Chats, wantChats)

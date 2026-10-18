@@ -63,6 +63,8 @@ func (r *Recorder) Handle(evt wa.Event) {
 		r.logIf(r.Store.SaveGroups(ctx, v.List), "recording groups", "count", len(v.List))
 	case wa.Contacts:
 		r.logIf(r.Store.SaveContacts(ctx, v.List), "recording contacts", "count", len(v.List))
+	case wa.ChatMuted:
+		r.logIf(r.Store.SetMuted(ctx, v.Chat, v.Until), "recording mute", "chat", v.Chat)
 	case wa.HistorySync:
 		r.onHistory(ctx, v)
 	}

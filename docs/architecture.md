@@ -5,7 +5,7 @@ cmd/go-whassup (main: signals + exit code only)
    └─► internal/app            composition root: args, paths, logging, wiring
          ├─► internal/paths     XDG locations (config, data dir, DBs, log)
          ├─► internal/config    typed Config (TOML)
-         ├─► internal/termcaps  terminal capabilities (Kitty graphics, tmux)
+         ├─► internal/termcaps  terminal capabilities (Kitty graphics, notifications, tmux)
          ├─► internal/logging   slog → log file
          ├─► internal/ui        Bubble Tea v2 TUI          ─┐
          ├─► internal/headless  login / listen commands     ├─► wa.Client (interface)
