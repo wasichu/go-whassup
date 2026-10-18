@@ -31,14 +31,6 @@ const (
 	markReadChoicesForError = "local-only, read-receipts-off or read-receipts-on"
 )
 
-// markReadAliases are names accepted from older config files and normalized
-// on load, so the next Save writes the new names.
-var markReadAliases = map[string]string{
-	"local":    MarkReadLocalOnly,
-	"devices":  MarkReadReceiptsOff,
-	"everyone": MarkReadReceiptsOn,
-}
-
 // Privacy controls what is sent on the user's behalf.
 type Privacy struct {
 	MarkRead string `toml:"mark_read" choices:"local-only,read-receipts-off,read-receipts-on" comment:"When you read a chat here: local-only = only clear it in go-whassup (nothing is sent);\nread-receipts-off = also mark it read on your phone and other devices, but senders see no blue ticks;\nread-receipts-on = also send read receipts (blue ticks), like the official apps."`
@@ -110,18 +102,10 @@ func Load(path string) (Config, error) {
 		}
 		return cfg, fmt.Errorf("config %s: %w", path, err)
 	}
-	cfg.normalize()
 	if err := cfg.Validate(); err != nil {
 		return cfg, fmt.Errorf("config %s: %w", path, err)
 	}
 	return cfg, nil
-}
-
-// normalize rewrites values from older config files to their current names.
-func (c *Config) normalize() {
-	if v, ok := markReadAliases[c.Privacy.MarkRead]; ok {
-		c.Privacy.MarkRead = v
-	}
 }
 
 const header = `# go-whassup configuration. See docs/config.md.

@@ -78,6 +78,7 @@ func TestLoadErrors(t *testing.T) {
 		{"negative", "[history]\nkeep_days = -1\n", "keep_days must be 0 or more"},
 		{"days without full sync", "[history]\nfull_sync_days = 30\n", "only used with"},
 		{"bad mark_read", "[privacy]\nmark_read = \"sometimes\"\n", "privacy.mark_read must be"},
+		{"old mark_read name", "[privacy]\nmark_read = \"everyone\"\n", "privacy.mark_read must be"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -106,33 +107,4 @@ func writeConfig(t *testing.T, body string) string {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	return path
-}
-
-func TestLoadMigratesOldMarkReadNames(t *testing.T) {
-	for old, want := range map[string]string{
-		"local":    MarkReadLocalOnly,
-		"devices":  MarkReadReceiptsOff,
-		"everyone": MarkReadReceiptsOn,
-	} {
-		t.Run(old, func(t *testing.T) {
-			path := writeConfig(t, "[privacy]\nmark_read = \""+old+"\"\n")
-			cfg, err := Load(path)
-			if err != nil {
-				t.Fatalf("an old name must not stop the app starting: %v", err)
-			}
-			if cfg.Privacy.MarkRead != want {
-				t.Fatalf("mark_read = %q, want %q", cfg.Privacy.MarkRead, want)
-			}
-			if err := Save(path, cfg); err != nil {
-				t.Fatalf("Save: %v", err)
-			}
-			data, err := os.ReadFile(path)
-			if err != nil {
-				t.Fatalf("ReadFile: %v", err)
-			}
-			if !strings.Contains(string(data), "mark_read = '"+want+"'") && !strings.Contains(string(data), `mark_read = "`+want+`"`) {
-				t.Errorf("saved file should use the new name %q:\n%s", want, data)
-			}
-		})
-	}
 }
