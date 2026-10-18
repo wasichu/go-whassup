@@ -20,6 +20,19 @@ import (
 type Config struct {
 	History History `toml:"history" comment:"How much chat history to fetch and keep."`
 	UI      UI      `toml:"ui" comment:"How the terminal interface looks and behaves."`
+	Privacy Privacy `toml:"privacy" comment:"What go-whassup tells WhatsApp about you."`
+}
+
+// Mark-read modes for Privacy.MarkRead.
+const (
+	MarkReadLocal    = "local"
+	MarkReadDevices  = "devices"
+	MarkReadEveryone = "everyone"
+)
+
+// Privacy controls what is sent on the user's behalf.
+type Privacy struct {
+	MarkRead string `toml:"mark_read" choices:"local,devices,everyone" comment:"When you read a chat here: local = only clear it in go-whassup (nothing is sent);\ndevices = also mark it read on your phone and other devices (no blue ticks);\neveryone = also send read receipts (blue ticks), like the official apps."`
 }
 
 // UI controls the TUI.
@@ -38,7 +51,7 @@ type History struct {
 // Default returns the configuration used when no file exists: store
 // everything the phone sends.
 func Default() Config {
-	return Config{UI: UI{InlineImages: true}}
+	return Config{UI: UI{InlineImages: true}, Privacy: Privacy{MarkRead: MarkReadLocal}}
 }
 
 // Validate reports every invalid setting.
@@ -52,6 +65,11 @@ func (c Config) Validate() error {
 	nonNegative("history.full_sync_days", c.History.FullSyncDays)
 	nonNegative("history.keep_days", c.History.KeepDays)
 	nonNegative("history.max_messages_per_chat", c.History.MaxMessagesPerChat)
+	switch c.Privacy.MarkRead {
+	case MarkReadLocal, MarkReadDevices, MarkReadEveryone:
+	default:
+		errs = append(errs, fmt.Errorf("privacy.mark_read must be local, devices or everyone, got %q", c.Privacy.MarkRead))
+	}
 	if c.History.FullSyncDays > 0 && !c.History.RequestFullSync {
 		errs = append(errs, errors.New("history.full_sync_days is only used with history.request_full_sync = true"))
 	}

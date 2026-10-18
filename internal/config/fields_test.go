@@ -12,7 +12,7 @@ func TestFieldsDiscoveryAndEditing(t *testing.T) {
 	for _, f := range fields {
 		names = append(names, f.Name())
 	}
-	want := "history.request_full_sync history.full_sync_days history.keep_days history.max_messages_per_chat ui.inline_images"
+	want := "history.request_full_sync history.full_sync_days history.keep_days history.max_messages_per_chat ui.inline_images privacy.mark_read"
 	if got := strings.Join(names, " "); got != want {
 		t.Fatalf("fields = %s, want %s", got, want)
 	}
@@ -23,7 +23,7 @@ func TestFieldsDiscoveryAndEditing(t *testing.T) {
 		t.Errorf("field metadata = %+v", fields[2])
 	}
 
-	fields[0].Toggle()
+	fields[0].Cycle()
 	if err := fields[2].Set(" 30 "); err != nil {
 		t.Fatalf("Set: %v", err)
 	}
@@ -38,5 +38,33 @@ func TestFieldsDiscoveryAndEditing(t *testing.T) {
 	}
 	if err := fields[0].Set("maybe"); err == nil {
 		t.Error("bad bool accepted")
+	}
+}
+
+func TestChoiceField(t *testing.T) {
+	cfg := Default()
+	var f Field
+	for _, x := range cfg.Fields() {
+		if x.Name() == "privacy.mark_read" {
+			f = x
+		}
+	}
+	if f.Kind != KindChoice || strings.Join(f.Choices, ",") != "local,devices,everyone" || f.Value() != "local" {
+		t.Fatalf("mark_read field = %+v (value %q)", f, f.Value())
+	}
+	f.Cycle()
+	f.Cycle()
+	if cfg.Privacy.MarkRead != "everyone" {
+		t.Errorf("after two cycles = %q", cfg.Privacy.MarkRead)
+	}
+	f.Cycle()
+	if cfg.Privacy.MarkRead != "local" {
+		t.Errorf("cycle should wrap, got %q", cfg.Privacy.MarkRead)
+	}
+	if err := f.Set("sometimes"); err == nil || !strings.Contains(err.Error(), "local, devices, everyone") {
+		t.Errorf("bad choice accepted: %v", err)
+	}
+	if err := f.Set("devices"); err != nil || cfg.Privacy.MarkRead != "devices" {
+		t.Errorf("Set(devices) = %v, %q", err, cfg.Privacy.MarkRead)
 	}
 }

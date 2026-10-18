@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -13,6 +14,7 @@ type FieldKind int
 const (
 	KindBool FieldKind = iota
 	KindInt
+	KindChoice // a string limited to Choices
 )
 
 // Field is one setting, discovered from Config's struct tags so editors
@@ -25,7 +27,9 @@ type Field struct {
 	Kind    FieldKind
 	// PairingOnly marks settings that only take effect when linking a device.
 	PairingOnly bool
-	v           reflect.Value
+	// Choices lists the allowed values of a KindChoice field, in display order.
+	Choices []string
+	v       reflect.Value
 }
 
 // Name is the dotted name used in messages, e.g. "history.keep_days".
@@ -33,8 +37,11 @@ func (f Field) Name() string { return f.Section + "." + f.Key }
 
 // Value renders the current value.
 func (f Field) Value() string {
-	if f.Kind == KindBool {
+	switch f.Kind {
+	case KindBool:
 		return strconv.FormatBool(f.v.Bool())
+	case KindChoice:
+		return f.v.String()
 	}
 	return strconv.FormatInt(f.v.Int(), 10)
 }
@@ -56,19 +63,30 @@ func (f Field) Set(s string) error {
 			return fmt.Errorf("%s: want a whole number", f.Name())
 		}
 		f.v.SetInt(int64(n))
+	case KindChoice:
+		if !slices.Contains(f.Choices, s) {
+			return fmt.Errorf("%s: want one of %s", f.Name(), strings.Join(f.Choices, ", "))
+		}
+		f.v.SetString(s)
 	}
 	return nil
 }
 
-// Toggle flips a bool field.
-func (f Field) Toggle() {
-	if f.Kind == KindBool {
+// Cycle moves a choice field to its next allowed value (wrapping), or
+// flips a bool.
+func (f Field) Cycle() {
+	switch f.Kind {
+	case KindBool:
 		f.v.SetBool(!f.v.Bool())
+	case KindChoice:
+		i := slices.Index(f.Choices, f.v.String())
+		f.v.SetString(f.Choices[(i+1)%len(f.Choices)])
 	}
 }
 
 // Fields lists c's settings in file order. Sections are Config's struct
-// fields; settings are their bool and int fields.
+// fields; settings are their bool and int fields, and string fields with a
+// `choices:"a,b,c"` tag.
 func (c *Config) Fields() []Field {
 	var out []Field
 	root := reflect.ValueOf(c).Elem()
@@ -92,6 +110,12 @@ func (c *Config) Fields() []Field {
 				f.Kind = KindBool
 			case reflect.Int:
 				f.Kind = KindInt
+			case reflect.String:
+				choices := sf.Tag.Get("choices")
+				if choices == "" {
+					continue // free-form strings aren't editable generically
+				}
+				f.Kind, f.Choices = KindChoice, strings.Split(choices, ",")
 			default:
 				continue // not editable generically
 			}

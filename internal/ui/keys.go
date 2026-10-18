@@ -30,7 +30,7 @@ var keys = struct {
 	PageDown:  key.NewBinding(key.WithKeys("pgdown"), key.WithHelp("pgdn", "scroll down")),
 	Select:    key.NewBinding(key.WithKeys("enter", "space"), key.WithHelp("enter", "select")),
 	Back:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
-	Edit:      key.NewBinding(key.WithKeys("enter", "space"), key.WithHelp("enter", "toggle/edit")),
+	Edit:      key.NewBinding(key.WithKeys("enter", "space"), key.WithHelp("enter", "change")),
 	Submit:    key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "continue")),
 	Cancel:    key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 	ForceQuit: key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "quit")),

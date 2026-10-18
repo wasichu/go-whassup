@@ -19,7 +19,7 @@ func TestLoadMissingFileGivesDefaults(t *testing.T) {
 
 func TestSaveLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "config.toml")
-	want := Config{History: History{RequestFullSync: true, FullSyncDays: 365, KeepDays: 90, MaxMessagesPerChat: 5000}, UI: UI{InlineImages: false}}
+	want := Config{History: History{RequestFullSync: true, FullSyncDays: 365, KeepDays: 90, MaxMessagesPerChat: 5000}, UI: UI{InlineImages: false}, Privacy: Privacy{MarkRead: MarkReadEveryone}}
 	if err := Save(path, want); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -77,6 +77,7 @@ func TestLoadErrors(t *testing.T) {
 		{"wrong type", "[history]\nkeep_days = \"lots\"\n", "config"},
 		{"negative", "[history]\nkeep_days = -1\n", "keep_days must be 0 or more"},
 		{"days without full sync", "[history]\nfull_sync_days = 30\n", "only used with"},
+		{"bad mark_read", "[privacy]\nmark_read = \"sometimes\"\n", "privacy.mark_read must be"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

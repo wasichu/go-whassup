@@ -101,9 +101,9 @@ func (m Model) settingsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		s.selected = min(s.selected+1, len(fields)-1)
 		s.err = ""
 	case key.Matches(msg, keys.Select):
-		if f.Kind == config.KindBool {
+		if f.Kind == config.KindBool || f.Kind == config.KindChoice {
 			next := s.cfg
-			next.Fields()[s.selected].Toggle()
+			next.Fields()[s.selected].Cycle()
 			return m.commitSetting(next)
 		}
 		s.editing, s.err = true, ""
@@ -159,6 +159,9 @@ func (m Model) settingsView(width, height int) string {
 			b.WriteString("\n" + senderStyle.Render("["+section+"]") + "\n")
 		}
 		value := f.Value()
+		if f.Kind == config.KindChoice {
+			value = "‹ " + value + " ›"
+		}
 		if i == s.selected && s.editing {
 			value = s.input.View()
 		}

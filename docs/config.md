@@ -23,8 +23,8 @@ TUI's Settings screen (`,`) reads and writes it.
 - **Precedence:** defaults < file < command-line flags (`-debug`). Environment
   variables are not supported (add them only when there's a real need).
 - **Settings screen.** `Config.Fields()` discovers settings by reflection over the
-  struct tags (bool and int fields; tag `applies:"pairing"` marks link-time-only
-  settings). The TUI renders and edits them generically, so a new setting appears there
+  struct tags: bool and int fields, and string fields with a `choices:"a,b"` tag, which
+  enter cycles through. Tag `applies:"pairing"` marks link-time-only settings. The TUI renders and edits them generically, so a new setting appears there
   with no UI code. A change goes through `Validate` → `Save` → `ApplyConfig` (wired in
   `internal/app`), which updates the client's pairing options and the recorder's
   retention, then prunes.
@@ -61,6 +61,15 @@ documented behavior.)
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `inline_images` | `true` | Show the login QR as a small image in terminals with Kitty graphics support (Ghostty, kitty). Requires true color; inside tmux also `allow-passthrough on`. Otherwise text blocks are used regardless. `false` always uses text blocks. |
+
+### `[privacy]`
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `mark_read` | `"local"` | What happens when you read a chat in go-whassup. `local`: only clear it in go-whassup; **nothing is sent**. `devices`: also mark it read on your phone and other devices, via `read-self` receipts like the official apps with read receipts off; senders see nothing. `everyone`: also send read receipts (blue ticks), like the official apps' default. |
+
+The trade-off with `devices`/`everyone`: each read sends an (end-to-end encrypted)
+receipt, so WhatsApp's servers learn *when* you read chats, though not what.
 
 ## Planned sections
 
