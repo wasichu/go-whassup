@@ -28,6 +28,10 @@ type Deps struct {
 	// ApplyConfig makes a saved config take effect in the running app
 	// (retention, pairing options). Called off the UI goroutine.
 	ApplyConfig func(context.Context, config.Config) error
+
+	// TerminalGraphics reports Kitty graphics support (SupportsKittyGraphics);
+	// inline images are used when this and Config.UI.InlineImages are set.
+	TerminalGraphics bool
 }
 
 // messagesPerChat is how many recent messages the conversation pane loads.

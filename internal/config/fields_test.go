@@ -12,7 +12,7 @@ func TestFieldsDiscoveryAndEditing(t *testing.T) {
 	for _, f := range fields {
 		names = append(names, f.Name())
 	}
-	want := "history.request_full_sync history.full_sync_days history.keep_days history.max_messages_per_chat"
+	want := "history.request_full_sync history.full_sync_days history.keep_days history.max_messages_per_chat ui.inline_images"
 	if got := strings.Join(names, " "); got != want {
 		t.Fatalf("fields = %s, want %s", got, want)
 	}

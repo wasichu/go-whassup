@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 
 	"github.com/wasichu/go-whassup/internal/config"
 	"github.com/wasichu/go-whassup/internal/headless"
@@ -91,11 +92,12 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 	switch inv.cmd {
 	case "tui":
 		return ui.Run(ctx, ui.Deps{
-			Client:     client,
-			Store:      st,
-			Log:        log,
-			Config:     cfg,
-			ConfigPath: p.ConfigFile,
+			Client:           client,
+			Store:            st,
+			Log:              log,
+			Config:           cfg,
+			ConfigPath:       p.ConfigFile,
+			TerminalGraphics: ui.SupportsKittyGraphics(os.Getenv),
 			ApplyConfig: func(ctx context.Context, c config.Config) error {
 				client.SetOptions(pairingOptions(c))
 				rec.SetRetention(retention(c))

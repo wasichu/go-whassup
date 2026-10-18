@@ -12,6 +12,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/wasichu/go-whassup/internal/config"
 	"github.com/wasichu/go-whassup/internal/store"
@@ -35,6 +36,24 @@ type harness struct {
 	client  *watest.Client
 	st      *store.Store
 	pending []chan tea.Msg // blocked commands (e.g. waitEvent), as Bubble Tea keeps them
+	raw     []string       // escape sequences sent with tea.Raw
+}
+
+// withGraphics simulates a true-color terminal with Kitty graphics support.
+func (h *harness) withGraphics() {
+	m := h.model()
+	m.deps.TerminalGraphics = true
+	h.m = m
+	h.send(tea.ColorProfileMsg{Profile: colorprofile.TrueColor})
+}
+
+func (h *harness) rawContains(s string) bool {
+	for _, r := range h.raw {
+		if strings.Contains(r, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // newHarness builds the model wired like internal/app: recorder first,
@@ -132,6 +151,8 @@ func (h *harness) deliver(msg tea.Msg) {
 	h.t.Helper()
 	switch msg := msg.(type) {
 	case nil:
+	case tea.RawMsg:
+		h.raw = append(h.raw, fmt.Sprint(msg.Msg))
 	case tea.BatchMsg:
 		for _, c := range msg {
 			h.run(c)
@@ -567,5 +588,63 @@ func TestSettingsToggleEditValidateSave(t *testing.T) {
 	h.key(",")
 	if h.model().settings.cfg.History.KeepDays != 90 {
 		t.Error("reopened settings lost the saved value")
+	}
+}
+
+func TestInlineQRImage(t *testing.T) {
+	h := newHarness(t, false)
+	h.withGraphics()
+	h.client.QREvents = []wa.Event{wa.PairQRCode{Code: sampleQR}}
+	h.send(tea.WindowSizeMsg{Width: 80, Height: 24}) // too small for the text QR
+	h.key("down")
+	h.key("enter")
+	h.settle()
+
+	v := h.view()
+	if !strings.Contains(v, string(rune(0x10EEEE))) || strings.Contains(v, "doesn't fit") {
+		t.Fatalf("inline image placeholders should show in 80x24:\n%s", v)
+	}
+	if !h.rawContains("a=T,U=1") {
+		t.Fatal("image was not transmitted")
+	}
+
+	h.key("esc") // cancel: image freed
+	if !h.rawContains("a=d,d=I") || h.model().login.image {
+		t.Error("image not deleted on cancel")
+	}
+}
+
+func TestInlineImagesRespectSetting(t *testing.T) {
+	h := newHarness(t, false)
+	h.withGraphics()
+	cfg := h.model().deps.Config
+	cfg.UI.InlineImages = false
+	m := h.model()
+	m.deps.Config = cfg
+	h.m = m
+	h.client.QREvents = []wa.Event{wa.PairQRCode{Code: sampleQR}}
+	h.send(tea.WindowSizeMsg{Width: 140, Height: 45})
+	h.key("down")
+	h.key("enter")
+	h.settle()
+	if strings.Contains(h.view(), string(rune(0x10EEEE))) || h.rawContains("a=T") {
+		t.Error("inline_images = false should draw text blocks")
+	}
+	if !strings.Contains(h.view(), "▀") {
+		t.Error("text-block QR missing")
+	}
+}
+
+func TestInlineImagesNeedTrueColor(t *testing.T) {
+	h := newHarness(t, false)
+	h.withGraphics()
+	h.send(tea.ColorProfileMsg{Profile: colorprofile.ANSI256})
+	h.client.QREvents = []wa.Event{wa.PairQRCode{Code: sampleQR}}
+	h.send(tea.WindowSizeMsg{Width: 140, Height: 45})
+	h.key("down")
+	h.key("enter")
+	h.settle()
+	if h.rawContains("a=T") || !strings.Contains(h.view(), "▀") {
+		t.Error("without true color, the QR should fall back to text blocks")
 	}
 }

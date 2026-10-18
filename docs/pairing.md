@@ -56,6 +56,22 @@ websocket gives up after about 160 s of unanswered pairing, and our wait is 3 mi
   - **One cell per module is the floor.** Half-blocks give square modules. Quarter
     blocks would halve the width but not the height, and distort the aspect; braille
     leaves gaps. The physical size is set by the font, so zooming out shrinks it.
+- **Inline image (Ghostty, kitty): `internal/ui/kitty.go`.** We use Kitty graphics with
+  **Unicode placeholders**:
+  - The PNG (from `rsc.io/qr`, which includes the spec's 4-module quiet zone) is sent
+    once with `tea.Raw`, as `a=T,U=1` (a virtual placement) with `q=2` so the terminal
+    sends no replies into our input.
+  - The view then draws 32×16 placeholder cells: U+10EEEE plus row/column diacritics
+    from kitty's table, with a 24-bit foreground colour that encodes the image ID.
+  - Because the placement is ordinary text, it survives Bubble Tea's redraws and
+    resizes. A test runs a real Bubble Tea program and confirms the renderer passes the
+    cells and colour through intact.
+  - The image is replaced on each new code and deleted (`a=d,d=I`) when leaving the QR
+    step or quitting.
+  - **Requirements:** `TERM_PROGRAM=ghostty` / `TERM=xterm-ghostty`, `TERM=xterm-kitty`
+    or `KITTY_WINDOW_ID`; **not** tmux/screen; **true colour** (the ID lives in the
+    colour, so a downsampled palette would show nothing). Otherwise we fall back to
+    text blocks.
 - **Comparison with waha-tui.** It polls WAHA's `auth/qr?format=raw` endpoint every few
   seconds and renders with `@opentui/qrcode`: error-correction level M, the spec's
   4-module border, fixed black/white, scale-to-fit, and "Terminal too small for QR"

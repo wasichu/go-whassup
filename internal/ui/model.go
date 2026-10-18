@@ -13,6 +13,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/colorprofile"
 
 	"github.com/wasichu/go-whassup/internal/wa"
 )
@@ -58,6 +59,7 @@ type Model struct {
 	conn          connState
 	notice        string // last error or hint, shown in the status line
 	noticeIsErr   bool
+	trueColor     bool // terminal renders 24-bit color (inline images need it)
 
 	chats    chatList
 	conv     conversation
@@ -95,6 +97,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		m.help.SetWidth(msg.Width)
 		m.layout()
+		return m, nil
+	case tea.ColorProfileMsg:
+		m.trueColor = msg.Profile == colorprofile.TrueColor
 		return m, nil
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
@@ -159,7 +164,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key.Matches(msg, keys.ForceQuit) {
 		m.deps.Client.CancelPairing()
-		return m, tea.Quit
+		m, hide, _ := m.hideQRImage()
+		return m, tea.Sequence(hide, tea.Quit)
 	}
 	if m.showHelp {
 		m.showHelp = false // any key closes the overlay
@@ -236,13 +242,15 @@ func (m Model) selectChat(delta int) (tea.Model, tea.Cmd) {
 
 func (m Model) handleEvent(evt wa.Event) (tea.Model, tea.Cmd) {
 	next := waitEvent(m.ctx, m.sub)
+	var loginCmd tea.Cmd
 	if m.screen == screenLogin {
 		var done bool
-		if m, done = m.loginEvent(evt); done {
+		if m, loginCmd, done = m.loginEvent(evt); done {
 			m.screen = screenMain
 			m.notice, m.noticeIsErr = "Linked. History will appear as your phone sends it.", false
 		}
 	}
+	next = tea.Batch(next, loginCmd)
 	switch v := evt.(type) {
 	case wa.Connected:
 		m.conn = connOnline

@@ -48,6 +48,7 @@ type login struct {
 	err     string
 	jid     string // linked account, after PairSuccess
 	unlinkd bool   // last re-link removed the device from the phone
+	image   bool   // an inline QR image is loaded in the terminal
 }
 
 func newLogin() login {
@@ -134,7 +135,8 @@ func (m Model) loginKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case waiting:
 			// First esc cancels the pairing; a second leaves the screen.
 			l.step, l.code, l.qr, l.err = loginChoose, "", "", ""
-			return m, cancelPairing(m.deps.Client)
+			m, hide, _ := m.hideQRImage()
+			return m, tea.Batch(cancelPairing(m.deps.Client), hide)
 		case l.step == loginPhone || l.step == loginConfirm || l.step == loginFailed:
 			l.step, l.err = loginChoose, ""
 			return m, nil
@@ -228,25 +230,60 @@ func (m Model) loginResult(msg tea.Msg) (Model, tea.Cmd) {
 
 // loginEvent updates the login screen from a protocol event. done reports
 // that pairing finished and the main screen should take over.
-func (m Model) loginEvent(evt wa.Event) (Model, bool) {
+func (m Model) loginEvent(evt wa.Event) (Model, tea.Cmd, bool) {
 	l := &m.login
 	switch v := evt.(type) {
 	case wa.PairQRCode:
 		if l.step == loginQR {
 			l.qr = v.Code
+			cmd := m.showQRImage() // mutates m: call before returning m
+			return m, cmd, false
 		}
 	case wa.PairSuccess:
 		l.step, l.jid = loginFinishing, v.JID
+		return m.hideQRImage()
 	case wa.PairFailed:
 		if l.step == loginCode || l.step == loginQR || l.step == loginRequesting {
 			l.step, l.err = loginFailed, v.Reason
+			return m.hideQRImage()
 		}
 	case wa.Connected:
 		if l.step == loginFinishing {
-			return m, true
+			return m, nil, true
 		}
 	}
-	return m, false
+	return m, nil, false
+}
+
+// inlineImages reports whether to show the QR as a Kitty-protocol image.
+// Placeholders identify the image by their 24-bit foreground color, so a
+// downsampled color profile would show nothing: require true color.
+func (m Model) inlineImages() bool {
+	return m.deps.TerminalGraphics && m.trueColor && m.deps.Config.UI.InlineImages
+}
+
+// showQRImage uploads the current QR as an inline image, replacing any
+// previous one (same id), when inline images are in use.
+func (m *Model) showQRImage() tea.Cmd {
+	if !m.inlineImages() || m.login.qr == "" {
+		return nil
+	}
+	png, err := qrPNG(m.login.qr)
+	if err != nil {
+		m.login.err = err.Error()
+		return nil
+	}
+	m.login.image = true
+	return tea.Raw(kittyTransmit(qrImageID, png, qrImageCols, qrImageRows))
+}
+
+// hideQRImage frees the inline QR image, if one is loaded.
+func (m Model) hideQRImage() (Model, tea.Cmd, bool) {
+	if !m.login.image {
+		return m, nil, false
+	}
+	m.login.image = false
+	return m, tea.Raw(kittyDelete(qrImageID)), false
 }
 
 func (m Model) loginView(width, height int) string {
@@ -328,6 +365,13 @@ func (m Model) qrView(width, height int) string {
 	const gap = 3
 	side := strings.Join(qrInstructions, "\n")
 	sideW := lipgloss.Width(side)
+	if m.inlineImages() {
+		img := kittyPlaceholders(qrImageID, qrImageCols, qrImageRows)
+		if qrImageCols+gap+sideW <= width {
+			return lipgloss.JoinHorizontal(lipgloss.Top, img, strings.Repeat(" ", gap), side)
+		}
+		return "On your phone: Settings › Linked devices › Link a device, then scan:\n\n" + img
+	}
 	var w, h int
 	for _, quiet := range qrQuietZones {
 		qr, qw, qh, err := renderQR(l.qr, quiet)

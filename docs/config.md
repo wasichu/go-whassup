@@ -56,8 +56,14 @@ startup and after each history sync batch.
 (Values come from whatsmeow's `DeviceProps.HistorySyncConfig` and mautrix-whatsapp's
 documented behavior.)
 
+### `[ui]`
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `inline_images` | `true` | Show the login QR as a small image in terminals with Kitty graphics support (Ghostty, kitty). Requires true color and no tmux; otherwise text blocks are used regardless. `false` always uses text blocks. |
+
 ## Planned sections
 
 - `[encryption]`: whether message text is encrypted at rest, and the key source
   (`keyring`, `password_command`, `prompt`). See `storage.md`.
-- `[ui]`: theme and keybindings, as the TUI grows.
+- More `[ui]` settings: theme and keybindings, as the TUI grows.

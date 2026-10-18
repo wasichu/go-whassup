@@ -19,6 +19,12 @@ import (
 // Tag `applies:"pairing"` marks settings that only take effect when linking.
 type Config struct {
 	History History `toml:"history" comment:"How much chat history to fetch and keep."`
+	UI      UI      `toml:"ui" comment:"How the terminal interface looks and behaves."`
+}
+
+// UI controls the TUI.
+type UI struct {
+	InlineImages bool `toml:"inline_images" comment:"Show the login QR code as a small image in terminals that support the Kitty graphics protocol (Ghostty, kitty).\nfalse = always draw it with text blocks."`
 }
 
 // History controls history sync requests and local retention.
@@ -32,7 +38,7 @@ type History struct {
 // Default returns the configuration used when no file exists: store
 // everything the phone sends.
 func Default() Config {
-	return Config{}
+	return Config{UI: UI{InlineImages: true}}
 }
 
 // Validate reports every invalid setting.

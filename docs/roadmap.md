@@ -26,6 +26,8 @@ step lands or the plan changes.
 - [x] Keymap with generated hints and a `?` overlay.
 - [x] Login screen: phone code, QR choice (`rsc.io/qr`, half-blocks), Re-link, esc to
   cancel. *(QR scan and TUI pairing: live test pending.)*
+- [x] Inline QR image via Kitty graphics (Ghostty/kitty), text-block fallback.
+  *(Live test pending.)*
 - [x] Settings screen: generic over `Config.Fields()`, validated, saved atomically and
   applied live. *(Live test pending.)*
 - **Login screen:**
