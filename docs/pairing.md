@@ -1,0 +1,62 @@
+# Pairing
+
+go-whassup links as a WhatsApp *linked device*, the same mechanism WhatsApp Web
+uses. We support **phone-number code pairing** only; QR pairing may come later (see below).
+
+## Sequence (whatsmeow ordering constraints)
+
+`wa.WhatsApp.Pair` owns the whole sequence because the steps must happen in this
+order:
+
+1. `GetQRChannel(ctx)`: must be called **before** connecting.
+2. `ConnectContext(ctx)`: opens the login websocket.
+3. Wait for the **first QR channel item**. It shows the socket is ready.
+   `PairPhone` fails if called earlier.
+4. `PairPhone(...)` returns the 8-character code the user types on their phone.
+5. A goroutine keeps draining the QR channel. Timeouts and errors become `PairFailed`.
+   Success arrives as the `PairSuccess` event.
+6. After `PairSuccess` the server forces a **reconnect**. Wait for `Connected` before
+   doing anything.
+7. Stay connected for a while. Right after linking, the phone pushes app-state keys
+   and history sync. `wa-tui login` therefore stays online until Ctrl-C instead of
+   exiting at `Connected`.
+
+The `ctx` passed to `Pair`/`Connect` bounds the **connection's lifetime**, including
+whatsmeow's automatic reconnects, not just the dial. Don't pass a short timeout
+context; use a separate timer for "how long to wait for the user". The login
+websocket gives up after about 160 s of unanswered pairing, and our wait is 3 min.
+
+## Server-side restrictions on how we identify
+
+There are two separate identities, and they have different rules:
+
+| What | Where it's set | Rule |
+| --- | --- | --- |
+| **Pairing display name** | `PairPhone(..., clientType, clientDisplayName)` | WhatsApp validates this server-side. It must look like `Browser (OS)` using **common** browser/OS names, or the request fails with HTTP 400. We send `PairClientChrome` + `"Chrome (Linux)"`. |
+| **Device name** (shown in the phone's *Linked devices*) | `store.SetOSInfo("go-whassup", …)` before pairing | Free-form; this is how our session shows up to the user. |
+
+In other words, every unofficial linked-device client has to claim to be a
+mainstream browser during pairing. WhatsApp only expects WhatsApp Web and desktop
+apps to link this way.
+
+For comparison, waha-tui doesn't deal with this directly. It calls the WAHA
+server's `auth/request-code` endpoint, and the WAHA *engine* does the pairing:
+- `WEBJS` really is a Chromium browser running WhatsApp Web.
+- `NOWEB` (Baileys) and `GOWS` (whatsmeow) are browserless and face the same rule we do.
+
+## Phone number format
+
+`wa.NormalizePhone` strips `+`, spaces, dashes, dots and parentheses, then requires
+8–15 digits with no leading `0`. That means international format with the country code:
+`+1 (555) 123-4567` → `15551234567`. Quote numbers containing spaces on the
+command line.
+
+## Adding QR pairing later
+
+The QR channel is already opened during code pairing (step 1). To add QR pairing:
+- add a `PairQR(ctx) (<-chan string, error)` method to `wa.Client` that forwards
+  `QRChannelEventCode` items;
+- render the QR in the UI. That needs a QR encoder dependency, which we've
+  deliberately avoided so far.
+
+Event handling doesn't change: success and failure still arrive as `PairSuccess` / `PairFailed`.

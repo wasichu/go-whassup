@@ -39,23 +39,48 @@ func main() {
 	}
 }
 
-func run(args []string) error {
-	cmd := "tui"
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		cmd, args = args[0], args[1:]
-	}
-	switch cmd {
-	case "tui", "login", "listen":
-	default:
-		return fmt.Errorf("unknown command %q (want login, listen, or none for the TUI)", cmd)
-	}
-	fs := flag.NewFlagSet("wa-tui "+cmd, flag.ContinueOnError)
-	debug := fs.Bool("debug", false, "log debug output (very verbose)")
+// invocation is the parsed command line.
+type invocation struct {
+	cmd   string // "tui", "login" or "listen"
+	debug bool
+	args  []string // positional arguments after the subcommand
+}
+
+// parseArgs accepts flags before and/or after the subcommand, so
+// `wa-tui -debug login` and `wa-tui login -debug` are equivalent.
+func parseArgs(args []string) (invocation, error) {
+	var inv invocation
+	fs := flag.NewFlagSet("wa-tui", flag.ContinueOnError)
+	fs.BoolVar(&inv.debug, "debug", false, "log debug output (very verbose)")
 	if err := fs.Parse(args); err != nil {
+		return inv, err
+	}
+	inv.cmd = "tui"
+	if fs.NArg() > 0 {
+		inv.cmd = fs.Arg(0)
+		if err := fs.Parse(fs.Args()[1:]); err != nil {
+			return inv, err
+		}
+	}
+	inv.args = fs.Args()
+
+	maxArgs := map[string]int{"tui": 0, "login": 1, "listen": 0}
+	n, ok := maxArgs[inv.cmd]
+	if !ok {
+		return inv, fmt.Errorf("unknown command %q (want login, listen, or none for the TUI)", inv.cmd)
+	}
+	if len(inv.args) > n {
+		return inv, fmt.Errorf("%s: unexpected arguments %q", inv.cmd, inv.args[n:])
+	}
+	return inv, nil
+}
+
+func run(args []string) error {
+	inv, err := parseArgs(args)
+	if err != nil {
 		return err
 	}
-
-	env, err := setup(*debug)
+	env, err := setup(inv.debug)
 	if err != nil {
 		return err
 	}
@@ -64,11 +89,15 @@ func run(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	switch cmd {
+	switch inv.cmd {
 	case "tui":
 		return runTUI()
 	case "login":
-		return runLogin(ctx, env, fs.Arg(0))
+		var phone string
+		if len(inv.args) > 0 {
+			phone = inv.args[0]
+		}
+		return runLogin(ctx, env, phone)
 	default: // "listen"; validated above
 		return runListen(ctx, env)
 	}

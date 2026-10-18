@@ -19,7 +19,7 @@ nothing else to install or run.
 | --- | --- |
 | `just check` | fmt-check + build + vet + lint + test. **Run before declaring any change done.** |
 | `just build` | Builds `bin/wa-tui` |
-| `just run [args]` | Builds and runs: no args = TUI (needs a real terminal); `login [phone]` = pair via phone code; `listen` = headless, prints incoming messages. Flags (`-debug`) go *after* the subcommand. |
+| `just run [args]` | Builds and runs: no args = TUI (needs a real terminal); `login [phone]` = pair via phone code; `listen` = headless, prints incoming messages. Flags work before or after the subcommand. Full usage: `docs/usage.md`. |
 | `just test [flags]` | `go test ./...` with extra flags, e.g. `just test -run TestX -v` |
 | `just lint [flags]` | golangci-lint. `.golangci.yml` enforces import boundaries, bans cgo sqlite and Bubble Tea v1, and forbids printing to the terminal and discarding errors. Fix the code; don't weaken the config. |
 | `just fmt` / `just tidy` | gofmt / `go mod tidy` |
@@ -58,6 +58,15 @@ invocations in docs.
 - Must build with `CGO_ENABLED=0`.
 - Test-only deps (e.g. `charmbracelet/x/exp/teatest`) are acceptable when they replace
   meaningful hand-rolled harness code.
+
+## Docs (`docs/`)
+
+- `docs/` holds design notes and protocol facts that the code alone doesn't explain.
+  `docs/README.md` is the index.
+- **When you change behavior a doc describes, update that doc in the same commit.**
+  New subsystems or non-obvious protocol findings get a doc, or a section in one,
+  plus an index entry.
+- Read the relevant doc before changing pairing, storage, or event flow.
 
 ## Layout
 
