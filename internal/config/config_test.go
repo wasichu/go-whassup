@@ -19,7 +19,7 @@ func TestLoadMissingFileGivesDefaults(t *testing.T) {
 
 func TestSaveLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "config.toml")
-	want := Config{History: History{RequestFullSync: true, FullSyncDays: 365, KeepDays: 90, MaxMessagesPerChat: 5000}, UI: UI{InlineImages: false}, Privacy: Privacy{MarkRead: MarkReadEveryone}}
+	want := Config{History: History{RequestFullSync: true, FullSyncDays: 365, KeepDays: 90, MaxMessagesPerChat: 5000}, UI: UI{InlineImages: false}, Privacy: Privacy{MarkRead: MarkReadReceiptsOn}}
 	if err := Save(path, want); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -106,4 +106,33 @@ func writeConfig(t *testing.T, body string) string {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	return path
+}
+
+func TestLoadMigratesOldMarkReadNames(t *testing.T) {
+	for old, want := range map[string]string{
+		"local":    MarkReadLocalOnly,
+		"devices":  MarkReadReceiptsOff,
+		"everyone": MarkReadReceiptsOn,
+	} {
+		t.Run(old, func(t *testing.T) {
+			path := writeConfig(t, "[privacy]\nmark_read = \""+old+"\"\n")
+			cfg, err := Load(path)
+			if err != nil {
+				t.Fatalf("an old name must not stop the app starting: %v", err)
+			}
+			if cfg.Privacy.MarkRead != want {
+				t.Fatalf("mark_read = %q, want %q", cfg.Privacy.MarkRead, want)
+			}
+			if err := Save(path, cfg); err != nil {
+				t.Fatalf("Save: %v", err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("ReadFile: %v", err)
+			}
+			if !strings.Contains(string(data), "mark_read = '"+want+"'") && !strings.Contains(string(data), `mark_read = "`+want+`"`) {
+				t.Errorf("saved file should use the new name %q:\n%s", want, data)
+			}
+		})
+	}
 }

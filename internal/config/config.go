@@ -25,14 +25,23 @@ type Config struct {
 
 // Mark-read modes for Privacy.MarkRead.
 const (
-	MarkReadLocal    = "local"
-	MarkReadDevices  = "devices"
-	MarkReadEveryone = "everyone"
+	MarkReadLocalOnly       = "local-only"        // nothing is sent
+	MarkReadReceiptsOff     = "read-receipts-off" // your devices are told; no blue ticks
+	MarkReadReceiptsOn      = "read-receipts-on"  // senders get read receipts (blue ticks)
+	markReadChoicesForError = "local-only, read-receipts-off or read-receipts-on"
 )
+
+// markReadAliases are names accepted from older config files and normalized
+// on load, so the next Save writes the new names.
+var markReadAliases = map[string]string{
+	"local":    MarkReadLocalOnly,
+	"devices":  MarkReadReceiptsOff,
+	"everyone": MarkReadReceiptsOn,
+}
 
 // Privacy controls what is sent on the user's behalf.
 type Privacy struct {
-	MarkRead string `toml:"mark_read" choices:"local,devices,everyone" comment:"When you read a chat here: local = only clear it in go-whassup (nothing is sent);\ndevices = also mark it read on your phone and other devices (no blue ticks);\neveryone = also send read receipts (blue ticks), like the official apps."`
+	MarkRead string `toml:"mark_read" choices:"local-only,read-receipts-off,read-receipts-on" comment:"When you read a chat here: local-only = only clear it in go-whassup (nothing is sent);\nread-receipts-off = also mark it read on your phone and other devices, but senders see no blue ticks;\nread-receipts-on = also send read receipts (blue ticks), like the official apps."`
 }
 
 // UI controls the TUI.
@@ -51,7 +60,7 @@ type History struct {
 // Default returns the configuration used when no file exists: store
 // everything the phone sends.
 func Default() Config {
-	return Config{UI: UI{InlineImages: true}, Privacy: Privacy{MarkRead: MarkReadLocal}}
+	return Config{UI: UI{InlineImages: true}, Privacy: Privacy{MarkRead: MarkReadLocalOnly}}
 }
 
 // Validate reports every invalid setting.
@@ -66,9 +75,9 @@ func (c Config) Validate() error {
 	nonNegative("history.keep_days", c.History.KeepDays)
 	nonNegative("history.max_messages_per_chat", c.History.MaxMessagesPerChat)
 	switch c.Privacy.MarkRead {
-	case MarkReadLocal, MarkReadDevices, MarkReadEveryone:
+	case MarkReadLocalOnly, MarkReadReceiptsOff, MarkReadReceiptsOn:
 	default:
-		errs = append(errs, fmt.Errorf("privacy.mark_read must be local, devices or everyone, got %q", c.Privacy.MarkRead))
+		errs = append(errs, fmt.Errorf("privacy.mark_read must be %s, got %q", markReadChoicesForError, c.Privacy.MarkRead))
 	}
 	if c.History.FullSyncDays > 0 && !c.History.RequestFullSync {
 		errs = append(errs, errors.New("history.full_sync_days is only used with history.request_full_sync = true"))
@@ -101,10 +110,18 @@ func Load(path string) (Config, error) {
 		}
 		return cfg, fmt.Errorf("config %s: %w", path, err)
 	}
+	cfg.normalize()
 	if err := cfg.Validate(); err != nil {
 		return cfg, fmt.Errorf("config %s: %w", path, err)
 	}
 	return cfg, nil
+}
+
+// normalize rewrites values from older config files to their current names.
+func (c *Config) normalize() {
+	if v, ok := markReadAliases[c.Privacy.MarkRead]; ok {
+		c.Privacy.MarkRead = v
+	}
 }
 
 const header = `# go-whassup configuration. See docs/config.md.

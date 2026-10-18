@@ -49,22 +49,22 @@ func TestChoiceField(t *testing.T) {
 			f = x
 		}
 	}
-	if f.Kind != KindChoice || strings.Join(f.Choices, ",") != "local,devices,everyone" || f.Value() != "local" {
+	if f.Kind != KindChoice || strings.Join(f.Choices, ",") != "local-only,read-receipts-off,read-receipts-on" || f.Value() != MarkReadLocalOnly {
 		t.Fatalf("mark_read field = %+v (value %q)", f, f.Value())
 	}
 	f.Cycle()
 	f.Cycle()
-	if cfg.Privacy.MarkRead != "everyone" {
+	if cfg.Privacy.MarkRead != MarkReadReceiptsOn {
 		t.Errorf("after two cycles = %q", cfg.Privacy.MarkRead)
 	}
 	f.Cycle()
-	if cfg.Privacy.MarkRead != "local" {
+	if cfg.Privacy.MarkRead != MarkReadLocalOnly {
 		t.Errorf("cycle should wrap, got %q", cfg.Privacy.MarkRead)
 	}
-	if err := f.Set("sometimes"); err == nil || !strings.Contains(err.Error(), "local, devices, everyone") {
+	if err := f.Set("sometimes"); err == nil || !strings.Contains(err.Error(), "local-only, read-receipts-off, read-receipts-on") {
 		t.Errorf("bad choice accepted: %v", err)
 	}
-	if err := f.Set("devices"); err != nil || cfg.Privacy.MarkRead != "devices" {
-		t.Errorf("Set(devices) = %v, %q", err, cfg.Privacy.MarkRead)
+	if err := f.Set(MarkReadReceiptsOff); err != nil || cfg.Privacy.MarkRead != MarkReadReceiptsOff {
+		t.Errorf("Set(read-receipts-off) = %v, %q", err, cfg.Privacy.MarkRead)
 	}
 }

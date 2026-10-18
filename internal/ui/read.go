@@ -6,6 +6,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/wasichu/go-whassup/internal/config"
+
 	"github.com/wasichu/go-whassup/internal/wa"
 )
 
@@ -42,8 +44,20 @@ func (m Model) readTick(msg readTickMsg) (tea.Model, tea.Cmd) {
 	if m.conv.chat.Unread == 0 {
 		return m, nil
 	}
-	mode := wa.ReadMode(m.deps.Config.Privacy.MarkRead)
-	return m, markChatRead(m.ctx, m.deps, msg.chat, mode)
+	return m, markChatRead(m.ctx, m.deps, msg.chat, readMode(m.deps.Config.Privacy.MarkRead))
+}
+
+// readMode maps the [privacy] mark_read setting to what wa sends. Anything
+// unrecognized sends nothing, the safe choice.
+func readMode(markRead string) wa.ReadMode {
+	switch markRead {
+	case config.MarkReadReceiptsOff:
+		return wa.ReadDevices
+	case config.MarkReadReceiptsOn:
+		return wa.ReadEveryone
+	default:
+		return wa.ReadLocal
+	}
 }
 
 // markChatRead clears the chat's unread messages locally and, per mode,

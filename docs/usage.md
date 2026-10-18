@@ -71,12 +71,12 @@ handlers (`internal/ui/keys.go`), so they can't drift.
   in another window stay unread. Replying also marks a chat read. Reading a chat on your
   phone clears it here too.
 - **What gets sent** is `[privacy] mark_read` (Settings `,`):
-  - `local` (default): nothing;
-  - `devices`: your phone and other devices are told, with no blue ticks;
-  - `everyone`: read receipts, like the official apps. If read receipts are off in your
-    phone's WhatsApp privacy settings, whatsmeow sends `read-self` instead, so your
-    phone's setting is respected. (Groups whose members are addressed by privacy ID are
-    untested with `everyone`.)
+  - `local-only` (default): nothing;
+  - `read-receipts-off`: your phone and other devices are told, with no blue ticks;
+  - `read-receipts-on`: read receipts, like the official apps. If read receipts are off
+    in your phone's WhatsApp privacy settings, whatsmeow sends `read-self` instead, so
+    your phone's setting is respected. (Groups whose members are addressed by privacy ID
+    are untested with `read-receipts-on`.)
 - **In tmux**, focus tracking needs `tmux set -g focus-events on` (add it to
   `~/.tmux.conf`). Without it, the status line shows a tip at launch, and chats count as
   read even while you're in another window.

@@ -838,7 +838,7 @@ func (h *harness) selectChat(jid string) {
 }
 
 func TestUnreadBadgeAndDivider(t *testing.T) {
-	h := newHarnessWithUnread(t, "local")
+	h := newHarnessWithUnread(t, config.MarkReadLocalOnly)
 	v := h.view()
 	if !strings.Contains(v, "── 2 new ──") {
 		t.Errorf("new-messages divider missing:\n%s", v)
@@ -868,9 +868,12 @@ func TestBadgeShowsCountForOtherChats(t *testing.T) {
 }
 
 func TestMarkReadModesSend(t *testing.T) {
-	for _, mode := range []wa.ReadMode{wa.ReadDevices, wa.ReadEveryone} {
-		t.Run(string(mode), func(t *testing.T) {
-			h := newHarnessWithUnread(t, string(mode))
+	for setting, mode := range map[string]wa.ReadMode{
+		config.MarkReadReceiptsOff: wa.ReadDevices,
+		config.MarkReadReceiptsOn:  wa.ReadEveryone,
+	} {
+		t.Run(setting, func(t *testing.T) {
+			h := newHarnessWithUnread(t, setting)
 			h.settle()
 			calls := h.client.ReadCalls()
 			if len(calls) != 1 || calls[0].Chat != bob || calls[0].Mode != mode || len(calls[0].IDs) != 2 {
@@ -978,5 +981,19 @@ func TestEditsDeletesReactionsRender(t *testing.T) {
 	}
 	if strings.Contains(v, "secret plans") {
 		t.Error("deleted text still shown")
+	}
+}
+
+func TestReadModeMapping(t *testing.T) {
+	for setting, want := range map[string]wa.ReadMode{
+		config.MarkReadLocalOnly:   wa.ReadLocal,
+		config.MarkReadReceiptsOff: wa.ReadDevices,
+		config.MarkReadReceiptsOn:  wa.ReadEveryone,
+		"":                         wa.ReadLocal,
+		"something-new":            wa.ReadLocal,
+	} {
+		if got := readMode(setting); got != want {
+			t.Errorf("readMode(%q) = %q, want %q", setting, got, want)
+		}
 	}
 }

@@ -66,9 +66,13 @@ documented behavior.)
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `mark_read` | `"local"` | What happens when you read a chat in go-whassup. `local`: only clear it in go-whassup; **nothing is sent**. `devices`: also mark it read on your phone and other devices, via `read-self` receipts like the official apps with read receipts off; senders see nothing. `everyone`: also send read receipts (blue ticks), like the official apps' default. |
+| `mark_read` | `"local-only"` | What happens when you read a chat in go-whassup. `local-only`: only clear it in go-whassup; **nothing is sent**. `read-receipts-off`: also mark it read on your phone and other devices, via `read-self` receipts like the official apps with *Read receipts* off; senders see no blue ticks. `read-receipts-on`: also send read receipts (blue ticks), like the official apps' default. |
 
-The trade-off with `devices`/`everyone`: each read sends an (end-to-end encrypted)
+Older config files may say `local`, `devices` or `everyone`. These still load, as
+aliases for the three values above, and the next save from the Settings screen writes
+the new names.
+
+The trade-off with `read-receipts-off`/`read-receipts-on`: each read sends an (end-to-end encrypted)
 receipt, so WhatsApp's servers learn *when* you read chats, though not what.
 
 ## Planned sections
