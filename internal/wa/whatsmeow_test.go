@@ -94,7 +94,7 @@ func TestEmitWithoutHandler(t *testing.T) {
 
 func TestOpenCreatesPrivateSessionDB(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.db")
-	w, err := Open(t.Context(), path, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	w, err := Open(t.Context(), path, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

@@ -23,6 +23,13 @@ func TestParseArgs(t *testing.T) {
 		{args: []string{"login", "-debug", "+15551234567"}, want: invocation{cmd: "login", debug: true, args: []string{"+15551234567"}}},
 		{args: []string{"-debug", "listen"}, want: invocation{cmd: "listen", debug: true}},
 		{args: []string{"frob"}, wantErr: `unknown command "frob"`},
+		{args: []string{"db", "chats"}, want: invocation{cmd: "db chats"}},
+		{args: []string{"db", "messages", "-n", "5", "Ada"}, want: invocation{cmd: "db messages", limit: 5, args: []string{"Ada"}}},
+		{args: []string{"-n", "5", "db", "messages", "Book club"}, want: invocation{cmd: "db messages", limit: 5, args: []string{"Book club"}}},
+		{args: []string{"db"}, wantErr: "want a subcommand"},
+		{args: []string{"db", "frob"}, wantErr: `unknown command "db frob"`},
+		{args: []string{"db", "messages"}, wantErr: "missing argument"},
+		{args: []string{"db", "messages", "-n", "-1", "x"}, wantErr: "-n must be"},
 		{args: []string{"listen", "extra"}, wantErr: "unexpected arguments"},
 		{args: []string{"login", "+1", "555"}, wantErr: "unexpected arguments"},
 	}
@@ -38,7 +45,10 @@ func TestParseArgs(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if got.cmd != tt.want.cmd || got.debug != tt.want.debug || !slices.Equal(got.args, tt.want.args) {
+			if tt.want.limit == 0 {
+				tt.want.limit = 20 // default
+			}
+			if got.cmd != tt.want.cmd || got.debug != tt.want.debug || got.limit != tt.want.limit || !slices.Equal(got.args, tt.want.args) {
 				t.Errorf("parseArgs(%q) = %+v, want %+v", tt.args, got, tt.want)
 			}
 		})

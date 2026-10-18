@@ -1,0 +1,79 @@
+package store
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+)
+
+// migrations[i] upgrades the schema from user_version i to i+1. Append only;
+// never edit a migration that has shipped.
+var migrations = []string{
+	// 1: chats, messages, contacts.
+	`
+CREATE TABLE chats (
+	jid             TEXT PRIMARY KEY,
+	name            TEXT NOT NULL DEFAULT '',
+	is_group        INTEGER NOT NULL DEFAULT 0,
+	last_message_at INTEGER NOT NULL DEFAULT 0  -- unix seconds
+) STRICT;
+
+CREATE TABLE messages (
+	chat_jid   TEXT NOT NULL,
+	id         TEXT NOT NULL,
+	sender_jid TEXT NOT NULL,
+	push_name  TEXT NOT NULL DEFAULT '',
+	ts         INTEGER NOT NULL,                -- unix seconds
+	from_me    INTEGER NOT NULL,
+	kind       TEXT NOT NULL,
+	body       BLOB NOT NULL,                   -- text sealed by codec
+	codec      INTEGER NOT NULL DEFAULT 0,      -- Codec.ID; 0 = plaintext
+	PRIMARY KEY (chat_jid, id)
+) STRICT;
+
+CREATE INDEX messages_by_chat_time ON messages (chat_jid, ts, id);
+
+CREATE TABLE contacts (
+	jid       TEXT PRIMARY KEY,
+	push_name TEXT NOT NULL
+) STRICT;
+`,
+}
+
+// migrate brings the schema up to date inside one transaction.
+func migrate(ctx context.Context, db *sql.DB) error {
+	var version int
+	if err := db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		return fmt.Errorf("reading schema version: %w", err)
+	}
+	if version > len(migrations) {
+		return fmt.Errorf("messages db schema v%d is newer than this build (v%d)", version, len(migrations))
+	}
+	if version == len(migrations) {
+		return nil
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("starting migration: %w", err)
+	}
+	defer rollback(tx)
+	for v := version; v < len(migrations); v++ {
+		if _, err := tx.ExecContext(ctx, migrations[v]); err != nil {
+			return fmt.Errorf("migrating messages db to v%d: %w", v+1, err)
+		}
+	}
+	// PRAGMA can't take bound parameters; the value is our own constant.
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", len(migrations))); err != nil {
+		return fmt.Errorf("setting schema version: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing migration: %w", err)
+	}
+	return nil
+}
+
+// rollback is deferred after BeginTx; after Commit it is a no-op, and a
+// rollback failure leaves nothing further to clean up.
+func rollback(tx *sql.Tx) {
+	_ = tx.Rollback() //nolint:errcheck // see comment above
+}

@@ -15,6 +15,7 @@ import (
 	"github.com/wasichu/go-whassup/internal/headless"
 	"github.com/wasichu/go-whassup/internal/logging"
 	"github.com/wasichu/go-whassup/internal/paths"
+	"github.com/wasichu/go-whassup/internal/store"
 	"github.com/wasichu/go-whassup/internal/ui"
 	"github.com/wasichu/go-whassup/internal/wa"
 )
@@ -59,13 +60,38 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 		return ui.Run(ctx)
 	}
 
-	client, err := wa.Open(ctx, p.SessionDB, log)
+	st, err := store.Open(ctx, p.MessagesDB, nil)
+	if err != nil {
+		return err
+	}
+	defer closeInto(&err, st)
+	console := headless.Console{In: stdio.In, Out: stdio.Out, Log: log}
+
+	switch inv.cmd {
+	case "db chats":
+		return console.Chats(ctx, st)
+	case "db messages":
+		return console.Messages(ctx, st, inv.args[0], inv.limit)
+	}
+
+	client, err := wa.Open(ctx, p.SessionDB, log, wa.Options{
+		RequestFullSync: cfg.History.RequestFullSync,
+		FullSyncDays:    cfg.History.FullSyncDays,
+	})
 	if err != nil {
 		return err
 	}
 	defer closeInto(&err, client)
 
-	console := headless.Console{In: stdio.In, Out: stdio.Out, Log: log}
+	// Registered before any display subscription, and never lossy.
+	rec := &store.Recorder{
+		Store:     st,
+		Retention: store.Retention{KeepDays: cfg.History.KeepDays, MaxPerChat: cfg.History.MaxMessagesPerChat},
+		Log:       log,
+	}
+	rec.Prune(ctx)
+	rec.Attach(client)
+
 	switch inv.cmd {
 	case "login":
 		var phone string

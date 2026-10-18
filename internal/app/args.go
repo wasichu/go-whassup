@@ -8,18 +8,31 @@ import (
 
 // invocation is the parsed command line.
 type invocation struct {
-	cmd   string // "tui", "login" or "listen"
+	cmd   string // "tui", "login", "listen", "db chats" or "db messages"
 	debug bool
-	args  []string // positional arguments after the subcommand
+	limit int      // -n, for "db messages"
+	args  []string // positional arguments after the (sub)command
 }
 
 const usage = `Usage:
-  wa-tui [-debug]                 start the TUI
-  wa-tui login [-debug] [phone]   link this device with a phone-number code
-  wa-tui listen [-debug]          connect headless and print incoming messages
+  wa-tui [-debug]                     start the TUI
+  wa-tui login [-debug] [phone]       link this device with a phone-number code
+  wa-tui listen [-debug]              connect and print incoming messages
+  wa-tui db chats                     list stored chats (reads messages.db; no network)
+  wa-tui db messages [-n N] <chat>    show a stored chat's newest N messages;
+                                      <chat> is a name, phone number or JID
 
 Flags may come before or after the subcommand.
 `
+
+// commands maps each command to its maximum and minimum positional args.
+var commands = map[string]struct{ min, max int }{
+	"tui":         {0, 0},
+	"login":       {0, 1},
+	"listen":      {0, 0},
+	"db chats":    {0, 0},
+	"db messages": {1, 1},
+}
 
 // parseArgs accepts flags before and/or after the subcommand, so
 // `wa-tui -debug login` and `wa-tui login -debug` are equivalent. Usage and
@@ -33,6 +46,7 @@ func parseArgs(args []string, errOut io.Writer) (invocation, error) {
 		fs.PrintDefaults()
 	}
 	fs.BoolVar(&inv.debug, "debug", false, "log debug output (very verbose; includes message text)")
+	fs.IntVar(&inv.limit, "n", 20, "number of messages to show (db messages; 0 = all)")
 	if err := fs.Parse(args); err != nil {
 		return inv, err
 	}
@@ -43,15 +57,29 @@ func parseArgs(args []string, errOut io.Writer) (invocation, error) {
 			return inv, err
 		}
 	}
+	if inv.cmd == "db" {
+		if fs.NArg() == 0 {
+			return inv, fmt.Errorf("db: want a subcommand: chats or messages")
+		}
+		inv.cmd = "db " + fs.Arg(0)
+		if err := fs.Parse(fs.Args()[1:]); err != nil {
+			return inv, err
+		}
+	}
 	inv.args = fs.Args()
 
-	maxArgs := map[string]int{"tui": 0, "login": 1, "listen": 0}
-	n, ok := maxArgs[inv.cmd]
+	bounds, ok := commands[inv.cmd]
 	if !ok {
-		return inv, fmt.Errorf("unknown command %q (want login, listen, or none for the TUI)", inv.cmd)
+		return inv, fmt.Errorf("unknown command %q (see wa-tui -h)", inv.cmd)
 	}
-	if len(inv.args) > n {
-		return inv, fmt.Errorf("%s: unexpected arguments %q", inv.cmd, inv.args[n:])
+	if len(inv.args) > bounds.max {
+		return inv, fmt.Errorf("%s: unexpected arguments %q", inv.cmd, inv.args[bounds.max:])
+	}
+	if len(inv.args) < bounds.min {
+		return inv, fmt.Errorf("%s: missing argument (see wa-tui -h)", inv.cmd)
+	}
+	if inv.limit < 0 {
+		return inv, fmt.Errorf("-n must be 0 or more")
 	}
 	return inv, nil
 }

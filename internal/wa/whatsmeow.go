@@ -6,15 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
-	"os"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
-	_ "modernc.org/sqlite" // registers the pure-Go "sqlite" driver
+	"google.golang.org/protobuf/proto"
+
+	"github.com/wasichu/go-whassup/internal/sqlite"
 )
 
 const (
@@ -36,31 +36,33 @@ type WhatsApp struct {
 
 var _ Client = (*WhatsApp)(nil)
 
+// Options configures Open.
+type Options struct {
+	// RequestFullSync asks the phone for ~1 year of history instead of
+	// ~3 months. Only sent when pairing.
+	RequestFullSync bool
+	// FullSyncDays limits the full sync; 0 = the phone's default. Only sent
+	// with RequestFullSync.
+	FullSyncDays int
+}
+
 // Open loads (or creates) the session store at dbPath and prepares a client.
 // It does not connect.
-func Open(ctx context.Context, dbPath string, log *slog.Logger) (*WhatsApp, error) {
+func Open(ctx context.Context, dbPath string, log *slog.Logger, opts Options) (*WhatsApp, error) {
+	// DeviceProps is whatsmeow's process-wide device description; it is sent
+	// to the phone when pairing.
 	store.SetOSInfo(deviceName, [3]uint32{0, 1, 0})
-
-	// The session db holds encryption keys. Create it user-only up front;
-	// SQLite gives its -wal/-shm files the same permissions.
-	if err := createPrivate(dbPath); err != nil {
-		return nil, err
+	store.DeviceProps.RequireFullSync = proto.Bool(opts.RequestFullSync)
+	store.DeviceProps.HistorySyncConfig.FullSyncDaysLimit = nil
+	if opts.RequestFullSync && opts.FullSyncDays > 0 {
+		store.DeviceProps.HistorySyncConfig.FullSyncDaysLimit = proto.Uint32(uint32(opts.FullSyncDays))
 	}
 
-	// _txlock=immediate + WAL + busy_timeout is the combination whatsmeow's
-	// own SQLite users run; it avoids "database is locked" under concurrent
-	// writes without the nested-transaction deadlocks of a 1-conn pool.
-	q := url.Values{}
-	q.Add("_pragma", "foreign_keys(1)")
-	q.Add("_pragma", "journal_mode(WAL)")
-	q.Add("_pragma", "busy_timeout(5000)")
-	q.Set("_txlock", "immediate")
-	db, err := sql.Open("sqlite", "file:"+dbPath+"?"+q.Encode())
+	db, err := sqlite.Open(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("opening session db: %w", err)
 	}
-
-	container := sqlstore.NewWithDB(db, "sqlite", newLogger(log, "store"))
+	container := sqlstore.NewWithDB(db, sqlite.Driver, newLogger(log, "store"))
 	if err := container.Upgrade(ctx); err != nil {
 		return nil, errors.Join(fmt.Errorf("migrating session db: %w", err), db.Close())
 	}
@@ -76,21 +78,6 @@ func Open(ctx context.Context, dbPath string, log *slog.Logger) (*WhatsApp, erro
 	}
 	w.cli.AddEventHandler(w.handleEvent)
 	return w, nil
-}
-
-func createPrivate(path string) error {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDONLY, 0o600)
-	if err != nil {
-		return fmt.Errorf("creating session db: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("creating session db: %w", err)
-	}
-	// Tighten files created by older builds.
-	if err := os.Chmod(path, 0o600); err != nil {
-		return fmt.Errorf("securing session db: %w", err)
-	}
-	return nil
 }
 
 func (w *WhatsApp) IsPaired() bool { return w.cli.Store.ID != nil }

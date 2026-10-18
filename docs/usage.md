@@ -1,10 +1,19 @@
 # Usage
 
 ```
-wa-tui [-debug]                 start the TUI (placeholder for now)
-wa-tui login [-debug] [phone]   link this device with a phone-number code
-wa-tui listen [-debug]          connect headless and print incoming messages
+wa-tui [-debug]                     start the TUI (placeholder for now)
+wa-tui login [-debug] [phone]       link this device with a phone-number code
+wa-tui listen [-debug]              connect and print incoming messages
+wa-tui db chats                     list stored chats (reads messages.db; no network)
+wa-tui db messages [-n N] <chat>    show a stored chat's newest N messages (default 20, 0 = all)
 ```
+
+- `login` and `listen` also **store** everything they receive, including the history
+  sync the phone pushes after linking, in `messages.db`.
+- The `db` commands only read the local database. They work offline and while
+  `listen` is running.
+- `<chat>` can be a JID, a phone number (`+1 555 123 4567`), or part of the chat's name
+  (`"book club"`). Ambiguous names list the candidates.
 
 - Flags may come before or after the subcommand (`wa-tui -debug login` ==
   `wa-tui login -debug`).

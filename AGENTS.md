@@ -82,8 +82,10 @@ internal/logging/    slog file logger
 internal/wa/         whatsmeow adapter: Client interface, Event types, Subscribe.
                      ONLY package importing whatsmeow.
 internal/wa/watest/  fake wa.Client shared by all tests
-internal/headless/   login/listen commands (Console: In/Out/Log)
-internal/store/      OUR chat/message schema (step 2). whatsmeow does NOT persist messages.
+internal/headless/   login/listen/db commands (Console: In/Out/Log)
+internal/sqlite/     the only place that opens SQLite (driver, DSN, 0600)
+internal/store/      OUR messages.db + Recorder. whatsmeow does NOT persist messages.
+                     Message text goes through Codec only (sealBody/openBody).
 internal/ui/         Bubble Tea models + Run. Imports internal/wa, never whatsmeow.
 ```
 

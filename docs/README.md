@@ -10,3 +10,4 @@ change to behavior described here updates the doc **in the same commit**.
 | [storage.md](storage.md) | Where data lives, the session DB, SQLite settings |
 | [usage.md](usage.md) | Commands and flags |
 | [config.md](config.md) | Config file, design, and every setting |
+| [roadmap.md](roadmap.md) | Where we are and what's next |

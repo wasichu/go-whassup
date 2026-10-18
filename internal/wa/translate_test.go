@@ -177,7 +177,7 @@ func TestHistoryFromProtoSkipsStatusBootstrap(t *testing.T) {
 // ParseWebMessage in ways the stub would hide.
 func TestHistoryWithRealParser(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	w, err := Open(t.Context(), filepath.Join(t.TempDir(), "session.db"), log)
+	w, err := Open(t.Context(), filepath.Join(t.TempDir(), "session.db"), log, Options{})
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}

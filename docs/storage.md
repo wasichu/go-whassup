@@ -5,12 +5,13 @@
 | Path | Contents |
 | --- | --- |
 | `$XDG_DATA_HOME/go-whassup/` (default `~/.local/share/go-whassup/`) | Databases. Directory created `0700`. |
+| `…/messages.db` | **Our** chats, messages and contact names (`internal/store`). Created `0600`. Safe to delete: it refills from live messages and the next history sync (which only happens on re-link). |
 | `…/session.db` | whatsmeow's store: device identity, Signal keys, contacts, app state. **Secret.** Created `0600`. Deleting it forces a re-pair; the old entry stays in the phone's Linked devices until you remove it there. |
 | `$XDG_STATE_HOME/go-whassup/wa.log` (default `~/.local/state/go-whassup/wa.log`) | Log, `0600`. Message *metadata* at info level; message *text* only with `-debug`. |
 
 Relative `XDG_*` values are ignored, as the XDG spec requires.
 
-## Session DB (whatsmeow `sqlstore`)
+## SQLite settings (both databases, `internal/sqlite`)
 
 - Driver: `modernc.org/sqlite` (pure Go, so `CGO_ENABLED=0` holds). It registers as
   `"sqlite"`, and whatsmeow's dialect parser accepts that name.
@@ -24,21 +25,54 @@ Relative `XDG_*` values are ignored, as the XDG spec requires.
   transactions plus WAL plus a busy timeout avoid `SQLITE_BUSY` ("database is
   locked"). We deliberately do **not** use `SetMaxOpenConns(1)`: whatsmeow's
   `DoTxn` helpers can nest, which risks deadlock on a single connection.
-- We open the `*sql.DB` ourselves and call `sqlstore.NewWithDB` + `Upgrade`.
+- `internal/sqlite.Open` is the only place that knows the driver and DSN. For the
+  session DB we pass its `*sql.DB` to `sqlstore.NewWithDB` + `Upgrade`.
+- **Two processes are fine.** Thanks to WAL, `wa-tui db chats` can read while
+  `wa-tui listen` writes.
 
-## Messages (step 2): built so encryption can be added later
+## Messages DB (`internal/store`)
 
-whatsmeow does **not** persist message content. Our own schema in `internal/store`
-stores it. Message text will be plaintext at first, but the design must make
-encryption a drop-in later rather than a migration:
+whatsmeow does **not** persist message content, so we do.
 
-- **One codec seam.** A `store.Codec` interface (`Seal([]byte) ([]byte, error)` /
-  `Open([]byte) ([]byte, error)`) has a no-op plaintext default. Message text and
+**Schema (v1; migrations in `schema.go`, tracked by `PRAGMA user_version`, append-only):**
+
+| Table | Columns |
+| --- | --- |
+| `chats` | `jid` PK, `name`, `is_group`, `last_message_at` (unix s) |
+| `messages` | PK `(chat_jid, id)`, `sender_jid`, `push_name`, `ts` (unix s), `from_me`, `kind`, `body` BLOB, `codec` |
+| `contacts` | `jid` PK, `push_name`: names users chose for themselves (from history sync and incoming messages) |
+
+**Behaviour:**
+- **Writing.** `store.Recorder` is registered directly with `AddEventHandler`, not through a
+  lossy subscription, and writes synchronously.
+  - Live messages and `HistorySync` batches are both stored.
+  - `INSERT OR IGNORE` on `(chat_jid, id)` dedupes overlapping history and live
+    delivery.
+  - Reactions are **skipped** for now (they'll attach to their target messages later).
+  - Edits and deletes are not applied yet (whatsmeow delivers them as protocol messages,
+    which we skip).
+- **Names.** A chat's title is its own name (group subject or history display name),
+  else the contact's push name, else the JID. An empty name never overwrites a known one.
+- **Ordering.** By `(ts, id)`, so messages in the same second stay stable.
+- **Retention.** `keep_days` and `max_messages_per_chat` (see `config.md`) are applied by
+  `Store.Prune` on startup and after every history sync batch. The per-chat cap uses a
+  `row_number()` window.
+- **Opening a newer schema** than the build knows is an error, not a silent downgrade.
+
+### Built so encryption can be added later
+
+Message text is plaintext today. The design makes encryption a drop-in rather than a
+migration (implemented in `internal/store/codec.go`):
+
+- **One codec seam.** The `store.Codec` interface (`ID()`, `Seal`, `Open`) has a no-op
+  `Plaintext` default (ID 0). Message text and
   captions pass through it at exactly **one write site and one read site** in
   `internal/store`. No other code touches the stored text column.
-- **Per-row marker.** Each row gets a `codec`/`key_id` column (0 = plaintext), so
-  plaintext and encrypted rows can coexist and turning encryption on needs no
-  migration. Existing rows can be re-sealed in the background later.
+- **Per-row marker.** The `messages.codec` column records which codec sealed each row,
+  so plaintext and encrypted rows coexist and turning encryption on needs no migration.
+  A row sealed by a codec the store doesn't have fails loudly instead of returning
+  garbage, and a test with a stand-in codec proves this. Existing rows can be re-sealed
+  in the background later.
 - **Metadata stays plaintext:** chat, sender, timestamps, message IDs. Listing and
   sorting keep working in SQL. The trade-off is that metadata (who you talk to and
   when) isn't protected.

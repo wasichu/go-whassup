@@ -8,9 +8,10 @@ cmd/wa-tui (main: signals + exit code only)
          ├─► internal/logging   slog → log file
          ├─► internal/ui        Bubble Tea v2 TUI          ─┐
          ├─► internal/headless  login / listen commands     ├─► wa.Client (interface)
+         ├─► internal/store     messages.db + Recorder      │
          └─► internal/wa        whatsmeow adapter         ◄─┘     └─► session.db
                 internal/wa/watest   fake wa.Client for tests
-                internal/store       (step 2) our chat/message DB
+                internal/sqlite      shared SQLite open (driver, DSN, 0600) for both DBs
 ```
 
 ## Rules of the layout
@@ -40,7 +41,7 @@ to every handler registered with `AddEventHandler`.
 
 There are two kinds of consumers:
 
-- **Must not lose events** (the message store, step 2): register a handler directly
+- **Must not lose events** (`store.Recorder`): register a handler directly
   and do the work synchronously. This deliberately slows whatsmeow down instead of
   dropping data.
 - **Display** (headless output, TUI): use `wa.Subscribe`. It pushes events onto a
