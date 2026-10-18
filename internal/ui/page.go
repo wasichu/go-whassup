@@ -100,6 +100,8 @@ func (r rootAPI) attachPath(path string, toCaption bool) tea.Cmd {
 	return cmd
 }
 
-// download fetches and opens an attachment (see Model.download).
-// (save: copy it to the save folder instead of opening it.)
-func (r rootAPI) download(item wa.Message, save bool) tea.Cmd { return r.m.download(item, save) }
+// openAttachment fetches and opens an attachment (see Model.openAttachment).
+func (r rootAPI) openAttachment(item wa.Message) tea.Cmd { return r.m.openAttachment(item) }
+
+// saveAttachment fetches and saves a copy (see Model.saveAttachment).
+func (r rootAPI) saveAttachment(item wa.Message) tea.Cmd { return r.m.saveAttachment(item) }

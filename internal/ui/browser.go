@@ -179,16 +179,16 @@ func (b *browser) startPreview(r rootAPI, msg previewTickMsg) tea.Cmd {
 		return nil
 	}
 	w, h := r.size()
-	_, cols, rows := browserLayout(w, h-1)
+	_, cols, rows := splitLayout(w, h-1)
 	path := filepath.Join(b.dir, e.name)
 	return b.preview.load(path, cols, rows, func(cols, rows int) ([]byte, error) { return previewPNG(path, cols, rows) })
 }
 
 func (*browser) help() []key.Binding { return browserHelp }
 
-// browserLayout splits the page: the listing's width, and the preview
+// splitLayout splits the page: the listing's width, and the preview
 // area in cells.
-func browserLayout(width, height int) (listW, cols, rows int) {
+func splitLayout(width, height int) (listW, cols, rows int) {
 	listW = min(max(width*2/5, 24), 50)
 	cols = max(min(width-listW-4, 70, maxPlacement), 4)
 	rows = max(min(height-6, 35, maxPlacement), 2)
@@ -196,7 +196,7 @@ func browserLayout(width, height int) (listW, cols, rows int) {
 }
 
 func (b *browser) view(r rootAPI, width, height int) string {
-	listW, _, _ := browserLayout(width, height)
+	listW, _, _ := splitLayout(width, height)
 	head := []string{
 		paneTitleStyle.Render("Send a file to " + chatTitle(r.chat(), r.own())),
 		faintStyle.Render(tildePath(b.dir)), "",

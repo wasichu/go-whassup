@@ -158,7 +158,7 @@ func TestAttachWithoutImagesIsTyped(t *testing.T) {
 // can address, and drawing it panicked.
 func TestBrowserPreviewFitsPlaceholderTable(t *testing.T) {
 	for _, w := range []int{80, 150, 220, 400} {
-		_, cols, rows := browserLayout(w, 120)
+		_, cols, rows := splitLayout(w, 120)
 		if cols > maxPlacement || rows > maxPlacement {
 			t.Errorf("width %d: preview %d×%d exceeds %d", w, cols, rows, maxPlacement)
 		}

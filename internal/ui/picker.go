@@ -69,9 +69,9 @@ func (p *picker) key(r rootAPI, k tea.KeyPressMsg) (bool, tea.Cmd) {
 	case key.Matches(k, keys.Down):
 		return false, p.move(r, 1)
 	case key.Matches(k, keys.Select):
-		return false, r.download(p.items[p.selected], false)
+		return false, r.openAttachment(p.items[p.selected])
 	case key.Matches(k, saveKey):
-		return false, r.download(p.items[p.selected], true)
+		return false, r.saveAttachment(p.items[p.selected])
 	}
 	return false, nil
 }
@@ -98,7 +98,7 @@ func (p *picker) startPreview(r rootAPI, msg previewTickMsg) tea.Cmd {
 	}
 	it, chat, cache := p.items[p.selected], r.chat().JID, r.deps().Media
 	w, h := r.size()
-	_, cols, rows := browserLayout(w, h-1)
+	_, cols, rows := splitLayout(w, h-1)
 	return p.preview.load(it.ID, cols, rows, func(cols, rows int) ([]byte, error) {
 		return attachmentPreview(cache, chat, it, cols, rows)
 	})
@@ -119,10 +119,22 @@ func attachmentPreview(cache MediaCache, chat string, it wa.Message, cols, rows 
 
 func (*picker) help() []key.Binding { return pickerHelp }
 
-// download fetches (if not cached) and opens an attachment of the open
+// openAttachment fetches (if not cached) and opens an attachment of the open
 // chat; the result arrives as mediaOpenedMsg, even if the picker has
 // closed by then.
-func (m *Model) download(item wa.Message, save bool) tea.Cmd {
+func (m *Model) openAttachment(item wa.Message) tea.Cmd {
+	return m.fetch(item, "Downloading", fetchAndOpen)
+}
+
+// saveAttachment downloads an attachment if needed and copies it to the
+// save folder; the result arrives as mediaOpenedMsg (save set).
+func (m *Model) saveAttachment(item wa.Message) tea.Cmd {
+	return m.fetch(item, "Saving", fetchAndSave)
+}
+
+// fetch starts then (fetchAndOpen or fetchAndSave) for an attachment of
+// the open chat, once at a time per attachment.
+func (m *Model) fetch(item wa.Message, verb string, then func(context.Context, Deps, string, wa.Message) tea.Cmd) tea.Cmd {
 	if m.downloading[item.ID] {
 		return nil // already on its way
 	}
@@ -131,12 +143,8 @@ func (m *Model) download(item wa.Message, save bool) tea.Cmd {
 		return nil
 	}
 	m.downloading[item.ID] = true
-	if save {
-		m.notice, m.noticeIsErr = "Saving "+mediaLabel(item)+"…", false
-		return fetchAndSave(m.ctx, m.deps, m.conv.chat.JID, item)
-	}
-	m.notice, m.noticeIsErr = "Downloading "+mediaLabel(item)+"…", false
-	return fetchAndOpen(m.ctx, m.deps, m.conv.chat.JID, item)
+	m.notice, m.noticeIsErr = verb+" "+mediaLabel(item)+"…", false
+	return then(m.ctx, m.deps, m.conv.chat.JID, item)
 }
 
 // fetchAndSave downloads an attachment if it isn't cached, then copies it
@@ -209,7 +217,7 @@ func (p *picker) view(r rootAPI, width, height int) string {
 	if !r.inlineImages() {
 		return pageStyle(width, height).Render(title + "\n\n" + p.listView(r, width, height-5) + keysLine)
 	}
-	listW, _, _ := browserLayout(width, height)
+	listW, _, _ := splitLayout(width, height)
 	bodyH := max(height-5, 1)
 	list := lipgloss.NewStyle().Width(listW).Height(bodyH).MaxHeight(bodyH).Render(p.listView(r, listW, bodyH))
 	side := ""
