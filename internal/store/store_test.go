@@ -398,8 +398,9 @@ func TestContactNamesTitlesAndSenders(t *testing.T) {
 	if err := st.SaveContacts(ctx, []wa.Contact{{JID: bob, Name: "Bob Builder"}}); err != nil {
 		t.Fatalf("SaveContacts: %v", err)
 	}
-	if msgs, _ := st.Messages(ctx, group, 0); msgs[0].SenderName != "Bob Builder" {
-		t.Errorf("sender name from address book = %q", msgs[0].SenderName)
+	msgs, err = st.Messages(ctx, group, 0)
+	if err != nil || len(msgs) != 1 || msgs[0].SenderName != "Bob Builder" {
+		t.Errorf("sender name from address book = %+v, %v", msgs, err)
 	}
 }
 
