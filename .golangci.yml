@@ -63,7 +63,6 @@ linters:
       - {path: internal/app/app\.go, linters: [gocognit, funlen], text: "`Run`|'Run'"}
       - {path: internal/app/encryption\.go, linters: [gocognit], text: "func `setUpEncryption`"}
       - {path: internal/app/encryption\.go, linters: [nestif], text: "source == config.KeySourceKeyring"}
-      - {path: internal/store/keys\.go, linters: [gocognit], text: "resealMessages|resealReactions"}
       - {path: internal/store/recorder\.go, linters: [gocognit], text: "Handle"}
       - {path: internal/store/messages\.go, linters: [gocognit, funlen], text: "Messages|attachReactions"}
       - {path: internal/store/prune\.go, linters: [gocognit], text: "Prune"}

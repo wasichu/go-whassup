@@ -78,3 +78,26 @@ func (s *Store) inTx(ctx context.Context, what string, fn func(*sql.Tx) error) e
 	}
 	return nil
 }
+
+// queryer is satisfied by *sql.DB and *sql.Tx.
+type queryer interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+// queryAll runs query and scans every row with scan, closing the rows.
+func queryAll[T any](ctx context.Context, q queryer, query string, args []any, scan func(*sql.Rows) (T, error)) ([]T, error) {
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []T
+	for rows.Next() {
+		v, err := scan(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}

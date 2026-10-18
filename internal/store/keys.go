@@ -149,57 +149,30 @@ func (s *Store) ResealBatch(ctx context.Context, n int) (int, error) {
 	return done, nil
 }
 
-func (s *Store) resealMessages(ctx context.Context, n int) (int, error) {
-	cur := s.current()
+// resealValue opens v with the codec that sealed it and seals it with the
+// current one. Failing to open is a *ResealError: retrying can't help.
+func (s *Store) resealValue(v []byte, codec int, chat, id, column string) ([]byte, error) {
+	plain, err := s.open(v, codec, chat, id, column)
+	if err != nil {
+		return nil, &ResealError{Chat: chat, ID: id, Err: err}
+	}
+	sealed, _, err := s.seal(plain, chat, id, column)
+	return sealed, err
+}
+
+// resealRows runs one batch over a table in a single short transaction:
+// load the rows that need it (scan), then rewrite each (apply).
+func resealRows[T any](ctx context.Context, s *Store, what, query string, args []any,
+	scan func(*sql.Rows) (T, error), apply func(*sql.Tx, T) error,
+) (int, error) {
 	done := 0
-	err := s.inTx(ctx, "re-sealing messages", func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `
-			SELECT rowid, chat_jid, id, body, codec, media, media_codec FROM messages
-			WHERE codec != ?1 OR (media IS NOT NULL AND media_codec != ?1) LIMIT ?2`, cur.ID(), n)
+	err := s.inTx(ctx, what, func(tx *sql.Tx) error {
+		batch, err := queryAll(ctx, tx, query, args, scan)
 		if err != nil {
 			return err
 		}
-		type row struct {
-			rowid             int64
-			chat, id          string
-			body, media       []byte
-			codec, mediaCodec int
-		}
-		var batch []row
-		for rows.Next() {
-			var r row
-			if err := rows.Scan(&r.rowid, &r.chat, &r.id, &r.body, &r.codec, &r.media, &r.mediaCodec); err != nil {
-				rows.Close()
-				return err
-			}
-			batch = append(batch, r)
-		}
-		if err := errors.Join(rows.Err(), rows.Close()); err != nil {
-			return err
-		}
 		for _, r := range batch {
-			body, err := s.open(r.body, r.codec, r.chat, r.id, colBody)
-			if err != nil {
-				return &ResealError{Chat: r.chat, ID: r.id, Err: err}
-			}
-			if r.body, _, err = s.seal(body, r.chat, r.id, colBody); err != nil {
-				return err
-			}
-			if r.media != nil {
-				media, err := s.open(r.media, r.mediaCodec, r.chat, r.id, colMedia)
-				if err != nil {
-					return &ResealError{Chat: r.chat, ID: r.id, Err: err}
-				}
-				if r.media, _, err = s.seal(media, r.chat, r.id, colMedia); err != nil {
-					return err
-				}
-			}
-			mediaCodec := 0
-			if r.media != nil {
-				mediaCodec = cur.ID()
-			}
-			if _, err := tx.ExecContext(ctx, `UPDATE messages SET body = ?, codec = ?, media = ?, media_codec = ? WHERE rowid = ?`,
-				r.body, cur.ID(), r.media, mediaCodec, r.rowid); err != nil {
+			if err := apply(tx, r); err != nil {
 				return err
 			}
 		}
@@ -213,54 +186,66 @@ func (s *Store) resealMessages(ctx context.Context, n int) (int, error) {
 	return done, err
 }
 
+type messageValues struct {
+	rowid             int64
+	chat, id          string
+	body, media       []byte
+	codec, mediaCodec int
+}
+
+func (s *Store) resealMessages(ctx context.Context, n int) (int, error) {
+	cur := s.current().ID()
+	return resealRows(ctx, s, "re-sealing messages", `
+		SELECT rowid, chat_jid, id, body, codec, media, media_codec FROM messages
+		WHERE codec != ?1 OR (media IS NOT NULL AND media_codec != ?1) LIMIT ?2`, []any{cur, n},
+		func(rows *sql.Rows) (messageValues, error) {
+			var r messageValues
+			err := rows.Scan(&r.rowid, &r.chat, &r.id, &r.body, &r.codec, &r.media, &r.mediaCodec)
+			return r, err
+		},
+		func(tx *sql.Tx, r messageValues) error {
+			body, err := s.resealValue(r.body, r.codec, r.chat, r.id, colBody)
+			if err != nil {
+				return err
+			}
+			var media []byte
+			mediaCodec := 0
+			if r.media != nil {
+				if media, err = s.resealValue(r.media, r.mediaCodec, r.chat, r.id, colMedia); err != nil {
+					return err
+				}
+				mediaCodec = cur
+			}
+			_, err = tx.ExecContext(ctx, `UPDATE messages SET body = ?, codec = ?, media = ?, media_codec = ? WHERE rowid = ?`,
+				body, cur, media, mediaCodec, r.rowid)
+			return err
+		})
+}
+
+type reactionValue struct {
+	rowid             int64
+	chat, msg, sender string
+	emoji             []byte
+	codec             int
+}
+
 func (s *Store) resealReactions(ctx context.Context, n int) (int, error) {
-	cur := s.current()
-	done := 0
-	err := s.inTx(ctx, "re-sealing reactions", func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `
-			SELECT rowid, chat_jid, message_id, sender_jid, emoji, codec FROM reactions WHERE codec != ? LIMIT ?`, cur.ID(), n)
-		if err != nil {
-			return err
-		}
-		type row struct {
-			rowid             int64
-			chat, msg, sender string
-			emoji             []byte
-			codec             int
-		}
-		var batch []row
-		for rows.Next() {
-			var r row
-			if err := rows.Scan(&r.rowid, &r.chat, &r.msg, &r.sender, &r.emoji, &r.codec); err != nil {
-				rows.Close()
-				return err
-			}
-			batch = append(batch, r)
-		}
-		if err := errors.Join(rows.Err(), rows.Close()); err != nil {
-			return err
-		}
-		for _, r := range batch {
-			plain, err := s.open(r.emoji, r.codec, r.chat, r.msg, reactionColumn(r.sender))
-			if err != nil {
-				return &ResealError{Chat: r.chat, ID: r.msg, Err: err}
-			}
-			sealed, _, err := s.seal(plain, r.chat, r.msg, reactionColumn(r.sender))
+	cur := s.current().ID()
+	return resealRows(ctx, s, "re-sealing reactions", `
+		SELECT rowid, chat_jid, message_id, sender_jid, emoji, codec FROM reactions WHERE codec != ? LIMIT ?`, []any{cur, n},
+		func(rows *sql.Rows) (reactionValue, error) {
+			var r reactionValue
+			err := rows.Scan(&r.rowid, &r.chat, &r.msg, &r.sender, &r.emoji, &r.codec)
+			return r, err
+		},
+		func(tx *sql.Tx, r reactionValue) error {
+			emoji, err := s.resealValue(r.emoji, r.codec, r.chat, r.msg, reactionColumn(r.sender))
 			if err != nil {
 				return err
 			}
-			if _, err := tx.ExecContext(ctx, `UPDATE reactions SET emoji = ?, codec = ? WHERE rowid = ?`, sealed, cur.ID(), r.rowid); err != nil {
-				return err
-			}
-		}
-		done = len(batch)
-		return nil
-	})
-	var rerr *ResealError
-	if errors.As(err, &rerr) {
-		return 0, rerr
-	}
-	return done, err
+			_, err = tx.ExecContext(ctx, `UPDATE reactions SET emoji = ?, codec = ? WHERE rowid = ?`, emoji, cur, r.rowid)
+			return err
+		})
 }
 
 // FinishEncrypting runs once every value is sealed: it rewrites the file so
