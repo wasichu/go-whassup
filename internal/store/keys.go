@@ -20,16 +20,19 @@ type StoredKey struct {
 	KDF       *crypt.KDFParams // nil for keyring keys (the KEK is random)
 	Wrapped   []byte
 	CreatedAt time.Time
+	// Finished reports that encrypting under this key completed (every
+	// value re-sealed, index emptied, file compacted).
+	Finished bool
 }
 
 // Key returns the current (newest) key, or nil if messages aren't encrypted.
 func (s *Store) Key(ctx context.Context) (*StoredKey, error) {
 	var k StoredKey
 	var kdf string
-	var created int64
+	var created, finished int64
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, alg, source, salt, kdf, wrapped, created_at FROM keys ORDER BY id DESC LIMIT 1`).
-		Scan(&k.ID, &k.Alg, &k.Source, &k.Salt, &kdf, &k.Wrapped, &created)
+		SELECT id, alg, source, salt, kdf, wrapped, created_at, finished_at FROM keys ORDER BY id DESC LIMIT 1`).
+		Scan(&k.ID, &k.Alg, &k.Source, &k.Salt, &kdf, &k.Wrapped, &created, &finished)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -42,7 +45,7 @@ func (s *Store) Key(ctx context.Context) (*StoredKey, error) {
 			return nil, fmt.Errorf("reading key parameters: %w", err)
 		}
 	}
-	k.CreatedAt = time.Unix(created, 0)
+	k.CreatedAt, k.Finished = time.Unix(created, 0), finished > 0
 	return &k, nil
 }
 
@@ -270,7 +273,14 @@ func (s *Store) FinishEncrypting(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `DELETE FROM messages_fts`); err != nil {
 		return fmt.Errorf("emptying search index: %w", err) // defensive; AddKey emptied it
 	}
-	return s.compact(ctx)
+	if err := s.compact(ctx); err != nil {
+		return err
+	}
+	// Only now is it finished; a crash before this line repeats the step.
+	if _, err := s.db.ExecContext(ctx, `UPDATE keys SET finished_at = ? WHERE id = ?`, time.Now().Unix(), s.current().ID()); err != nil {
+		return fmt.Errorf("recording encryption finished: %w", err)
+	}
+	return nil
 }
 
 // FinishDecrypting runs once every value is plaintext again: it rebuilds the

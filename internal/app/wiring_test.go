@@ -34,6 +34,12 @@ func TestTUIDepsFullyWired(t *testing.T) {
 	deps := tuiDeps(config.Default(), paths.Paths{ConfigFile: filepath.Join(dir, "c.toml")}, client, st,
 		&store.Recorder{Store: st, Log: log}, media.Cache{Dir: dir}, log)
 
+	// Every field must be listed: a new ui.Deps field forces a decision
+	// here instead of silently being left unset.
+	required := map[string]bool{
+		"Client": true, "Store": true, "Log": true, "Config": true, "ConfigPath": true,
+		"ApplyConfig": true, "Media": true, "OpenFile": true,
+	}
 	mayBeEmpty := map[string]bool{
 		"Graphics":  true, // depends on the terminal
 		"FocusHint": true, // only set inside tmux with focus-events off
@@ -42,8 +48,13 @@ func TestTUIDepsFullyWired(t *testing.T) {
 	v := reflect.ValueOf(deps)
 	for i := range v.NumField() {
 		name := v.Type().Field(i).Name
-		if v.Field(i).IsZero() && !mayBeEmpty[name] {
-			t.Errorf("ui.Deps.%s isn't wired by the app", name)
+		switch {
+		case required[name]:
+			if v.Field(i).IsZero() {
+				t.Errorf("ui.Deps.%s isn't wired by the app", name)
+			}
+		case !mayBeEmpty[name]:
+			t.Errorf("ui.Deps.%s is new: wire it in tuiDeps and list it as required (or explain why it may be empty)", name)
 		}
 	}
 }

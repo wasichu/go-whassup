@@ -168,6 +168,14 @@ func (m Model) settingsSaved(msg configSavedMsg) (tea.Model, tea.Cmd) {
 func (m Model) settingsView(width, height int) string {
 	s := m.settings
 	fields := s.cfg.Fields()
+	if s.pending != nil {
+		// A confirmation gets the whole screen so it fits small terminals.
+		name := fields[s.selected].Name()
+		content := paneTitleStyle.Render("Change "+name+"?") + "\n\n" +
+			lipgloss.NewStyle().Width(min(width-4, 80)).Render(s.confirm) + "\n\n" +
+			senderStyle.Render("y = yes, n = no")
+		return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Padding(0, 1).Render(content)
+	}
 	var b strings.Builder
 	b.WriteString(paneTitleStyle.Render("Settings") + "  " + faintStyle.Render(tildePath(m.deps.ConfigPath)) + "\n")
 
@@ -202,9 +210,7 @@ func (m Model) settingsView(width, height int) string {
 			b.WriteString(faintStyle.Render("Applies the next time you link (L › Re-link).") + "\n")
 		}
 	}
-	if s.pending != nil {
-		b.WriteString("\n" + lipgloss.NewStyle().Width(min(width-4, 80)).Render(s.confirm) + "\n" + senderStyle.Render("(y/n)") + "\n")
-	} else if s.err != "" {
+	if s.err != "" {
 		b.WriteString("\n" + errorStyle.Render(s.err) + "\n")
 	} else if s.saved != "" {
 		b.WriteString("\n" + onlineStyle.Render(s.saved) + "\n")

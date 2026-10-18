@@ -34,7 +34,7 @@ const (
 
 // Encryption controls at-rest encryption of messages.db.
 type Encryption struct {
-	Enabled         bool   `toml:"enabled" confirm:"Encrypts message text and attachment keys only: who you talk to, when, and contact names stay readable on disk. Turning it on re-encrypts stored messages and turns message search off; turning it off decrypts everything back. Continue?" comment:"Encrypt message text and attachment keys in messages.db.\nEncrypts message text only: who you talk to, when, and contact names stay readable on disk.\nMessage search is unavailable while this is on."`
+	Enabled         bool   `toml:"enabled" confirm:"Encrypts message text and attachment keys only: who you talk to, when, and contact names stay readable on disk. Turning it on re-encrypts stored messages and turns message search off; turning it off decrypts everything back. Takes effect when you next start wa-tui. Continue?" comment:"Encrypt message text and attachment keys in messages.db.\nEncrypts message text only: who you talk to, when, and contact names stay readable on disk.\nMessage search is unavailable while this is on."`
 	KeySource       string `toml:"key_source" choices:"keyring,password-command,prompt" comment:"Where the key comes from: keyring = your OS keychain (no prompt);\npassword-command = run password_command and use its output as a passphrase;\nprompt = ask for a passphrase when go-whassup starts."`
 	PasswordCommand string `toml:"password_command" text:"true" comment:"With key_source = password-command: a shell command that prints your passphrase,\ne.g. \"pass show whatsapp\" or \"gpg --decrypt ~/.config/go-whassup/pass.gpg\"."`
 }

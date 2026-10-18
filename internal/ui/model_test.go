@@ -1223,6 +1223,7 @@ func TestSearchJumpsToOlderMessage(t *testing.T) {
 
 func TestSettingsConfirmsEncryptionToggle(t *testing.T) {
 	h := newHarness(t, true)
+	h.send(tea.WindowSizeMsg{Width: 80, Height: 24}) // the question must fit a small terminal
 	h.key(",")
 	for range 6 { // down to encryption.enabled
 		h.key("down")
@@ -1233,7 +1234,7 @@ func TestSettingsConfirmsEncryptionToggle(t *testing.T) {
 	}
 	h.key("enter")
 	v := ansi.Strip(h.view())
-	if !strings.Contains(v, "who you talk to") || !strings.Contains(v, "(y/n)") {
+	if !strings.Contains(v, "who you talk to") || !strings.Contains(v, "y = yes, n = no") {
 		t.Fatalf("confirmation with metadata warning missing:\n%s", v)
 	}
 	if len(h.applied) != 0 {

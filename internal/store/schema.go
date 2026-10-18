@@ -127,6 +127,11 @@ INSERT INTO reactions_v10 (chat_jid, message_id, sender_jid, from_me, emoji, cod
 DROP TABLE reactions;
 ALTER TABLE reactions_v10 RENAME TO reactions;
 `,
+	// 11: when FinishEncrypting completed for a key (so a crash between the
+	// last re-seal batch and the final VACUUM is finished on next start).
+	`
+ALTER TABLE keys ADD COLUMN finished_at INTEGER NOT NULL DEFAULT 0;
+`,
 }
 
 // migrate brings the schema up to date inside one transaction.

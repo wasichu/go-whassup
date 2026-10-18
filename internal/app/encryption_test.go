@@ -216,3 +216,36 @@ func TestResetMessages(t *testing.T) {
 		t.Errorf("warning missing: %s", out.String())
 	}
 }
+
+func TestCrashBeforeFinishIsCompletedNextStart(t *testing.T) {
+	f := newEncFixture(t)
+	kr := &fakeKeyring{}
+	st := f.open()
+	if _, err := setUpEncryption(t.Context(), cfgWith(true, config.KeySourceKeyring), f.p, st, fakeSources(kr, ""), true, f.log); err != nil {
+		t.Fatal(err)
+	}
+	// Re-seal everything, then "crash" before FinishEncrypting.
+	for {
+		n, err := st.ResealBatch(t.Context(), 100)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n == 0 {
+			break
+		}
+	}
+	again := f.open()
+	e, err := setUpEncryption(t.Context(), cfgWith(true, config.KeySourceKeyring), f.p, again, fakeSources(kr, ""), true, f.log)
+	if err != nil || e.pending != 0 || e.finish == nil {
+		t.Fatalf("restart after a crash before finishing = %+v, %v; want the finish step to run", e, err)
+	}
+	startReseal(t.Context(), again, e, f.log)()
+	k, err := again.Key(t.Context())
+	if err != nil || !k.Finished {
+		t.Errorf("key = %+v, %v; want Finished", k, err)
+	}
+	e, err = setUpEncryption(t.Context(), cfgWith(true, config.KeySourceKeyring), f.p, f.open(), fakeSources(kr, ""), true, f.log)
+	if err != nil || e.finish != nil {
+		t.Errorf("once finished, nothing more to do: %+v, %v", e, err)
+	}
+}

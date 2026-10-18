@@ -181,7 +181,8 @@ migration (implemented in `internal/store/codec.go`):
 4. Re-seal in batches of 500 in the background, checkpointing the WAL after every batch.
 5. `VACUUM`.
 
-It resumes on the next start if interrupted. A value that can't be opened stops
+It resumes on the next start if interrupted, including a crash after the last batch but
+before compaction: `keys.finished_at` (v11) is only set once compaction completes. A value that can't be opened stops
 re-sealing (`ResealError`) rather than retrying forever.
 
 **Disabling.**

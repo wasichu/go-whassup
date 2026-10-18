@@ -40,7 +40,10 @@ func realKeySources(cfg config.Config, p paths.Paths, stdio IO) keySources {
 			in, _ := stdio.In.(*os.File)
 			label := "Passphrase for stored messages: "
 			if confirm {
-				label = "New passphrase for stored messages (encrypts message text only; who you talk to and when stays readable): "
+				if _, err := fmt.Fprintln(stdio.Err, "Setting up encryption of stored messages (message text only;\nwho you talk to and when stays readable)."); err != nil {
+					return nil, err
+				}
+				label = "New passphrase: "
 			}
 			return keysource.Prompt{In: in, Out: stdio.Err}.Passphrase(label, confirm)
 		},
@@ -103,7 +106,9 @@ func setUpEncryption(ctx context.Context, cfg config.Config, p paths.Paths, st *
 		return encryption{}, err
 	}
 	switch {
-	case want && (key == nil || e.pending > 0):
+	case want && (key == nil || e.pending > 0 || !key.Finished):
+		// Also when every value is sealed but the final compaction never
+		// completed (a crash right after the last batch).
 		e.finish = st.FinishEncrypting
 	case !want && key != nil:
 		e.finish = st.FinishDecrypting

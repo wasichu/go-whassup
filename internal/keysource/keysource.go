@@ -37,6 +37,9 @@ func run(ctx context.Context, stdin []byte, name string, args ...string) ([]byte
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return out, fmt.Errorf("%s didn't respond in time (is the keychain locked, or waiting for approval in a dialog?)", name)
+	}
 	if err != nil {
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
