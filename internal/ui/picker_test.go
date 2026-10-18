@@ -178,3 +178,28 @@ func TestOpenedNoticeIsShortAndClearsOnMove(t *testing.T) {
 		t.Errorf("moving to another attachment should clear the notice, got %q", n)
 	}
 }
+
+func TestOpenedNoticeGoesWhenLeaving(t *testing.T) {
+	h := newHarness(t, true)
+	h.client.DownloadData = []byte("%PDF-1.7")
+	h.seedAttachment("doc1", "report.pdf")
+	h.key("enter") // into the message box
+	h.key("ctrl+o")
+	h.key("enter")
+	h.settle()
+	if h.model().notice != "File opened." {
+		t.Fatalf("notice = %q", h.model().notice)
+	}
+	h.key("esc")
+	if n := h.model().notice; n != "" || h.model().screen != screenMain {
+		t.Errorf("esc back to the chat should clear the notice, got %q", n)
+	}
+
+	// A download that finishes after leaving doesn't announce itself.
+	h.key("ctrl+o")
+	h.key("esc")
+	h.send(mediaOpenedMsg{chat: ada, id: "doc1", path: "/cache/abc.pdf"})
+	if n := h.model().notice; n != "" {
+		t.Errorf("late \"File opened.\" on the chat screen: %q", n)
+	}
+}

@@ -62,6 +62,7 @@ func (p *picker) update(r rootAPI, msg tea.Msg) (bool, tea.Cmd) {
 func (p *picker) key(r rootAPI, k tea.KeyPressMsg) (bool, tea.Cmd) {
 	switch {
 	case key.Matches(k, keys.Back):
+		r.notify("") // what it said was about this view's attachments
 		return true, p.preview.hide()
 	case key.Matches(k, keys.Up):
 		return false, p.move(r, -1)
@@ -196,8 +197,13 @@ func (m Model) mediaOpened(msg mediaOpenedMsg) (Model, tea.Cmd) {
 	case msg.err != nil:
 		m.setError("opening attachment", msg.err)
 	default:
-		// The cached file's name is a hash: nothing worth showing.
-		m.notice, m.noticeIsErr = "File opened.", false
+		// The cached file's name is a hash: nothing worth showing. And only
+		// while the attachments view is still open: it's no news elsewhere.
+		if m.screen == screenPicker {
+			m.notice, m.noticeIsErr = "File opened.", false
+		} else if m.notice != "" && !m.noticeIsErr {
+			m.notice = "" // the "Downloading …" this answers
+		}
 	}
 	if msg.chat == m.conv.chat.JID {
 		return m, loadMessages(m.ctx, m.deps, msg.chat) // refresh the ✓
