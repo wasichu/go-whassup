@@ -17,7 +17,7 @@ step lands or the plan changes.
    - `wa-tui db chats` / `db messages`;
    - `wa-tui login -relink` to unlink and pair again.
 
-## In progress: step 3, minimal TUI
+## In progress: step 3, minimal TUI (built; final live tests pending)
 
 - [x] Sending: `wa.SendText` (emitted as an event); push name announced as
   "unavailable" on connect.
@@ -26,7 +26,8 @@ step lands or the plan changes.
 - [x] Keymap with generated hints and a `?` overlay.
 - [x] Login screen: phone code, QR choice (`rsc.io/qr`, half-blocks), Re-link, esc to
   cancel. *(QR scan and TUI pairing: live test pending.)*
-- [ ] Settings screen (below).
+- [x] Settings screen: generic over `Config.Fields()`, validated, saved atomically and
+  applied live. *(Live test pending.)*
 - **Login screen:**
   - Phone-code pairing (the step-1 flow) by default.
   - When already paired: a **"Re-link"** option, the same as `login -relink` via

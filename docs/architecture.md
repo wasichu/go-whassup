@@ -88,8 +88,11 @@ There are two kinds of consumers:
 
 ## TUI structure (`internal/ui`)
 
-- **One root `Model`** with a `screen` (main, login), a `?` help overlay, and sub-state
-  per screen (`chatList`, `conversation`, `login`). Everything changes only in `Update`.
+- **One root `Model`** with a `screen` (main, login, settings), a `?` help overlay, and
+  sub-state per screen (`chatList`, `conversation`, `login`, `settings`). Everything
+  changes only in `Update`.
+- **`ui.Deps`** also carries `Config`, `ConfigPath` and an `ApplyConfig` hook, so the UI
+  never reaches into the recorder or client internals to apply settings.
 - **`keys.go` is the single keymap.** Handlers use `key.Matches`, and hints/help render
   the same bindings with `bubbles/help`.
 - **Focus gates shortcuts.** Keys reach the message input only when it's focused, and

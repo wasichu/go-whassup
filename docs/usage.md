@@ -42,11 +42,12 @@ the status line. If the device isn't linked, it opens the **login screen** inste
 | `esc` | | back to chat list |
 | `pgup`/`pgdn` | scroll messages | scroll messages |
 | `L` | login screen: link, or re-link | (typed) |
+| `,` | settings | (typed) |
 | `?` | key help (any key closes) | (typed) |
 | `q` | quit | (typed) |
 | `ctrl+c` | quit | quit |
 
-Shortcuts only act from the chat list. In the message box `q`, `L` and `?` are just
+Shortcuts only act from the chat list. In the message box `q`, `L`, `,` and `?` are just
 characters. Hints in the status line are generated from the same keymap as the
 handlers (`internal/ui/keys.go`), so they can't drift.
 
@@ -61,3 +62,14 @@ handlers (`internal/ui/keys.go`), so they can't drift.
 - **Esc:** while waiting for the code or a scan, cancels pairing; otherwise goes back.
 - **After you're logged out remotely** (e.g. from the phone), the login screen opens with
   the reason.
+
+### Settings screen (`,`)
+
+- Lists every setting in `config.toml`, grouped by section, with its description (the
+  same comment written into the file).
+- `↑`/`↓` to choose; `enter` or space toggles yes/no settings or edits numbers (`enter`
+  saves, `esc` cancels).
+- **Each committed change is validated, saved to the file and applied immediately.**
+  For example, lowering `keep_days` prunes right away. Settings that only matter when
+  linking are labelled as such.
+- Invalid values are explained inline, and the previous value is kept.

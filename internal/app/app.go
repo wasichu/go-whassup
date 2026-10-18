@@ -70,10 +70,7 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 		return console.Messages(ctx, st, inv.args[0], inv.limit)
 	}
 
-	client, err := wa.Open(ctx, p.SessionDB, log, wa.Options{
-		RequestFullSync: cfg.History.RequestFullSync,
-		FullSyncDays:    cfg.History.FullSyncDays,
-	})
+	client, err := wa.Open(ctx, p.SessionDB, log, pairingOptions(cfg))
 	if err != nil {
 		return err
 	}
@@ -85,7 +82,7 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 	// lossy.
 	rec := &store.Recorder{
 		Store:     st,
-		Retention: store.Retention{KeepDays: cfg.History.KeepDays, MaxPerChat: cfg.History.MaxMessagesPerChat},
+		Retention: retention(cfg),
 		Log:       log,
 	}
 	rec.Prune(ctx)
@@ -93,7 +90,19 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 
 	switch inv.cmd {
 	case "tui":
-		return ui.Run(ctx, ui.Deps{Client: client, Store: st, Log: log})
+		return ui.Run(ctx, ui.Deps{
+			Client:     client,
+			Store:      st,
+			Log:        log,
+			Config:     cfg,
+			ConfigPath: p.ConfigFile,
+			ApplyConfig: func(ctx context.Context, c config.Config) error {
+				client.SetOptions(pairingOptions(c))
+				rec.SetRetention(retention(c))
+				rec.Prune(ctx)
+				return nil
+			},
+		})
 	case "login":
 		var phone string
 		if len(inv.args) > 0 {
@@ -115,6 +124,14 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 	default: // "listen"; parseArgs rejects anything else
 		return console.Listen(ctx, client)
 	}
+}
+
+func pairingOptions(c config.Config) wa.Options {
+	return wa.Options{RequestFullSync: c.History.RequestFullSync, FullSyncDays: c.History.FullSyncDays}
+}
+
+func retention(c config.Config) store.Retention {
+	return store.Retention{KeepDays: c.History.KeepDays, MaxPerChat: c.History.MaxMessagesPerChat}
 }
 
 // closeInto closes c and joins any error into *err, for use with defer.

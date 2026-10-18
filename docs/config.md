@@ -2,7 +2,7 @@
 
 `$XDG_CONFIG_HOME/go-whassup/config.toml` (default `~/.config/go-whassup/config.toml`).
 The file is optional: if it's missing, the defaults apply. The Settings screen in the
-TUI (step 3) will read and write it.
+TUI's Settings screen (`,`) reads and writes it.
 
 ## Design (`internal/config`)
 
@@ -22,9 +22,17 @@ TUI (step 3) will read and write it.
   are lost on save**; that's the accepted trade-off for TUI editing.
 - **Precedence:** defaults < file < command-line flags (`-debug`). Environment
   variables are not supported (add them only when there's a real need).
+- **Settings screen.** `Config.Fields()` discovers settings by reflection over the
+  struct tags (bool and int fields; tag `applies:"pairing"` marks link-time-only
+  settings). The TUI renders and edits them generically, so a new setting appears there
+  with no UI code. A change goes through `Validate` → `Save` → `ApplyConfig` (wired in
+  `internal/app`), which updates the client's pairing options and the recorder's
+  retention, then prunes.
 - **Adding a setting:**
-  1. Add a field with `toml` and `comment` tags.
-  2. Set its default in `Default()`.
+  1. Add a field with `toml` and `comment` tags (plus `applies:"pairing"` if it only
+     matters when linking).
+  2. Set its default in `Default()`. If the running app must react, extend `ApplyConfig`
+     in `internal/app`.
   3. Add any validation to `Validate()`.
   4. Document it in the table below.
   5. Extend the round-trip test.

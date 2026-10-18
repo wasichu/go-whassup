@@ -25,6 +25,7 @@ type screen int
 const (
 	screenMain screen = iota
 	screenLogin
+	screenSettings
 )
 
 type focus int
@@ -58,10 +59,11 @@ type Model struct {
 	notice        string // last error or hint, shown in the status line
 	noticeIsErr   bool
 
-	chats chatList
-	conv  conversation
-	login login
-	help  help.Model
+	chats    chatList
+	conv     conversation
+	login    login
+	settings settings
+	help     help.Model
 }
 
 // New returns the root model. sub must be a subscription on deps.Client,
@@ -100,6 +102,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleEvent(msg.evt)
 	case pairCodeMsg, pairQRStartedMsg, logoutMsg:
 		return m.loginResult(msg)
+	case configSavedMsg:
+		return m.settingsSaved(msg)
 	case chatsLoadedMsg:
 		if msg.err != nil {
 			m.setError("loading chats", msg.err)
@@ -144,6 +148,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch {
 	case m.screen == screenLogin && m.login.step == loginPhone:
 		m.login.phone, cmd = m.login.phone.Update(msg)
+	case m.screen == screenSettings && m.settings.editing:
+		m.settings.input, cmd = m.settings.input.Update(msg)
 	case m.screen == screenMain && m.focus == focusInput:
 		m.conv.input, cmd = m.conv.input.Update(msg)
 	}
@@ -159,8 +165,11 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.showHelp = false // any key closes the overlay
 		return m, nil
 	}
-	if m.screen == screenLogin {
+	switch m.screen {
+	case screenLogin:
 		return m.loginKey(msg)
+	case screenSettings:
+		return m.settingsKey(msg)
 	}
 
 	switch {
@@ -200,6 +209,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.showHelp = true
 	case key.Matches(msg, keys.Login):
 		return m.openLogin(""), nil
+	case key.Matches(msg, keys.Settings):
+		return m.openSettings(), nil
 	case key.Matches(msg, keys.Up):
 		return m.selectChat(-1)
 	case key.Matches(msg, keys.Down):
@@ -293,6 +304,8 @@ func (m Model) render() string {
 		body = m.helpView(bodyH)
 	case m.screen == screenLogin:
 		body = m.loginView(m.width, bodyH)
+	case m.screen == screenSettings:
+		body = m.settingsView(m.width, bodyH)
 	default:
 		left := m.chats.view(m.listWidth(), bodyH, m.focus == focusList)
 		sep := separatorStyle.Render(strings.TrimSuffix(strings.Repeat("│\n", bodyH), "\n"))
@@ -357,6 +370,11 @@ func (m Model) contextHelp() []key.Binding {
 			return []key.Binding{keys.Back}
 		}
 		return menuHelp
+	case m.screen == screenSettings:
+		if m.settings.editing {
+			return formHelp
+		}
+		return settingsHelp
 	case m.focus == focusInput:
 		return inputHelp
 	default:

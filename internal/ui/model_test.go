@@ -13,6 +13,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/wasichu/go-whassup/internal/config"
 	"github.com/wasichu/go-whassup/internal/store"
 	"github.com/wasichu/go-whassup/internal/wa"
 	"github.com/wasichu/go-whassup/internal/wa/watest"
@@ -27,6 +28,8 @@ const (
 var day = time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 
 type harness struct {
+	applied []config.Config // configs passed to ApplyConfig
+	cfgPath string
 	t       *testing.T
 	m       tea.Model
 	client  *watest.Client
@@ -65,8 +68,15 @@ func newHarness(t *testing.T, paired bool) *harness {
 	sub := wa.Subscribe(client, 64, log)
 	t.Cleanup(sub.Close)
 
-	h := &harness{t: t, client: client, st: st}
-	h.m = New(ctx, Deps{Client: client, Store: st, Log: log}, sub)
+	h := &harness{t: t, client: client, st: st, cfgPath: filepath.Join(t.TempDir(), "config.toml")}
+	h.m = New(ctx, Deps{
+		Client: client, Store: st, Log: log,
+		Config: config.Default(), ConfigPath: h.cfgPath,
+		ApplyConfig: func(_ context.Context, c config.Config) error {
+			h.applied = append(h.applied, c)
+			return nil
+		},
+	}, sub)
 	h.send(tea.WindowSizeMsg{Width: 100, Height: 30})
 	h.run(h.m.Init())
 	h.settle()
@@ -140,6 +150,8 @@ func (h *harness) key(k string) {
 		h.send(tea.KeyPressMsg{Code: tea.KeyEsc})
 	case "down":
 		h.send(tea.KeyPressMsg{Code: tea.KeyDown})
+	case "up":
+		h.send(tea.KeyPressMsg{Code: tea.KeyUp})
 	case "ctrl+c":
 		h.send(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
 	default:
@@ -455,5 +467,70 @@ func TestScrollPositionSurvivesOtherChatActivity(t *testing.T) {
 	m = h.model()
 	if after := m.conv.viewport.YOffset(); after != before {
 		t.Errorf("scroll moved from %d to %d after activity in another chat", before, after)
+	}
+}
+
+func TestSettingsToggleEditValidateSave(t *testing.T) {
+	h := newHarness(t, true)
+	h.key(",")
+	v := h.view()
+	for _, want := range []string{"Settings", "[history]", "request_full_sync", "keep_days", "Applies the next time you link"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("settings view missing %q:\n%s", want, v)
+		}
+	}
+
+	// full_sync_days without request_full_sync is invalid: kept, error shown.
+	h.key("down")
+	h.key("enter")
+	h.send(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	h.key("30")
+	h.key("enter")
+	if !strings.Contains(h.view(), "only used with") || len(h.applied) != 0 {
+		t.Fatalf("cross-field validation not shown or config applied:\n%s", h.view())
+	}
+	h.key("esc") // cancel the edit
+
+	// Toggle request_full_sync: saved and applied.
+	h.key("up")
+	h.key("enter")
+	if len(h.applied) != 1 || !h.applied[0].History.RequestFullSync {
+		t.Fatalf("toggle not applied: %+v\n%s", h.applied, h.view())
+	}
+	saved, err := config.Load(h.cfgPath)
+	if err != nil || !saved.History.RequestFullSync {
+		t.Fatalf("toggle not saved: %+v, %v", saved, err)
+	}
+	if !strings.Contains(h.view(), "Saved to") {
+		t.Errorf("save confirmation missing:\n%s", h.view())
+	}
+
+	// Edit keep_days: junk rejected, then a valid value saved.
+	h.key("down")
+	h.key("down")
+	h.key("enter")
+	h.send(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	h.key("x")
+	h.key("enter")
+	if !strings.Contains(h.view(), "whole number") {
+		t.Errorf("parse error missing:\n%s", h.view())
+	}
+	h.send(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	h.key("90")
+	h.key("enter")
+	if saved, err := config.Load(h.cfgPath); err != nil || saved.History.KeepDays != 90 {
+		t.Errorf("keep_days not saved: %+v, %v", saved, err)
+	}
+	if got := h.model().deps.Config.History.KeepDays; got != 90 {
+		t.Errorf("model config not updated: %d", got)
+	}
+
+	h.key("esc")
+	if h.model().screen != screenMain {
+		t.Error("esc should return to main")
+	}
+	h.key(",")
+	if h.model().settings.cfg.History.KeepDays != 90 {
+		t.Error("reopened settings lost the saved value")
 	}
 }

@@ -12,7 +12,7 @@ var keys = struct {
 	// Main screen, either focus.
 	PageUp, PageDown key.Binding
 	// Lists on the login and settings screens.
-	Select, Back, Submit, Cancel key.Binding
+	Select, Back, Submit, Cancel, Edit key.Binding
 	// Everywhere.
 	ForceQuit key.Binding
 }{
@@ -29,6 +29,7 @@ var keys = struct {
 	PageDown:  key.NewBinding(key.WithKeys("pgdown"), key.WithHelp("pgdn", "scroll down")),
 	Select:    key.NewBinding(key.WithKeys("enter", " "), key.WithHelp("enter", "select")),
 	Back:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+	Edit:      key.NewBinding(key.WithKeys("enter", " "), key.WithHelp("enter", "toggle/edit")),
 	Submit:    key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "continue")),
 	Cancel:    key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 	ForceQuit: key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "quit")),
@@ -36,14 +37,15 @@ var keys = struct {
 
 // Binding sets per context, rendered with help.ShortHelpView/FullHelpView.
 var (
-	listHelp     = []key.Binding{keys.Up, keys.Down, keys.Open, keys.Login, keys.Help, keys.Quit}
+	listHelp     = []key.Binding{keys.Up, keys.Down, keys.Open, keys.Login, keys.Settings, keys.Help, keys.Quit}
 	inputHelp    = []key.Binding{keys.Send, keys.Blur, keys.PageUp, keys.PageDown}
 	menuHelp     = []key.Binding{keys.Up, keys.Down, keys.Select, keys.Back}
 	formHelp     = []key.Binding{keys.Submit, keys.Back}
 	waitHelp     = []key.Binding{keys.Cancel}
+	settingsHelp = []key.Binding{keys.Up, keys.Down, keys.Edit, keys.Back}
 	fullMainHelp = [][]key.Binding{
 		{keys.Up, keys.Down, keys.Open, keys.Quit},
 		{keys.Send, keys.Blur, keys.PageUp, keys.PageDown},
-		{keys.Login, keys.Help, keys.ForceQuit},
+		{keys.Login, keys.Settings, keys.Help, keys.ForceQuit},
 	}
 )

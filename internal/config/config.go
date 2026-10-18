@@ -15,15 +15,16 @@ import (
 )
 
 // Config is the full configuration. Field comments are written into the
-// file by Save, so keep them user-facing.
+// file by Save and shown by the Settings screen, so keep them user-facing.
+// Tag `applies:"pairing"` marks settings that only take effect when linking.
 type Config struct {
 	History History `toml:"history" comment:"How much chat history to fetch and keep."`
 }
 
 // History controls history sync requests and local retention.
 type History struct {
-	RequestFullSync    bool `toml:"request_full_sync" comment:"Ask the phone for ~1 year of history when linking, instead of its default ~3 months.\nOnly takes effect when pairing a device (wa-tui login)."`
-	FullSyncDays       int  `toml:"full_sync_days" comment:"With request_full_sync: how many days to ask for. 0 = the phone's full-sync default."`
+	RequestFullSync    bool `toml:"request_full_sync" applies:"pairing" comment:"Ask the phone for ~1 year of history when linking, instead of its default ~3 months.\nOnly takes effect when pairing a device (wa-tui login)."`
+	FullSyncDays       int  `toml:"full_sync_days" applies:"pairing" comment:"With request_full_sync: how many days to ask for. 0 = the phone's full-sync default."`
 	KeepDays           int  `toml:"keep_days" comment:"Delete stored messages older than this many days. 0 = keep everything."`
 	MaxMessagesPerChat int  `toml:"max_messages_per_chat" comment:"Keep at most this many of the newest messages per chat. 0 = no limit."`
 }

@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/wasichu/go-whassup/internal/config"
 	"github.com/wasichu/go-whassup/internal/store"
 	"github.com/wasichu/go-whassup/internal/wa"
 )
@@ -21,6 +22,12 @@ type Deps struct {
 	Client wa.Client
 	Store  Store
 	Log    *slog.Logger
+
+	Config     config.Config
+	ConfigPath string
+	// ApplyConfig makes a saved config take effect in the running app
+	// (retention, pairing options). Called off the UI goroutine.
+	ApplyConfig func(context.Context, config.Config) error
 }
 
 // messagesPerChat is how many recent messages the conversation pane loads.

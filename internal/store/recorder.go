@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/wasichu/go-whassup/internal/wa"
@@ -13,9 +14,18 @@ import (
 // synchronously so no message is dropped.
 type Recorder struct {
 	Store     *Store
-	Retention Retention
+	Retention Retention // initial policy; change it later with SetRetention
 	Log       *slog.Logger
 	Now       func() time.Time // for tests; nil means time.Now
+
+	mu sync.Mutex // guards Retention after Attach
+}
+
+// SetRetention changes the policy; it is safe while events are flowing.
+func (r *Recorder) SetRetention(ret Retention) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.Retention = ret
 }
 
 // Attach registers the recorder on client and returns a function that
@@ -46,14 +56,17 @@ func (r *Recorder) Handle(evt wa.Event) {
 
 // Prune applies the retention policy now.
 func (r *Recorder) Prune(ctx context.Context) {
-	if r.Retention == (Retention{}) {
+	r.mu.Lock()
+	ret := r.Retention
+	r.mu.Unlock()
+	if ret == (Retention{}) {
 		return
 	}
 	now := time.Now
 	if r.Now != nil {
 		now = r.Now
 	}
-	n, err := r.Store.Prune(ctx, r.Retention, now())
+	n, err := r.Store.Prune(ctx, ret, now())
 	if err != nil {
 		r.Log.Error("pruning messages", "err", err)
 		return

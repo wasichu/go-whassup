@@ -328,3 +328,15 @@ func TestRecorderStoresSentMessages(t *testing.T) {
 		t.Errorf("stored = %+v", got)
 	}
 }
+
+func TestRecorderSetRetention(t *testing.T) {
+	st := openStore(t, "", nil)
+	rec := &Recorder{Store: st, Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: func() time.Time { return t0 }}
+	mustSave(t, st, msg(ada, "1", t0.Add(-time.Minute), "a"), msg(ada, "2", t0, "b"))
+	rec.Prune(t.Context()) // no policy: nothing deleted
+	rec.SetRetention(Retention{MaxPerChat: 1})
+	rec.Prune(t.Context())
+	if got, err := st.Messages(t.Context(), ada, 0); err != nil || len(got) != 1 || got[0].ID != "2" {
+		t.Errorf("after SetRetention: %v, %v", ids(got), err)
+	}
+}

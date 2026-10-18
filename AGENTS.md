@@ -77,7 +77,7 @@ invocations in docs.
 cmd/wa-tui/          main.go only: signal ctx -> app.Run -> exit code. Keep it ~20 lines.
 internal/app/        composition root: args, paths, logging, wiring. No business logic.
 internal/paths/      XDG locations (ConfigFile, DataDir, SessionDB, MessagesDB, LogFile)
-internal/config/     typed Config: defaults, Load (strict), Validate, Save (atomic)
+internal/config/     typed Config: defaults, Load (strict), Validate, Save (atomic), Fields (generic editing)
 internal/logging/    slog file logger
 internal/wa/         whatsmeow adapter: Client interface, Event types, Subscribe.
                      ONLY package importing whatsmeow.
