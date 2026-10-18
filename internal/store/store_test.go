@@ -612,8 +612,8 @@ func TestEditMessage(t *testing.T) {
 	if m := onlyMessage(t, st, ada, "1"); m.Text != "hello" || !m.Edited {
 		t.Errorf("after edits: %q edited=%v", m.Text, m.Edited)
 	}
-	if found, _ := st.EditMessage(ctx, wa.MessageEdited{Chat: ada, ID: "missing", Text: "x", At: t0}); found {
-		t.Error("edit of an unknown message reported found")
+	if found, err := st.EditMessage(ctx, wa.MessageEdited{Chat: ada, ID: "missing", Text: "x", At: t0}); err != nil || found {
+		t.Errorf("edit of an unknown message = %v, %v; want not found", found, err)
 	}
 }
 
