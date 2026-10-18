@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
@@ -222,6 +223,47 @@ func qrFailureReason(item whatsmeow.QRChannelItem) string {
 	}
 }
 
+func (w *WhatsApp) SendText(ctx context.Context, chat, text string) error {
+	cli := w.client()
+	if cli.Store.ID == nil {
+		return ErrNotPaired
+	}
+	to, err := types.ParseJID(chat)
+	if err != nil {
+		return fmt.Errorf("bad chat %q: %w", chat, err)
+	}
+	resp, err := cli.SendMessage(ctx, to, &waE2E.Message{Conversation: proto.String(text)})
+	if err != nil {
+		return fmt.Errorf("sending message: %w", err)
+	}
+	// whatsmeow doesn't echo messages this device sends; emit it ourselves
+	// so the recorder and UI see it through the normal event path.
+	w.emit(Message{
+		ID:        resp.ID,
+		Chat:      chat,
+		Sender:    cli.Store.ID.ToNonAD().String(),
+		PushName:  cli.Store.PushName,
+		Timestamp: resp.Timestamp,
+		FromMe:    true,
+		IsGroup:   to.Server == types.GroupServer,
+		Kind:      KindText,
+		Text:      text,
+	})
+	return nil
+}
+
+// announceName tells the server our push name so recipients don't see "-"
+// as the sender. It uses "unavailable" so this doesn't mark the user online
+// or switch on active read receipts.
+func (w *WhatsApp) announceName() {
+	err := w.client().SendPresence(context.Background(), types.PresenceUnavailable)
+	if err != nil {
+		// Right after pairing the push name may not have synced yet; the
+		// next connection will succeed.
+		w.log.Debug("announcing push name", "err", err)
+	}
+}
+
 func (w *WhatsApp) Disconnect() { w.client().Disconnect() }
 
 func (w *WhatsApp) Close() error {
@@ -260,6 +302,7 @@ func (w *WhatsApp) resolveKey(jid, alt types.JID) string {
 func (w *WhatsApp) handleEvent(evt any) {
 	switch v := evt.(type) {
 	case *events.Connected:
+		go w.announceName() // not on whatsmeow's event goroutine: it sends a node
 		w.emit(Connected{})
 	case *events.Disconnected:
 		w.emit(Disconnected{})

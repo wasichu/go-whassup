@@ -42,6 +42,13 @@ type Client interface {
 	// ErrNotPaired if there is nothing to log out.
 	Logout(ctx context.Context) (phoneUnlinked bool, err error)
 
+	// SendText sends a text message to chat (a chat key, e.g. from
+	// Message.Chat). Once the server acknowledges it, the sent message is
+	// emitted as a Message event with FromMe set, like any other message:
+	// that event is the only way it reaches the store and the UI. Returns
+	// ErrNotPaired before pairing, and an error while disconnected.
+	SendText(ctx context.Context, chat, text string) error
+
 	// IsPaired reports whether a session exists in the store.
 	IsPaired() bool
 

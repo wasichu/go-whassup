@@ -310,3 +310,21 @@ func TestRecorder(t *testing.T) {
 		t.Errorf("bob messages = %v, %v; want only b1 (handler removed)", ids(b), err)
 	}
 }
+
+func TestRecorderStoresSentMessages(t *testing.T) {
+	st := openStore(t, "", nil)
+	client := &watest.Client{Paired: true}
+	rec := &Recorder{Store: st, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	rec.Attach(client)
+
+	if err := client.SendText(t.Context(), ada, "sent from here"); err != nil {
+		t.Fatalf("SendText: %v", err)
+	}
+	got, err := st.Messages(t.Context(), ada, 0)
+	if err != nil {
+		t.Fatalf("Messages: %v", err)
+	}
+	if len(got) != 1 || !got[0].FromMe || got[0].Text != "sent from here" {
+		t.Errorf("stored = %+v", got)
+	}
+}

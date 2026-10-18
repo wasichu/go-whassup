@@ -132,3 +132,18 @@ func TestLogoutUnpaired(t *testing.T) {
 		t.Errorf("Logout on fresh store = %v, want ErrNotPaired", err)
 	}
 }
+
+func TestSendTextUnpaired(t *testing.T) {
+	w, err := Open(t.Context(), filepath.Join(t.TempDir(), "session.db"), slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := w.Close(); err != nil {
+			t.Errorf("Close: %v", err)
+		}
+	})
+	if err := w.SendText(t.Context(), "15551234567@s.whatsapp.net", "hi"); !errors.Is(err, ErrNotPaired) {
+		t.Errorf("SendText unpaired = %v, want ErrNotPaired", err)
+	}
+}

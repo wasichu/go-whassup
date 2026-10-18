@@ -3,7 +3,10 @@ package watest
 
 import (
 	"context"
+	"fmt"
+	"slices"
 	"sync"
+	"time"
 
 	"github.com/wasichu/go-whassup/internal/wa"
 )
@@ -19,6 +22,9 @@ type Client struct {
 	// Logout outcome: PhoneUnlinked is returned on success; LogoutErr fails it.
 	PhoneUnlinked bool
 	LogoutErr     error
+	// SendErr fails SendText; otherwise sent messages are emitted and recorded.
+	SendErr error
+	Sent    []wa.Message
 	// Events emitted synchronously, in order, from a successful Pair or Connect.
 	PairEvents    []wa.Event
 	ConnectEvents []wa.Event
@@ -75,6 +81,38 @@ func (c *Client) Logout(context.Context) (bool, error) {
 	c.mu.Unlock()
 	c.Paired = false
 	return c.PhoneUnlinked, nil
+}
+
+// SendText emits the sent message like the real client. Timestamps are
+// fixed so tests are deterministic.
+func (c *Client) SendText(_ context.Context, chat, text string) error {
+	if !c.Paired {
+		return wa.ErrNotPaired
+	}
+	if c.SendErr != nil {
+		return c.SendErr
+	}
+	c.mu.Lock()
+	m := wa.Message{
+		ID:        fmt.Sprintf("SENT%d", len(c.Sent)+1),
+		Chat:      chat,
+		Sender:    "me@s.whatsapp.net",
+		Timestamp: time.Date(2026, 1, 1, 0, 0, len(c.Sent), 0, time.UTC),
+		FromMe:    true,
+		Kind:      wa.KindText,
+		Text:      text,
+	}
+	c.Sent = append(c.Sent, m)
+	c.mu.Unlock()
+	c.Emit(m)
+	return nil
+}
+
+// SentMessages returns what SendText sent, safely for concurrent use.
+func (c *Client) SentMessages() []wa.Message {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.Sent)
 }
 
 func (c *Client) IsPaired() bool { return c.Paired }

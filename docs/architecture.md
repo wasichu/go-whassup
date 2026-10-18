@@ -70,6 +70,13 @@ There are two kinds of consumers:
 - **Skipped:** protocol messages (revokes, edits, key distribution), status updates
   (`status@broadcast`, i.e. stories), and the `INITIAL_STATUS_V3` history blob.
   **Edits and deletes are not applied yet.**
+- **Sent messages.** whatsmeow doesn't echo messages this device sends. After the
+  server acknowledges one, `SendText` emits it as a normal `wa.Message` with
+  `FromMe` set, so the recorder and UI see it through the same path as everything
+  else. `SendText` returns only an error; there is no second path.
+- **Push name.** On each `Connected`, we send presence **`unavailable`** once. This
+  registers our display name, so recipients don't see "-" as the sender. "Available"
+  would also mark the user online and switch on active read receipts, which we avoid.
 - **History sync** arrives as `wa.HistorySync{Chats, Messages, PushNames}`, parsed with
   whatsmeow's `ParseWebMessage`. Empty batches aren't emitted. App-state sync,
   receipts and presence are still only logged at debug level.
