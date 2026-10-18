@@ -60,8 +60,6 @@ linters:
         linters: [funlen, gocognit]
       # Known offenders, being refactored (code-quality pass, 2026-10-18).
       # Each refactor commit deletes the entries it fixes; don't add new ones.
-      - {path: internal/app/encryption\.go, linters: [gocognit], text: "func `setUpEncryption`"}
-      - {path: internal/app/encryption\.go, linters: [nestif], text: "source == config.KeySourceKeyring"}
       - {path: internal/ui/cmds\.go, linters: [gocognit], text: "loadMessages"}
       - {path: internal/ui/conversation\.go, linters: [gocognit], text: "renderMessages"}
       - {path: internal/ui/info\.go, linters: [gocognit, nestif], text: "infoView|d.IsGroup"}

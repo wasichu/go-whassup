@@ -82,19 +82,11 @@ func setUpEncryption(ctx context.Context, cfg config.Config, p paths.Paths, st *
 		}
 	}
 
-	// 2. Turning it on: no plaintext media may remain next to encrypted
-	// messages, then create and store the key (AddKey also empties the
-	// search index), then switch writes to it.
+	// 2. Turning it on.
 	if key == nil && want && transitions {
-		if err := os.RemoveAll(p.MediaDir); err != nil {
-			return encryption{}, fmt.Errorf("removing unencrypted media cache: %w", err)
-		}
-		codec, err := createKey(ctx, cfg.Encryption.KeySource, st, ks)
-		if err != nil {
+		if err := enable(ctx, cfg.Encryption.KeySource, p, st, ks, log); err != nil {
 			return encryption{}, err
 		}
-		st.Unlock(codec, true)
-		log.Info("encryption enabled", "key", codec.ID())
 	}
 
 	// "On" as long as any key exists: while decrypting, sealed values remain.
@@ -105,15 +97,37 @@ func setUpEncryption(ctx context.Context, cfg config.Config, p paths.Paths, st *
 	if e.pending, err = st.Pending(ctx); err != nil {
 		return encryption{}, err
 	}
+	e.finish = finishStep(st, want, key, e.pending)
+	return e, nil
+}
+
+// enable turns encryption on: no plaintext media may remain next to
+// encrypted messages, then the key is created and stored (AddKey also
+// empties the search index), then writes switch to it.
+func enable(ctx context.Context, source string, p paths.Paths, st *store.Store, ks keySources, log *slog.Logger) error {
+	if err := os.RemoveAll(p.MediaDir); err != nil {
+		return fmt.Errorf("removing unencrypted media cache: %w", err)
+	}
+	codec, err := createKey(ctx, source, st, ks)
+	if err != nil {
+		return err
+	}
+	st.Unlock(codec, true)
+	log.Info("encryption enabled", "key", codec.ID())
+	return nil
+}
+
+// finishStep is what to run once the background re-seal is done, if any.
+func finishStep(st *store.Store, want bool, key *store.StoredKey, pending int) func(context.Context) error {
 	switch {
-	case want && (key == nil || e.pending > 0 || !key.Finished):
+	case want && (key == nil || pending > 0 || !key.Finished):
 		// Also when every value is sealed but the final compaction never
 		// completed (a crash right after the last batch).
-		e.finish = st.FinishEncrypting
+		return st.FinishEncrypting
 	case !want && key != nil:
-		e.finish = st.FinishDecrypting
+		return st.FinishDecrypting
 	}
-	return e, nil
+	return nil
 }
 
 func unlock(ctx context.Context, key *store.StoredKey, ks keySources) (*store.KeyCodec, error) {
@@ -155,25 +169,12 @@ func createKey(ctx context.Context, source string, st *store.Store, ks keySource
 	stored := store.StoredKey{Alg: alg, Source: source}
 	var kek []byte
 	if source == config.KeySourceKeyring {
-		if kek, err = crypt.NewKey(); err != nil {
-			return nil, err
-		}
-		if err := ks.keyring.Put(ctx, kek); err != nil {
-			return nil, err
-		}
+		kek, err = newKeyringKEK(ctx, ks)
 	} else {
-		pass, err := ks.passphrase(ctx, source, true)
-		if err != nil {
-			return nil, err
-		}
-		if stored.Salt, err = crypt.NewSalt(); err != nil {
-			return nil, err
-		}
-		params := crypt.DefaultKDF
-		stored.KDF = &params
-		if kek, err = crypt.DeriveKEK(pass, stored.Salt, params); err != nil {
-			return nil, err
-		}
+		kek, err = newPassphraseKEK(ctx, source, ks, &stored)
+	}
+	if err != nil {
+		return nil, err
 	}
 	if stored.Wrapped, err = crypt.Wrap(kek, dek); err != nil {
 		return nil, err
@@ -183,6 +184,31 @@ func createKey(ctx context.Context, source string, st *store.Store, ks keySource
 		return nil, err
 	}
 	return store.NewKeyCodec(id, dek)
+}
+
+// newKeyringKEK makes a random key-encryption key and stores it in the
+// keyring (no derivation: it's already random).
+func newKeyringKEK(ctx context.Context, ks keySources) ([]byte, error) {
+	kek, err := crypt.NewKey()
+	if err != nil {
+		return nil, err
+	}
+	return kek, ks.keyring.Put(ctx, kek)
+}
+
+// newPassphraseKEK asks for a new passphrase (twice) and derives the
+// key-encryption key, recording the salt and parameters on stored.
+func newPassphraseKEK(ctx context.Context, source string, ks keySources, stored *store.StoredKey) ([]byte, error) {
+	pass, err := ks.passphrase(ctx, source, true)
+	if err != nil {
+		return nil, err
+	}
+	if stored.Salt, err = crypt.NewSalt(); err != nil {
+		return nil, err
+	}
+	params := crypt.DefaultKDF
+	stored.KDF = &params
+	return crypt.DeriveKEK(pass, stored.Salt, params)
 }
 
 // resealBatch is how many messages each background transaction re-seals.
