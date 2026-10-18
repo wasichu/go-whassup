@@ -10,6 +10,8 @@ import (
 
 // Client is a scriptable wa.Client. Configure the exported fields before use.
 type Client struct {
+	wa.Handlers // AddEventHandler and Emit
+
 	Paired     bool
 	PairCode   string
 	PairErr    error
@@ -19,29 +21,12 @@ type Client struct {
 	ConnectEvents []wa.Event
 
 	mu        sync.Mutex
-	handler   func(wa.Event)
 	pairPhone string
 	connected bool
 	closed    bool
 }
 
 var _ wa.Client = (*Client)(nil)
-
-func (c *Client) SetEventHandler(h func(wa.Event)) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.handler = h
-}
-
-// Emit delivers evt to the registered handler, as the protocol goroutines would.
-func (c *Client) Emit(evt wa.Event) {
-	c.mu.Lock()
-	h := c.handler
-	c.mu.Unlock()
-	if h != nil {
-		h(evt)
-	}
-}
 
 func (c *Client) Pair(_ context.Context, phone string) (string, error) {
 	if c.Paired {

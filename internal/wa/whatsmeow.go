@@ -8,11 +8,11 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
-	"sync/atomic"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
+	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	_ "modernc.org/sqlite" // registers the pure-Go "sqlite" driver
 )
@@ -27,10 +27,11 @@ const (
 
 // WhatsApp implements Client on top of whatsmeow.
 type WhatsApp struct {
-	cli     *whatsmeow.Client
-	db      *sql.DB
-	log     *slog.Logger
-	handler atomic.Pointer[func(Event)]
+	Handlers // provides AddEventHandler
+
+	cli *whatsmeow.Client
+	db  *sql.DB
+	log *slog.Logger
 }
 
 var _ Client = (*WhatsApp)(nil)
@@ -91,8 +92,6 @@ func createPrivate(path string) error {
 	}
 	return nil
 }
-
-func (w *WhatsApp) SetEventHandler(h func(Event)) { w.handler.Store(&h) }
 
 func (w *WhatsApp) IsPaired() bool { return w.cli.Store.ID != nil }
 
@@ -185,10 +184,27 @@ func (w *WhatsApp) Close() error {
 	return nil
 }
 
-func (w *WhatsApp) emit(e Event) {
-	if h := w.handler.Load(); h != nil {
-		(*h)(e)
+func (w *WhatsApp) emit(e Event) { w.Emit(e) }
+
+// resolveKey implements keyResolver using the message's alternate address
+// first, then whatsmeow's LID->phone-number mapping store.
+func (w *WhatsApp) resolveKey(jid, alt types.JID) string {
+	jid = jid.ToNonAD()
+	if jid.Server != types.HiddenUserServer {
+		return jid.String()
 	}
+	if alt.Server == types.DefaultUserServer {
+		return alt.ToNonAD().String()
+	}
+	// Local DB lookup on whatsmeow's event goroutine; no request context exists here.
+	pn, err := w.cli.Store.LIDs.GetPNForLID(context.Background(), jid)
+	if err != nil {
+		w.log.Debug("LID lookup failed", "lid", jid, "err", err)
+	}
+	if !pn.IsEmpty() {
+		return pn.ToNonAD().String()
+	}
+	return jid.String()
 }
 
 // handleEvent runs on whatsmeow's goroutines. It translates protocol events
@@ -210,23 +226,18 @@ func (w *WhatsApp) handleEvent(evt any) {
 	case *events.PairSuccess:
 		w.emit(PairSuccess{JID: v.ID.ToNonAD().String()})
 	case *events.Message:
-		text, ok := messageText(v.Message)
-		if !ok {
-			return
+		if msg, ok := messageFromEvent(v, w.resolveKey); ok {
+			w.emit(msg)
 		}
-		w.emit(Message{
-			ID:        v.Info.ID,
-			Chat:      v.Info.Chat.ToNonAD().String(),
-			Sender:    v.Info.Sender.ToNonAD().String(),
-			PushName:  v.Info.PushName,
-			Timestamp: v.Info.Timestamp,
-			FromMe:    v.Info.IsFromMe,
-			IsGroup:   v.Info.IsGroup,
-			Text:      text,
-		})
+	case *events.HistorySync:
+		if h, ok := historyFromProto(v.Data, w.cli.ParseWebMessage, w.resolveKey, w.log); ok {
+			w.log.Info("history sync", "type", v.Data.GetSyncType().String(),
+				"chats", len(h.Chats), "messages", len(h.Messages), "push_names", len(h.PushNames))
+			w.emit(h)
+		}
 	default:
-		// History sync, app-state sync, receipts, presence etc. Handled in
-		// later steps; a fresh pairing produces a flood of these.
+		// App-state sync, receipts, presence etc. Handled in later steps; a
+		// fresh pairing produces a flood of these.
 		w.log.Debug("unhandled event", "type", fmt.Sprintf("%T", evt))
 	}
 }

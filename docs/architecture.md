@@ -30,25 +30,47 @@ cmd/wa-tui (main: signals + exit code only)
 ## Event flow and goroutines
 
 whatsmeow calls its event handler on its own goroutines. `WhatsApp.handleEvent`
-translates each event into a `wa.Event` and passes it to the handler set with
-`SetEventHandler`.
+translates each event (`internal/wa/translate.go`) into a `wa.Event` and emits it
+to every handler registered with `AddEventHandler`.
+- Handlers run in registration order on that goroutine.
+- `AddEventHandler` returns a `remove` func.
+- `wa.Handlers` is the shared implementation, embedded by both the real client and
+  `watest.Client`.
 
-**Consumers use `wa.Subscribe`.** It registers a handler that pushes events onto a
-buffered channel, `Subscription.C`, which a single goroutine then consumes:
+There are two kinds of consumers:
 
-- **headless:** `Console.Follow` loops over `sub.C` and prints.
-- **TUI:** a `tea.Cmd` receives the next event from `sub.C` and returns it as a
-  `tea.Msg`. `Update()` handles it and re-issues the command. This is the standard
-  Bubble Tea pattern for waiting on activity, and state changes only in `Update()`.
+- **Must not lose events** (the message store, step 2): register a handler directly
+  and do the work synchronously. This deliberately slows whatsmeow down instead of
+  dropping data.
+- **Display** (headless output, TUI): use `wa.Subscribe`. It pushes events onto a
+  buffered channel, `Subscription.C`, which a single goroutine then consumes.
+  `Subscription.Close` removes the handler.
+  - **headless:** `Console.Follow` loops over `sub.C` and prints.
+  - **TUI:** a `tea.Cmd` receives the next event from `sub.C` and returns it as a
+    `tea.Msg`. `Update()` handles it and re-issues the command. State changes only in
+    `Update()`.
 
-`Subscribe` never blocks the protocol goroutines. If the buffer is full, events are
-**dropped and counted** (`Subscription.Dropped()`), and consumers surface the
-count. That's fine for display. **Anything that must not lose data (the message
-store in step 2) must not consume a lossy subscription.** It needs its own handler
-that writes synchronously or blocks deliberately.
+  `Subscribe` never blocks. If its buffer is full, events are **dropped and counted**
+  (`Subscription.Dropped()`), and consumers surface the count.
 
-Events we don't handle yet (history sync, app-state sync, receipts, presence) are
-logged at debug level. A fresh pairing produces a flood of them.
+## Translation rules (`internal/wa/translate.go`)
+
+- **Stable keys.** Chat and sender keys are JIDs without the device suffix.
+  - WhatsApp addresses some users by a privacy ID (`…@lid`). Keys prefer the
+    phone-number form so one person maps to one chat. The order of preference is:
+    1. the message's own alternate address (`SenderAlt`/`RecipientAlt`, or the
+       conversation's `PnJID` in history);
+    2. whatsmeow's LID→phone-number store.
+  - An unresolvable LID is kept as the key. Messages are never dropped for this.
+- **Kinds.** `Message.Kind` is `text`, `image`, `video`, `document`, `reaction`, or a
+  name derived from the protobuf field (e.g. `sticker`). `Message.Text` is the body or
+  caption only. `Summary()` renders `[kind] text` for display.
+- **Skipped:** protocol messages (revokes, edits, key distribution), status updates
+  (`status@broadcast`, i.e. stories), and the `INITIAL_STATUS_V3` history blob.
+  **Edits and deletes are not applied yet.**
+- **History sync** arrives as `wa.HistorySync{Chats, Messages, PushNames}`, parsed with
+  whatsmeow's `ParseWebMessage`. Empty batches aren't emitted. App-state sync,
+  receipts and presence are still only logged at debug level.
 
 ## Terminal ownership
 

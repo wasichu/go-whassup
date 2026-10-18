@@ -122,12 +122,13 @@ func TestListenNotPaired(t *testing.T) {
 func TestListenPrintsEvents(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	out := &cancelWriter{marker: "hello there", cancel: cancel}
+	out := &cancelWriter{marker: "history sync", cancel: cancel}
 	client := &watest.Client{
 		Paired: true,
 		ConnectEvents: []wa.Event{
 			wa.Connected{},
-			wa.Message{Chat: "1@s.whatsapp.net", PushName: "Ada", Text: "hello there", Timestamp: time.Now()},
+			wa.Message{Chat: "1@s.whatsapp.net", PushName: "Ada", Kind: wa.KindText, Text: "hello there", Timestamp: time.Now()},
+			wa.HistorySync{Chats: []wa.Chat{{JID: "1@s.whatsapp.net"}}, Messages: make([]wa.Message, 3)},
 		},
 	}
 
@@ -137,7 +138,7 @@ func TestListenPrintsEvents(t *testing.T) {
 	if !client.Connected() {
 		t.Error("client was not connected")
 	}
-	for _, want := range []string{"-- wa.Connected", "Ada: hello there"} {
+	for _, want := range []string{"-- wa.Connected", "Ada: hello there", "history sync: 1 chats, 3 messages"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output missing %q:\n%s", want, out.String())
 		}

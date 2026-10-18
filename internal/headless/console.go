@@ -127,7 +127,9 @@ func (c Console) printEvent(evt wa.Event) {
 	case wa.Message:
 		c.Log.Info("message", "id", v.ID, "chat", v.Chat, "sender", v.Sender, "from_me", v.FromMe, "group", v.IsGroup)
 		c.Log.Debug("message text", "id", v.ID, "push_name", v.PushName, "text", v.Text)
-		c.printf("%s  %s  %s: %s\n", v.Timestamp.Local().Format("15:04:05"), v.Chat, senderLabel(v), v.Text)
+		c.printf("%s  %s  %s: %s\n", v.Timestamp.Local().Format("15:04:05"), v.Chat, senderLabel(v), v.Summary())
+	case wa.HistorySync:
+		c.printf("-- history sync: %d chats, %d messages\n", len(v.Chats), len(v.Messages))
 	case wa.LoggedOut:
 		c.Log.Warn("logged out", "reason", v.Reason)
 		c.printf("Logged out (%s). Run `wa-tui login` to pair again.\n", v.Reason)

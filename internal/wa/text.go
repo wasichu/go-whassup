@@ -34,41 +34,45 @@ func NormalizePhone(phone string) (string, error) {
 	return digits, nil
 }
 
-// messageText renders a message body for display. ok is false for messages
-// that carry no user-visible content (protocol messages such as revokes and
-// key distribution).
-func messageText(msg *waE2E.Message) (text string, ok bool) {
+// Message kinds with special handling. Other kinds are derived from the
+// protobuf field name (see firstSetField), e.g. "sticker" or "poll creation".
+const (
+	KindText     = "text"
+	KindImage    = "image"
+	KindVideo    = "video"
+	KindDocument = "document"
+	KindReaction = "reaction"
+)
+
+// messageContent extracts a message's kind and text (body, caption, file
+// name or reaction emoji). ok is false for messages that carry no
+// user-visible content (protocol messages such as revokes and key
+// distribution).
+func messageContent(msg *waE2E.Message) (kind, text string, ok bool) {
 	if msg == nil {
-		return "", false
+		return "", "", false
 	}
 	switch {
 	case msg.Conversation != nil:
-		return msg.GetConversation(), true
+		return KindText, msg.GetConversation(), true
 	case msg.ExtendedTextMessage != nil:
-		return msg.GetExtendedTextMessage().GetText(), true
+		return KindText, msg.GetExtendedTextMessage().GetText(), true
 	case msg.ImageMessage != nil:
-		return withCaption("[image]", msg.GetImageMessage().GetCaption()), true
+		return KindImage, msg.GetImageMessage().GetCaption(), true
 	case msg.VideoMessage != nil:
-		return withCaption("[video]", msg.GetVideoMessage().GetCaption()), true
+		return KindVideo, msg.GetVideoMessage().GetCaption(), true
 	case msg.DocumentMessage != nil:
 		doc := msg.GetDocumentMessage()
-		return withCaption("[document] "+doc.GetFileName(), doc.GetCaption()), true
+		return KindDocument, strings.TrimSpace(doc.GetFileName() + " " + doc.GetCaption()), true
 	case msg.ReactionMessage != nil:
-		return "[reaction] " + msg.GetReactionMessage().GetText(), true
+		return KindReaction, msg.GetReactionMessage().GetText(), true
 	case msg.ProtocolMessage != nil, msg.SenderKeyDistributionMessage != nil:
-		return "", false
+		return "", "", false
 	}
 	if kind := firstSetField(msg); kind != "" {
-		return "[" + kind + "]", true
+		return kind, "", true
 	}
-	return "", false
-}
-
-func withCaption(label, caption string) string {
-	if caption == "" {
-		return label
-	}
-	return label + " " + caption
+	return "", "", false
 }
 
 // firstSetField names the populated field of msg in a readable form, e.g.

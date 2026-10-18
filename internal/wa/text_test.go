@@ -37,31 +37,49 @@ func TestNormalizePhone(t *testing.T) {
 	}
 }
 
-func TestMessageText(t *testing.T) {
+func TestMessageContent(t *testing.T) {
 	tests := []struct {
-		name   string
-		msg    *waE2E.Message
-		want   string
-		wantOK bool
+		name     string
+		msg      *waE2E.Message
+		wantKind string
+		wantText string
+		wantOK   bool
 	}{
-		{"nil", nil, "", false},
-		{"conversation", &waE2E.Message{Conversation: proto.String("hi")}, "hi", true},
-		{"extended", &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String("link https://x")}}, "link https://x", true},
-		{"image no caption", &waE2E.Message{ImageMessage: &waE2E.ImageMessage{}}, "[image]", true},
-		{"image caption", &waE2E.Message{ImageMessage: &waE2E.ImageMessage{Caption: proto.String("cat")}}, "[image] cat", true},
-		{"document", &waE2E.Message{DocumentMessage: &waE2E.DocumentMessage{FileName: proto.String("a.pdf")}}, "[document] a.pdf", true},
-		{"reaction", &waE2E.Message{ReactionMessage: &waE2E.ReactionMessage{Text: proto.String("👍")}}, "[reaction] 👍", true},
-		{"protocol", &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{}}, "", false},
-		{"sticker via reflection", &waE2E.Message{StickerMessage: &waE2E.StickerMessage{}}, "[sticker]", true},
-		{"poll v3 via reflection", &waE2E.Message{PollCreationMessageV3: &waE2E.PollCreationMessage{}}, "[poll creation]", true},
-		{"empty", &waE2E.Message{}, "", false},
+		{"nil", nil, "", "", false},
+		{"conversation", &waE2E.Message{Conversation: proto.String("hi")}, KindText, "hi", true},
+		{"extended", &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String("link https://x")}}, KindText, "link https://x", true},
+		{"image no caption", &waE2E.Message{ImageMessage: &waE2E.ImageMessage{}}, KindImage, "", true},
+		{"image caption", &waE2E.Message{ImageMessage: &waE2E.ImageMessage{Caption: proto.String("cat")}}, KindImage, "cat", true},
+		{"document", &waE2E.Message{DocumentMessage: &waE2E.DocumentMessage{FileName: proto.String("a.pdf")}}, KindDocument, "a.pdf", true},
+		{"reaction", &waE2E.Message{ReactionMessage: &waE2E.ReactionMessage{Text: proto.String("👍")}}, KindReaction, "👍", true},
+		{"protocol", &waE2E.Message{ProtocolMessage: &waE2E.ProtocolMessage{}}, "", "", false},
+		{"sticker via reflection", &waE2E.Message{StickerMessage: &waE2E.StickerMessage{}}, "sticker", "", true},
+		{"poll v3 via reflection", &waE2E.Message{PollCreationMessageV3: &waE2E.PollCreationMessage{}}, "poll creation", "", true},
+		{"empty", &waE2E.Message{}, "", "", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, ok := messageText(tt.msg)
-			if got != tt.want || ok != tt.wantOK {
-				t.Errorf("messageText() = %q, %v; want %q, %v", got, ok, tt.want, tt.wantOK)
+			kind, text, ok := messageContent(tt.msg)
+			if kind != tt.wantKind || text != tt.wantText || ok != tt.wantOK {
+				t.Errorf("messageContent() = %q, %q, %v; want %q, %q, %v", kind, text, ok, tt.wantKind, tt.wantText, tt.wantOK)
 			}
 		})
+	}
+}
+
+func TestMessageSummary(t *testing.T) {
+	tests := []struct {
+		msg  Message
+		want string
+	}{
+		{Message{Kind: KindText, Text: "hi"}, "hi"},
+		{Message{Kind: KindImage}, "[image]"},
+		{Message{Kind: KindImage, Text: "cat"}, "[image] cat"},
+		{Message{Kind: KindReaction, Text: "👍"}, "[reaction] 👍"},
+	}
+	for _, tt := range tests {
+		if got := tt.msg.Summary(); got != tt.want {
+			t.Errorf("%+v.Summary() = %q, want %q", tt.msg, got, tt.want)
+		}
 	}
 }

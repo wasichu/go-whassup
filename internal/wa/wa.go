@@ -16,11 +16,11 @@ var ErrAlreadyPaired = errors.New("device is already paired")
 // Client is the protocol surface the rest of the app depends on. The UI and
 // cmd packages use this interface so they can be exercised with a fake.
 type Client interface {
-	// SetEventHandler registers the function that receives every Event. It is
-	// called from background goroutines, so implementations that touch UI
-	// state must forward events (e.g. via tea.Program.Send). Set it before
-	// calling Pair or Connect.
-	SetEventHandler(func(Event))
+	// AddEventHandler registers fn to receive every Event and returns a
+	// function that removes it. Handlers run in registration order on
+	// background goroutines: they must not touch UI state (use Subscribe) and
+	// a slow handler delays the rest. Register before calling Pair or Connect.
+	AddEventHandler(fn func(Event)) (remove func())
 
 	// Pair links this device using a phone-number pairing code. It connects,
 	// requests a code for phone (international format, digits only after
@@ -45,7 +45,7 @@ type Client interface {
 	Close() error
 }
 
-// Event is any value delivered to the handler registered with SetEventHandler.
+// Event is any value delivered to handlers registered with AddEventHandler.
 type Event interface{ isEvent() }
 
 // Connected is emitted once the client is authenticated and online.
@@ -66,17 +66,44 @@ type PairSuccess struct{ JID string }
 // PairFailed is emitted when pairing times out or is rejected.
 type PairFailed struct{ Reason string }
 
-// Message is a chat message received live or echoed from another of the
-// user's devices.
+// Message is a chat message received live, echoed from another of the
+// user's devices, or delivered by history sync.
 type Message struct {
 	ID        string
-	Chat      string // stable chat key: JID without device suffix
-	Sender    string // JID without device suffix
+	Chat      string // stable chat key, see ChatKey
+	Sender    string // stable user key, see ChatKey
 	PushName  string
 	Timestamp time.Time
 	FromMe    bool
 	IsGroup   bool
-	Text      string // body, or a "[kind]" placeholder for non-text messages
+	Kind      string // "text", "image", "reaction", ... see messageKind
+	Text      string // body or caption; may be empty for media
+}
+
+// Summary renders the message for one-line display, e.g. "[image] caption".
+func (m Message) Summary() string {
+	if m.Kind == KindText {
+		return m.Text
+	}
+	if m.Text == "" {
+		return "[" + m.Kind + "]"
+	}
+	return "[" + m.Kind + "] " + m.Text
+}
+
+// Chat describes a conversation, as delivered by history sync.
+type Chat struct {
+	JID     string // stable chat key
+	Name    string // group subject or contact name; may be empty
+	IsGroup bool
+}
+
+// HistorySync is a batch of past conversations pushed by the phone after
+// linking (and occasionally later). Messages within a batch are not ordered.
+type HistorySync struct {
+	Chats     []Chat
+	Messages  []Message
+	PushNames map[string]string // user key -> push name
 }
 
 func (Connected) isEvent()    {}
@@ -85,3 +112,4 @@ func (LoggedOut) isEvent()    {}
 func (PairSuccess) isEvent()  {}
 func (PairFailed) isEvent()   {}
 func (Message) isEvent()      {}
+func (HistorySync) isEvent()  {}

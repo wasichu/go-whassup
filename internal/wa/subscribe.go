@@ -17,14 +17,15 @@ import (
 type Subscription struct {
 	C       <-chan Event
 	dropped atomic.Uint64
+	remove  func()
 }
 
-// Subscribe registers a handler on client that feeds a new Subscription
-// with a buffer of size events. It replaces any previously set handler.
+// Subscribe adds a handler to client that feeds a new Subscription with a
+// buffer of size events. Call Close to remove the handler.
 func Subscribe(client Client, size int, log *slog.Logger) *Subscription {
 	ch := make(chan Event, size)
 	s := &Subscription{C: ch}
-	client.SetEventHandler(func(evt Event) {
+	s.remove = client.AddEventHandler(func(evt Event) {
 		select {
 		case ch <- evt:
 		default:
@@ -37,3 +38,7 @@ func Subscribe(client Client, size int, log *slog.Logger) *Subscription {
 
 // Dropped returns how many events have been discarded so far.
 func (s *Subscription) Dropped() uint64 { return s.dropped.Load() }
+
+// Close stops delivery to the subscription. C is not closed, so a pending
+// receive simply never completes; select on a context alongside it.
+func (s *Subscription) Close() { s.remove() }

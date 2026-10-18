@@ -21,7 +21,7 @@ func newTestWhatsApp(t *testing.T) (*WhatsApp, *[]Event) {
 	t.Helper()
 	w := &WhatsApp{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	var got []Event
-	w.SetEventHandler(func(e Event) { got = append(got, e) })
+	w.AddEventHandler(func(e Event) { got = append(got, e) })
 	return w, &got
 }
 
@@ -49,6 +49,7 @@ func TestHandleEventMessage(t *testing.T) {
 		Sender:    "15551234567@s.whatsapp.net",
 		PushName:  "Ada",
 		Timestamp: ts,
+		Kind:      KindText,
 		Text:      "hello",
 	}
 	if len(*got) != 1 || (*got)[0] != want {
@@ -69,7 +70,7 @@ func TestHandleEventConnectionLifecycle(t *testing.T) {
 	w.handleEvent(&events.PairSuccess{ID: types.NewADJID("15551234567", 0, 12)})
 	w.handleEvent(&events.Connected{})
 	w.handleEvent(&events.Disconnected{})
-	w.handleEvent(&events.HistorySync{}) // ignored for now
+	w.handleEvent(&events.HistorySync{}) // empty history is not emitted
 
 	want := []Event{
 		PairSuccess{JID: "15551234567@s.whatsapp.net"},
