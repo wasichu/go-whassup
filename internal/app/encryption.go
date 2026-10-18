@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
-	"sync"
 
 	"github.com/wasichu/go-whassup/internal/config"
 	"github.com/wasichu/go-whassup/internal/crypt"
@@ -54,67 +52,11 @@ func realKeySources(cfg config.Config, p paths.Paths, stdio IO) keySources {
 // how to recover.
 var ErrLocked = errors.New("can't unlock stored messages")
 
-// encryption is the outcome of setUpEncryption.
+// encryption is the outcome of encryptor.Start.
 type encryption struct {
 	on      bool // messages are (being) encrypted: no message text in logs, temp media
 	pending int  // values still to re-seal in the background
 	finish  func(context.Context) error
-}
-
-// setUpEncryption unlocks the stored key and starts any transition the
-// config asks for. transitions=false (db commands) only unlocks.
-func setUpEncryption(ctx context.Context, cfg config.Config, p paths.Paths, st *store.Store, ks keySources, transitions bool, log *slog.Logger) (encryption, error) {
-	key, err := st.Key(ctx)
-	if err != nil {
-		return encryption{}, err
-	}
-	want := cfg.Encryption.Enabled
-
-	// 1. A key exists: unlock it from the source it was created with.
-	if key != nil {
-		codec, err := unlock(ctx, key, ks)
-		if err != nil {
-			return encryption{}, err
-		}
-		st.Unlock(codec, want || !transitions)
-		if transitions && !want {
-			st.WritePlaintext() // turning it off: decrypt in the background
-		}
-	}
-
-	// 2. Turning it on.
-	if key == nil && want && transitions {
-		if err := enable(ctx, cfg.Encryption.KeySource, p, st, ks, log); err != nil {
-			return encryption{}, err
-		}
-	}
-
-	// "On" as long as any key exists: while decrypting, sealed values remain.
-	e := encryption{on: want || key != nil}
-	if !transitions {
-		return e, nil
-	}
-	if e.pending, err = st.Pending(ctx); err != nil {
-		return encryption{}, err
-	}
-	e.finish = finishStep(st, want, key, e.pending)
-	return e, nil
-}
-
-// enable turns encryption on: no plaintext media may remain next to
-// encrypted messages, then the key is created and stored (AddKey also
-// empties the search index), then writes switch to it.
-func enable(ctx context.Context, source string, p paths.Paths, st *store.Store, ks keySources, log *slog.Logger) error {
-	if err := os.RemoveAll(p.MediaDir); err != nil {
-		return fmt.Errorf("removing unencrypted media cache: %w", err)
-	}
-	codec, err := createKey(ctx, source, st, ks)
-	if err != nil {
-		return err
-	}
-	st.Unlock(codec, true)
-	log.Info("encryption enabled", "key", codec.ID())
-	return nil
 }
 
 // finishStep is what to run once the background re-seal is done, if any.
@@ -213,43 +155,6 @@ func newPassphraseKEK(ctx context.Context, source string, ks keySources, stored 
 
 // resealBatch is how many messages each background transaction re-seals.
 const resealBatch = 500
-
-// startReseal re-seals in the background until done (then runs finish) or
-// ctx ends. It stops on the first error rather than retrying: a value that
-// can't be opened would fail forever. Wait for it before closing the store.
-func startReseal(ctx context.Context, st *store.Store, e encryption, log *slog.Logger) (wait func()) {
-	if e.finish == nil {
-		return func() {}
-	}
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		total := 0
-		for ctx.Err() == nil {
-			n, err := st.ResealBatch(ctx, resealBatch)
-			if err != nil {
-				log.Error("re-sealing stopped; it resumes next start", "done", total, "err", err)
-				return
-			}
-			if n == 0 {
-				break
-			}
-			total += n
-			log.Info("re-sealing", "done", total, "of", e.pending)
-		}
-		if ctx.Err() != nil {
-			log.Info("re-sealing paused; it resumes next start", "done", total)
-			return
-		}
-		if err := e.finish(ctx); err != nil {
-			log.Error("finishing encryption change", "err", err)
-			return
-		}
-		log.Info("encryption change complete", "values", total)
-	}()
-	return wg.Wait
-}
 
 // resetMessages is `go-whassup db reset`: after an explicit confirmation it
 // deletes messages.db (and its journal files) and the media cache. The

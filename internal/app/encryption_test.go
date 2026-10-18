@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -71,12 +72,28 @@ func cfgWith(enabled bool, source string) config.Config {
 	return c
 }
 
-// run sets up encryption and lets the background re-seal finish.
+// crypto returns an encryptor for st, closed when the test ends (before
+// the store: cleanups run in reverse).
+func (f *encFixture) crypto(st *store.Store, ks keySources) *encryptor {
+	f.t.Helper()
+	c := newEncryptor(f.t.Context(), st, f.p, ks, f.log)
+	f.t.Cleanup(func() {
+		if err := c.Close(); err != nil {
+			f.t.Errorf("Close: %v", err)
+		}
+	})
+	return c
+}
+
+// run starts encryption as the app does and lets the re-seal finish.
 func (f *encFixture) run(st *store.Store, cfg config.Config, ks keySources, transitions bool) (encryption, error) {
 	f.t.Helper()
-	e, err := setUpEncryption(f.t.Context(), cfg, f.p, st, ks, transitions, f.log)
-	if err == nil {
-		startReseal(f.t.Context(), st, e, f.log)()
+	c := f.crypto(st, ks)
+	e, err := c.Start(f.t.Context(), cfg, transitions)
+	if done := c.Running(); err == nil && done != nil {
+		if derr := <-done; derr != nil {
+			f.t.Fatalf("re-seal: %v", derr)
+		}
 	}
 	return e, err
 }
@@ -221,7 +238,7 @@ func TestCrashBeforeFinishIsCompletedNextStart(t *testing.T) {
 	f := newEncFixture(t)
 	kr := &fakeKeyring{}
 	st := f.open()
-	if _, err := setUpEncryption(t.Context(), cfgWith(true, config.KeySourceKeyring), f.p, st, fakeSources(kr, ""), true, f.log); err != nil {
+	if _, err := f.crypto(st, fakeSources(kr, "")).setUp(t.Context(), cfgWith(true, config.KeySourceKeyring), true); err != nil {
 		t.Fatal(err)
 	}
 	// Re-seal everything, then "crash" before FinishEncrypting.
@@ -235,17 +252,171 @@ func TestCrashBeforeFinishIsCompletedNextStart(t *testing.T) {
 		}
 	}
 	again := f.open()
-	e, err := setUpEncryption(t.Context(), cfgWith(true, config.KeySourceKeyring), f.p, again, fakeSources(kr, ""), true, f.log)
+	c := f.crypto(again, fakeSources(kr, ""))
+	e, err := c.setUp(t.Context(), cfgWith(true, config.KeySourceKeyring), true)
 	if err != nil || e.pending != 0 || e.finish == nil {
 		t.Fatalf("restart after a crash before finishing = %+v, %v; want the finish step to run", e, err)
 	}
-	startReseal(t.Context(), again, e, f.log)()
+	if err := c.reseal(t.Context(), e.finish, e.pending); err != nil {
+		t.Fatal(err)
+	}
 	k, err := again.Key(t.Context())
 	if err != nil || !k.Finished {
 		t.Errorf("key = %+v, %v; want Finished", k, err)
 	}
-	e, err = setUpEncryption(t.Context(), cfgWith(true, config.KeySourceKeyring), f.p, f.open(), fakeSources(kr, ""), true, f.log)
+	e, err = f.crypto(f.open(), fakeSources(kr, "")).setUp(t.Context(), cfgWith(true, config.KeySourceKeyring), true)
 	if err != nil || e.finish != nil {
 		t.Errorf("once finished, nothing more to do: %+v, %v", e, err)
+	}
+}
+
+// wait returns a done channel's outcome, failing the test if it takes long.
+func wait(t *testing.T, done <-chan error) error {
+	t.Helper()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(10 * time.Second):
+		t.Fatal("re-seal didn't finish")
+		return nil
+	}
+}
+
+func TestLiveEncryptAndDecrypt(t *testing.T) {
+	f := newEncFixture(t)
+	kr := &fakeKeyring{}
+	st := f.open()
+	c := f.crypto(st, fakeSources(kr, ""))
+	if _, err := c.Start(t.Context(), cfgWith(false, config.KeySourceKeyring), true); err != nil {
+		t.Fatal(err)
+	}
+	if c.cache.Dir() != f.p.MediaDir {
+		t.Fatalf("unencrypted: cache in %s", c.cache.Dir())
+	}
+
+	done, err := c.Set(t.Context(), true, config.KeySourceKeyring, nil)
+	if err != nil {
+		t.Fatalf("turning on: %v", err)
+	}
+	if err := wait(t, done); err != nil {
+		t.Fatalf("encrypting: %v", err)
+	}
+	k, err := st.Key(t.Context())
+	if err != nil || k == nil || !k.Finished || kr.key == nil {
+		t.Fatalf("after encrypting: key %+v, %v, keyring set %v", k, err, kr.key != nil)
+	}
+	if _, err := st.Search(t.Context(), "lunch", 5); !errors.Is(err, store.ErrSearchUnavailable) {
+		t.Errorf("search while encrypted = %v", err)
+	}
+	if c.cache.Dir() == f.p.MediaDir {
+		t.Error("downloads must move to a temporary directory while encrypted")
+	}
+
+	done, err = c.Set(t.Context(), false, config.KeySourceKeyring, nil)
+	if err != nil {
+		t.Fatalf("turning off: %v", err)
+	}
+	if err := wait(t, done); err != nil {
+		t.Fatalf("decrypting: %v", err)
+	}
+	if k, err := st.Key(t.Context()); err != nil || k != nil {
+		t.Errorf("key after decrypting = %+v, %v; want none", k, err)
+	}
+	if hits, err := st.Search(t.Context(), "lunch", 5); err != nil || len(hits) != 1 {
+		t.Errorf("search after decrypting = %v, %v", hits, err)
+	}
+	if c.cache.Dir() != f.p.MediaDir {
+		t.Errorf("after decrypting, downloads go back to %s, not %s", f.p.MediaDir, c.cache.Dir())
+	}
+}
+
+func TestReenableWhileDecryptingReusesTheKey(t *testing.T) {
+	f := newEncFixture(t)
+	kr := &fakeKeyring{}
+	st := f.open()
+	c := f.crypto(st, fakeSources(kr, ""))
+	if _, err := c.Start(t.Context(), cfgWith(false, config.KeySourceKeyring), true); err != nil {
+		t.Fatal(err)
+	}
+	done, err := c.Set(t.Context(), true, config.KeySourceKeyring, nil)
+	if err == nil {
+		err = wait(t, done)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := st.Key(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Decrypting is held before its first batch until it's replaced.
+	held := make(chan struct{})
+	var once sync.Once
+	c.beforeBatch = func(ctx context.Context) {
+		once.Do(func() {
+			close(held)
+			<-ctx.Done()
+		})
+	}
+	decrypting, err := c.Set(t.Context(), false, config.KeySourceKeyring, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-held
+	done, err = c.Set(t.Context(), true, config.KeySourceKeyring, nil)
+	if err != nil {
+		t.Fatalf("turning on again: %v", err)
+	}
+	if err := wait(t, decrypting); !errors.Is(err, errReplaced) {
+		t.Errorf("replaced decrypt ended with %v, want errReplaced", err)
+	}
+	if err := wait(t, done); err != nil {
+		t.Fatal(err)
+	}
+	k, err := st.Key(t.Context())
+	if err != nil || k == nil || k.ID != first.ID || !k.Finished {
+		t.Errorf("key = %+v, %v; want the same key (%d), finished", k, err, first.ID)
+	}
+	if n, err := st.Pending(t.Context()); err != nil || n != 0 {
+		t.Errorf("pending = %d, %v", n, err)
+	}
+}
+
+func TestLivePromptSource(t *testing.T) {
+	f := newEncFixture(t)
+	st := f.open()
+	c := f.crypto(st, fakeSources(&fakeKeyring{}, "unused"))
+	if _, err := c.Start(t.Context(), cfgWith(false, config.KeySourcePrompt), true); err != nil {
+		t.Fatal(err)
+	}
+	if need, err := c.NeedsPassphrase(t.Context(), true, config.KeySourcePrompt); err != nil || !need {
+		t.Errorf("NeedsPassphrase = %v, %v; want true", need, err)
+	}
+	if _, err := c.Set(t.Context(), true, config.KeySourcePrompt, nil); err == nil {
+		t.Fatal("prompt without a passphrase should fail")
+	}
+	if k, _ := st.Key(t.Context()); k != nil { //nolint:errcheck // checked by the next Set
+		t.Fatal("a failed enable left a key")
+	}
+	pass := []byte("correct horse")
+	done, err := c.Set(t.Context(), true, config.KeySourcePrompt, pass)
+	if err == nil {
+		err = wait(t, done)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(pass, make([]byte, len(pass))) {
+		t.Error("the passphrase should be zeroed after use")
+	}
+	if need, _ := c.NeedsPassphrase(t.Context(), false, config.KeySourcePrompt); need { //nolint:errcheck // false either way
+		t.Error("turning off never needs a passphrase")
+	}
+
+	// Restart: the passphrase typed in Settings unlocks it.
+	again := f.open()
+	if _, err := f.run(again, cfgWith(true, config.KeySourcePrompt), fakeSources(nil, "correct horse"), true); err != nil {
+		t.Fatalf("unlock with the passphrase set live: %v", err)
 	}
 }

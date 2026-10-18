@@ -89,6 +89,7 @@ type env struct {
 	logCap  *logging.Cap // info while encrypted: whatsmeow's debug output has message text
 	st      *store.Store
 	enc     encryption
+	crypto  *encryptor
 	cache   *media.Switchable
 	console headless.Console
 }
@@ -108,48 +109,25 @@ func openEnv(ctx context.Context, inv invocation, p paths.Paths, stdio IO, clean
 	cleanup.add(logCloser.Close)
 	slog.SetDefault(log)
 	log.Info("starting", "cmd", inv.cmd, "data_dir", p.DataDir, "config", fmt.Sprintf("%+v", e.cfg))
-	e.logCap = &logging.Cap{}
-	e.log, e.waLog = log, logging.Capped(log, e.logCap)
+	e.log = log
 
 	if e.st, err = store.Open(ctx, p.MessagesDB, nil); err != nil {
 		return e, err
 	}
 	cleanup.add(e.st.Close)
 
-	transitions := !strings.HasPrefix(inv.cmd, "db ")
-	if e.enc, err = setUpEncryption(ctx, e.cfg, p, e.st, realKeySources(e.cfg, p, stdio), transitions, log); err != nil {
-		return e, err
-	}
-	// Re-sealing runs while the app does; on exit it's cancelled (and
+	// Re-sealing runs while the app does; on exit it's stopped (and
 	// resumes next start) before the store closes.
-	rctx, stopReseal := context.WithCancel(ctx)
-	wait := startReseal(rctx, e.st, e.enc, log)
-	cleanup.add(func() error { stopReseal(); wait(); return nil })
-
-	if e.cache, err = mediaCache(p, e.enc, cleanup); err != nil {
+	e.crypto = newEncryptor(ctx, e.st, p, realKeySources(e.cfg, p, stdio), log)
+	cleanup.add(e.crypto.Close)
+	transitions := !strings.HasPrefix(inv.cmd, "db ")
+	if e.enc, err = e.crypto.Start(ctx, e.cfg, transitions); err != nil {
 		return e, err
 	}
-	if e.enc.on {
-		// No message text (or whatsmeow chatter) in the log.
-		e.logCap.Set(slog.LevelInfo)
-	}
+	e.cache, e.logCap = e.crypto.cache, e.crypto.logCap
+	e.waLog = logging.Capped(log, e.logCap)
 	e.console = headless.Console{In: stdio.In, Out: stdio.Out, Log: log, NoText: e.enc.on}
 	return e, nil
-}
-
-// mediaCache is the attachment cache: the data dir normally, or a
-// temporary directory removed on exit while encrypted (cached files would
-// be plaintext).
-func mediaCache(p paths.Paths, enc encryption, cleanup *cleanups) (*media.Switchable, error) {
-	if !enc.on {
-		return media.NewSwitchable(p.MediaDir), nil
-	}
-	tmp, err := os.MkdirTemp("", "go-whassup-media-")
-	if err != nil {
-		return nil, fmt.Errorf("creating temporary media dir: %w", err)
-	}
-	cleanup.add(func() error { return os.RemoveAll(tmp) })
-	return media.NewSwitchable(tmp), nil
 }
 
 // runDB runs the offline `db` commands.
