@@ -50,10 +50,14 @@ func (r *Recorder) Handle(evt wa.Event) {
 		r.markRead(ctx, v.Chat, v.At)
 	case wa.MessageEdited:
 		found, err := r.Store.EditMessage(ctx, v)
-		if err != nil {
+		switch {
+		case err != nil:
 			r.Log.Error("recording edit", "id", v.ID, "err", err)
-		} else if !found {
-			r.Log.Debug("edit for a message we don't have", "id", v.ID)
+		case !found:
+			// IDs only: never log message text by default.
+			r.Log.Info("edit for a message we don't have (or an older edit)", "chat", v.Chat, "id", v.ID)
+		default:
+			r.Log.Info("applied edit", "chat", v.Chat, "id", v.ID)
 		}
 	case wa.MessageDeleted:
 		if err := r.Store.DeleteMessage(ctx, v); err != nil {
