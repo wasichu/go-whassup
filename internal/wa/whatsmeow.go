@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
-	"go.mau.fi/whatsmeow/types/events"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/wasichu/go-whassup/internal/sqlite"
@@ -178,139 +176,6 @@ func (w *WhatsApp) Connect(ctx context.Context) error {
 	return nil
 }
 
-func (w *WhatsApp) Pair(ctx context.Context, phone string) (string, error) {
-	digits, err := NormalizePhone(phone)
-	if err != nil {
-		return "", err
-	}
-	qrCh, err := w.startPairing(ctx)
-	if err != nil {
-		return "", err
-	}
-
-	// PairPhone only works once the first QR item shows the login socket is up.
-	select {
-	case item, ok := <-qrCh:
-		if !ok {
-			return "", errors.New("pairing cancelled")
-		}
-		if item.Event != whatsmeow.QRChannelEventCode {
-			w.CancelPairing()
-			return "", fmt.Errorf("pairing not ready: %s", qrFailureReason(item))
-		}
-	case <-ctx.Done():
-		w.CancelPairing()
-		return "", ctx.Err()
-	}
-
-	code, err := w.client().PairPhone(ctx, digits, true, whatsmeow.PairClientChrome, pairDisplayName)
-	if err != nil {
-		w.CancelPairing()
-		return "", fmt.Errorf("requesting pairing code: %w", err)
-	}
-	go w.watchPairing(qrCh, false)
-	return code, nil
-}
-
-func (w *WhatsApp) PairQR(ctx context.Context) error {
-	qrCh, err := w.startPairing(ctx)
-	if err != nil {
-		return err
-	}
-	go w.watchPairing(qrCh, true)
-	return nil
-}
-
-// startPairing opens the QR channel and connects. The channel gets its own
-// cancellable context so CancelPairing can stop it the way whatsmeow
-// intends (close channel, remove handler, disconnect), while ctx keeps
-// bounding the connection a successful pairing leaves behind.
-func (w *WhatsApp) startPairing(ctx context.Context) (<-chan whatsmeow.QRChannelItem, error) {
-	if w.IsPaired() {
-		return nil, ErrAlreadyPaired
-	}
-	w.CancelPairing() // at most one pairing at a time
-	// After a remote logout whatsmeow has deleted the device; its stores
-	// are no-ops, so pair on a fresh one.
-	if w.client().Store.Deleted {
-		w.setDevice(w.container.NewDevice())
-	}
-	w.applyDeviceProps()
-
-	pairCtx, cancel := context.WithCancel(ctx)
-	cli := w.client()
-	qrCh, err := cli.GetQRChannel(pairCtx)
-	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("opening pairing channel: %w", err)
-	}
-	w.mu.Lock()
-	w.cancelPair = cancel
-	w.mu.Unlock()
-	if err := cli.ConnectContext(ctx); err != nil {
-		w.CancelPairing()
-		return nil, fmt.Errorf("connecting for pairing: %w", err)
-	}
-	return qrCh, nil
-}
-
-// CancelPairing stops an in-progress Pair or PairQR. After a pairing has
-// succeeded the channel is already closed, so this can't drop the
-// resulting connection.
-func (w *WhatsApp) CancelPairing() {
-	w.mu.Lock()
-	cancel := w.cancelPair
-	w.cancelPair = nil
-	w.mu.Unlock()
-	if cancel != nil {
-		cancel()
-		// If cancelled before the first QR event, whatsmeow's emitter never
-		// started and won't disconnect for us.
-		if w.client().Store.ID == nil {
-			w.client().Disconnect()
-		}
-	}
-}
-
-// watchPairing drains the QR channel until pairing resolves. Success is
-// reported by the PairSuccess event handler; this reports failures and,
-// for QR pairing, each new code. A user cancel closes the channel without
-// a terminal item, so it emits nothing.
-func (w *WhatsApp) watchPairing(qrCh <-chan whatsmeow.QRChannelItem, forwardCodes bool) {
-	for item := range qrCh {
-		switch item.Event {
-		case whatsmeow.QRChannelEventCode:
-			if forwardCodes {
-				w.emit(PairQRCode{Code: compactQR(item.Code)})
-			}
-		case whatsmeow.QRChannelSuccess.Event:
-		default:
-			w.emit(PairFailed{Reason: qrFailureReason(item)})
-		}
-	}
-}
-
-// qrLinkPrefix is the deep link whatsmeow wraps QR payloads in so a phone's
-// camera app can open WhatsApp. WhatsApp's own Linked devices scanner reads
-// the bare "2@ref,keys..." form, which Baileys still sends, and dropping
-// the prefix shrinks the code from 61 to 57 modules (65x33 -> 61x31 cells).
-const qrLinkPrefix = "https://wa.me/settings/linked_devices#"
-
-func compactQR(code string) string { return strings.TrimPrefix(code, qrLinkPrefix) }
-
-func qrFailureReason(item whatsmeow.QRChannelItem) string {
-	switch {
-	case item.Event == whatsmeow.QRChannelTimeout.Event:
-		return "timed out waiting for the code to be entered"
-	case item.Event == whatsmeow.QRChannelClientOutdated.Event:
-		return "client outdated: update whatsmeow"
-	case item.Error != nil:
-		return item.Error.Error()
-	default:
-		return item.Event
-	}
-}
-
 func (w *WhatsApp) SendText(ctx context.Context, chat, text string) error {
 	cli := w.client()
 	if cli.Store.ID == nil {
@@ -389,84 +254,9 @@ func (w *WhatsApp) MarkRead(ctx context.Context, chat string, msgs []Message, mo
 	return errors.Join(errs...)
 }
 
-// announceName tells the server our push name so recipients don't see "-"
-// as the sender. It uses "unavailable" so this doesn't mark the user online
-// or switch on active read receipts.
-func (w *WhatsApp) announceName() {
-	err := w.client().SendPresence(context.Background(), types.PresenceUnavailable)
-	if err != nil {
-		// Right after pairing the push name may not have synced yet; the
-		// next connection will succeed.
-		w.log.Debug("announcing push name", "err", err)
-	}
-}
-
-// decryptSecret decrypts a secret-encrypted message (e.g. an edit) with the
-// stored secret of the message it targets. Failures are logged; the caller
-// drops the message rather than storing it undecrypted.
-func (w *WhatsApp) decryptSecret(evt *events.Message) (*waE2E.Message, error) {
-	msg, err := w.client().DecryptSecretEncryptedMessage(context.Background(), evt)
-	if err != nil {
-		w.log.Warn("couldn't decrypt secret-encrypted message", "id", evt.Info.ID,
-			"target", evt.Message.GetSecretEncryptedMessage().GetTargetMessageKey().GetID(), "err", err)
-	}
-	return msg, err
-}
-
 // groupSyncInterval limits full group syncs to one per this long, however
 // often the connection drops and comes back.
 const groupSyncInterval = time.Hour
-
-// emitGroupSnapshot fetches all joined groups (one request) and emits them.
-func (w *WhatsApp) emitGroupSnapshot() {
-	w.mu.Lock()
-	if time.Since(w.lastGroupSync) < groupSyncInterval {
-		w.mu.Unlock()
-		return
-	}
-	w.lastGroupSync = time.Now()
-	w.mu.Unlock()
-
-	cli := w.client()
-	groups, err := cli.GetJoinedGroups(context.Background())
-	if err != nil {
-		w.log.Warn("fetching groups", "err", err)
-		return
-	}
-	list := make([]Group, 0, len(groups))
-	for _, g := range groups {
-		list = append(list, groupFromInfo(g, w.resolveKey))
-	}
-	w.log.Info("groups snapshot", "count", len(list))
-	w.emit(Groups{List: list, Snapshot: true})
-}
-
-// refreshGroup re-fetches one group after the server reports a change.
-func (w *WhatsApp) refreshGroup(jid types.JID) {
-	info, err := w.client().GetGroupInfo(context.Background(), jid)
-	if err != nil {
-		w.log.Warn("fetching group info", "group", jid, "err", err)
-		return
-	}
-	w.emit(Groups{List: []Group{groupFromInfo(info, w.resolveKey)}})
-}
-
-// emitContactSnapshot emits every known contact. It reads whatsmeow's local
-// store, so it is cheap and works whenever a session exists.
-func (w *WhatsApp) emitContactSnapshot() {
-	cli := w.client()
-	if cli == nil || cli.Store.ID == nil {
-		return
-	}
-	all, err := cli.Store.Contacts.GetAllContacts(context.Background())
-	if err != nil {
-		w.log.Warn("reading contacts", "err", err)
-		return
-	}
-	list := contactsFromStore(all, w.resolveKey)
-	w.log.Info("contacts snapshot", "count", len(list))
-	w.emit(Contacts{List: list, Snapshot: true})
-}
 
 func (w *WhatsApp) Disconnect() { w.client().Disconnect() }
 
@@ -500,106 +290,4 @@ func (w *WhatsApp) resolveKey(jid, alt types.JID) string {
 		return pn.ToNonAD().String()
 	}
 	return jid.String()
-}
-
-// handleEvent runs on whatsmeow's goroutines. It translates protocol events
-// into our plain Event values and must never touch UI state directly.
-func (w *WhatsApp) handleEvent(evt any) {
-	if w.connectionEvent(evt) || w.peopleEvent(evt) || w.messageEvent(evt) {
-		return
-	}
-	// App-state sync, receipts, presence etc. Handled in later steps; a
-	// fresh pairing produces a flood of these.
-	w.log.Debug("unhandled event", "type", fmt.Sprintf("%T", evt))
-}
-
-// connectionEvent handles connection and pairing events.
-func (w *WhatsApp) connectionEvent(evt any) bool {
-	switch v := evt.(type) {
-	case *events.Connected:
-		go w.announceName() // not on whatsmeow's event goroutine: it sends a node
-		w.emit(Connected{})
-		go w.emitContactSnapshot()
-		go w.emitGroupSnapshot()
-	case *events.Disconnected:
-		w.emit(Disconnected{})
-	case *events.StreamReplaced:
-		w.log.Warn("another client took over this session")
-		w.emit(Disconnected{})
-	case *events.LoggedOut:
-		w.emit(LoggedOut{Reason: v.Reason.String()})
-	case *events.TemporaryBan:
-		w.log.Error("temporary ban", "detail", v.String())
-		w.emit(Disconnected{})
-	case *events.PairSuccess:
-		w.emit(PairSuccess{JID: v.ID.ToNonAD().String()})
-	default:
-		return false
-	}
-	return true
-}
-
-// peopleEvent handles contacts, groups and read state.
-func (w *WhatsApp) peopleEvent(evt any) bool {
-	switch v := evt.(type) {
-	case *events.JoinedGroup:
-		w.emit(Groups{List: []Group{groupFromInfo(&v.GroupInfo, w.resolveKey)}})
-	case *events.GroupInfo:
-		go w.refreshGroup(v.JID) // name, topic or membership changed
-	case *events.AppStateSyncComplete:
-		go w.emitContactSnapshot() // address-book names arrive via app state
-	case *events.Contact:
-		if !v.FromFullSync { // the AppStateSyncComplete snapshot covers full syncs
-			w.emit(Contacts{List: []Contact{w.contactFromAction(v)}})
-		}
-	case *events.PushName:
-		w.emit(Contacts{List: []Contact{{JID: w.resolveKey(v.JID, v.JIDAlt), PushName: v.NewPushName}}})
-	case *events.BusinessName:
-		w.emit(Contacts{List: []Contact{{JID: w.resolveKey(v.JID, types.EmptyJID), BusinessName: v.NewBusinessName}}})
-	case *events.MarkChatAsRead:
-		if v.Action.GetRead() {
-			w.emit(ChatRead{Chat: w.resolveKey(v.JID, types.EmptyJID), At: v.Timestamp})
-		}
-	case *events.Receipt:
-		// Our own other device read an incoming message.
-		if v.IsFromMe && (v.Type == types.ReceiptTypeRead || v.Type == types.ReceiptTypeReadSelf) {
-			w.emit(ChatRead{Chat: w.resolveKey(v.Chat, types.EmptyJID), At: v.Timestamp})
-		}
-	default:
-		return false
-	}
-	return true
-}
-
-func (w *WhatsApp) contactFromAction(v *events.Contact) Contact {
-	name := v.Action.GetFullName()
-	if name == "" {
-		name = v.Action.GetFirstName()
-	}
-	var pn types.JID
-	if p, err := types.ParseJID(v.Action.GetPnJID()); err == nil {
-		pn = p
-	}
-	return Contact{JID: w.resolveKey(v.JID, pn), Name: name}
-}
-
-// messageEvent handles messages (and what acts on them) and history.
-func (w *WhatsApp) messageEvent(evt any) bool {
-	switch v := evt.(type) {
-	case *events.Message:
-		if e, ok := classifyMessage(v, w.resolveKey, w.decryptSecret); ok {
-			w.emit(e)
-		}
-	case *events.DeleteForMe:
-		w.emit(MessageDeleted{Chat: w.resolveKey(v.ChatJID, types.EmptyJID), ID: v.MessageID, At: v.Timestamp, ForMe: true})
-	case *events.HistorySync:
-		if h, ok := historyFromProto(v.Data, w.client().ParseWebMessage, w.resolveKey, w.log); ok {
-			w.log.Info("history sync", "type", v.Data.GetSyncType().String(),
-				"chats", len(h.Chats), "messages", len(h.Messages), "push_names", len(h.PushNames))
-			w.emit(h)
-		}
-	default:
-		return false
-	}
-	return true
 }

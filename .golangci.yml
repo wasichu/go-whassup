@@ -58,8 +58,6 @@ linters:
       # Table-driven tests are long by nature.
       - path: _test\.go
         linters: [funlen, gocognit]
-      # Known offenders, being refactored (code-quality pass, 2026-10-18).
-      # Each refactor commit deletes the entries it fixes; don't add new ones.
 
 formatters:
   enable:
