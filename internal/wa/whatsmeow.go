@@ -505,44 +505,22 @@ func (w *WhatsApp) resolveKey(jid, alt types.JID) string {
 // handleEvent runs on whatsmeow's goroutines. It translates protocol events
 // into our plain Event values and must never touch UI state directly.
 func (w *WhatsApp) handleEvent(evt any) {
+	if w.connectionEvent(evt) || w.peopleEvent(evt) || w.messageEvent(evt) {
+		return
+	}
+	// App-state sync, receipts, presence etc. Handled in later steps; a
+	// fresh pairing produces a flood of these.
+	w.log.Debug("unhandled event", "type", fmt.Sprintf("%T", evt))
+}
+
+// connectionEvent handles connection and pairing events.
+func (w *WhatsApp) connectionEvent(evt any) bool {
 	switch v := evt.(type) {
 	case *events.Connected:
 		go w.announceName() // not on whatsmeow's event goroutine: it sends a node
 		w.emit(Connected{})
 		go w.emitContactSnapshot()
 		go w.emitGroupSnapshot()
-	case *events.JoinedGroup:
-		w.emit(Groups{List: []Group{groupFromInfo(&v.GroupInfo, w.resolveKey)}})
-	case *events.GroupInfo:
-		go w.refreshGroup(v.JID) // name, topic or membership changed
-	case *events.AppStateSyncComplete:
-		go w.emitContactSnapshot() // address-book names arrive via app state
-	case *events.Contact:
-		if v.FromFullSync {
-			return // the AppStateSyncComplete snapshot covers these
-		}
-		name := v.Action.GetFullName()
-		if name == "" {
-			name = v.Action.GetFirstName()
-		}
-		var pn types.JID
-		if p, err := types.ParseJID(v.Action.GetPnJID()); err == nil {
-			pn = p
-		}
-		w.emit(Contacts{List: []Contact{{JID: w.resolveKey(v.JID, pn), Name: name}}})
-	case *events.MarkChatAsRead:
-		if v.Action.GetRead() {
-			w.emit(ChatRead{Chat: w.resolveKey(v.JID, types.EmptyJID), At: v.Timestamp})
-		}
-	case *events.Receipt:
-		// Our own other device read an incoming message.
-		if v.IsFromMe && (v.Type == types.ReceiptTypeRead || v.Type == types.ReceiptTypeReadSelf) {
-			w.emit(ChatRead{Chat: w.resolveKey(v.Chat, types.EmptyJID), At: v.Timestamp})
-		}
-	case *events.PushName:
-		w.emit(Contacts{List: []Contact{{JID: w.resolveKey(v.JID, v.JIDAlt), PushName: v.NewPushName}}})
-	case *events.BusinessName:
-		w.emit(Contacts{List: []Contact{{JID: w.resolveKey(v.JID, types.EmptyJID), BusinessName: v.NewBusinessName}}})
 	case *events.Disconnected:
 		w.emit(Disconnected{})
 	case *events.StreamReplaced:
@@ -555,13 +533,65 @@ func (w *WhatsApp) handleEvent(evt any) {
 		w.emit(Disconnected{})
 	case *events.PairSuccess:
 		w.emit(PairSuccess{JID: v.ID.ToNonAD().String()})
+	default:
+		return false
+	}
+	return true
+}
+
+// peopleEvent handles contacts, groups and read state.
+func (w *WhatsApp) peopleEvent(evt any) bool {
+	switch v := evt.(type) {
+	case *events.JoinedGroup:
+		w.emit(Groups{List: []Group{groupFromInfo(&v.GroupInfo, w.resolveKey)}})
+	case *events.GroupInfo:
+		go w.refreshGroup(v.JID) // name, topic or membership changed
+	case *events.AppStateSyncComplete:
+		go w.emitContactSnapshot() // address-book names arrive via app state
+	case *events.Contact:
+		if !v.FromFullSync { // the AppStateSyncComplete snapshot covers full syncs
+			w.emit(Contacts{List: []Contact{w.contactFromAction(v)}})
+		}
+	case *events.PushName:
+		w.emit(Contacts{List: []Contact{{JID: w.resolveKey(v.JID, v.JIDAlt), PushName: v.NewPushName}}})
+	case *events.BusinessName:
+		w.emit(Contacts{List: []Contact{{JID: w.resolveKey(v.JID, types.EmptyJID), BusinessName: v.NewBusinessName}}})
+	case *events.MarkChatAsRead:
+		if v.Action.GetRead() {
+			w.emit(ChatRead{Chat: w.resolveKey(v.JID, types.EmptyJID), At: v.Timestamp})
+		}
+	case *events.Receipt:
+		// Our own other device read an incoming message.
+		if v.IsFromMe && (v.Type == types.ReceiptTypeRead || v.Type == types.ReceiptTypeReadSelf) {
+			w.emit(ChatRead{Chat: w.resolveKey(v.Chat, types.EmptyJID), At: v.Timestamp})
+		}
+	default:
+		return false
+	}
+	return true
+}
+
+func (w *WhatsApp) contactFromAction(v *events.Contact) Contact {
+	name := v.Action.GetFullName()
+	if name == "" {
+		name = v.Action.GetFirstName()
+	}
+	var pn types.JID
+	if p, err := types.ParseJID(v.Action.GetPnJID()); err == nil {
+		pn = p
+	}
+	return Contact{JID: w.resolveKey(v.JID, pn), Name: name}
+}
+
+// messageEvent handles messages (and what acts on them) and history.
+func (w *WhatsApp) messageEvent(evt any) bool {
+	switch v := evt.(type) {
 	case *events.Message:
 		if e, ok := classifyMessage(v, w.resolveKey, w.decryptSecret); ok {
 			w.emit(e)
 		}
 	case *events.DeleteForMe:
-		alt := types.EmptyJID
-		w.emit(MessageDeleted{Chat: w.resolveKey(v.ChatJID, alt), ID: v.MessageID, At: v.Timestamp, ForMe: true})
+		w.emit(MessageDeleted{Chat: w.resolveKey(v.ChatJID, types.EmptyJID), ID: v.MessageID, At: v.Timestamp, ForMe: true})
 	case *events.HistorySync:
 		if h, ok := historyFromProto(v.Data, w.client().ParseWebMessage, w.resolveKey, w.log); ok {
 			w.log.Info("history sync", "type", v.Data.GetSyncType().String(),
@@ -569,8 +599,7 @@ func (w *WhatsApp) handleEvent(evt any) {
 			w.emit(h)
 		}
 	default:
-		// App-state sync, receipts, presence etc. Handled in later steps; a
-		// fresh pairing produces a flood of these.
-		w.log.Debug("unhandled event", "type", fmt.Sprintf("%T", evt))
+		return false
 	}
+	return true
 }

@@ -69,7 +69,6 @@ linters:
       - {path: internal/ui/login\.go, linters: [gocognit, funlen], text: "loginKey|loginView"}
       - {path: internal/ui/model\.go, linters: [gocognit, funlen], text: "Update|handleKey"}
       - {path: internal/ui/settings\.go, linters: [gocognit, funlen], text: "settingsKey"}
-      - {path: internal/wa/whatsmeow\.go, linters: [funlen], text: "handleEvent"}
 
 formatters:
   enable:
