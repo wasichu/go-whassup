@@ -12,57 +12,73 @@ import (
 )
 
 // SaveMessages stores msgs, ignoring any already stored (history sync and
-// live delivery overlap), and bumps each chat's last activity. It returns
-// how many were new.
+// live delivery overlap), and bumps each chat's last activity, all in one
+// transaction. It returns how many were new.
 func (s *Store) SaveMessages(ctx context.Context, msgs []wa.Message) (int, error) {
 	if len(msgs) == 0 {
 		return 0, nil
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, fmt.Errorf("saving messages: %w", err)
-	}
-	defer rollback(tx)
-
 	inserted := 0
-	for _, m := range msgs {
-		body, codecID, err := s.seal([]byte(m.Text), m.Chat, m.ID, colBody)
-		if err != nil {
-			return 0, err
-		}
-		var media []byte
-		mediaCodec := 0
-		if m.Media != nil {
-			if media, mediaCodec, err = s.seal(m.Media.Data, m.Chat, m.ID, colMedia); err != nil {
-				return 0, err
+	err := s.inTx(ctx, "saving messages", func(tx *sql.Tx) error {
+		for _, m := range msgs {
+			isNew, err := s.insertMessage(ctx, tx, m)
+			if err != nil {
+				return err
+			}
+			if isNew {
+				inserted++
+			}
+			if err := bumpChat(ctx, tx, m); err != nil {
+				return err
 			}
 		}
-		var rowid int64
-		err = tx.QueryRowContext(ctx, `
-			INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, push_name, ts, from_me, kind, body, codec, media, media_codec)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING rowid`,
-			m.Chat, m.ID, m.Sender, m.PushName, m.Timestamp.Unix(), m.FromMe, m.Kind, body, codecID, media, mediaCodec).Scan(&rowid)
-		switch {
-		case errors.Is(err, sql.ErrNoRows): // already stored
-		case err != nil:
-			return 0, fmt.Errorf("saving message %s: %w", m.ID, err)
-		default:
-			inserted++
-			if err := s.index(ctx, tx, rowid, m.Chat, m.ID, m.Text); err != nil {
-				return 0, err
-			}
-		}
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO chats (jid, is_group, last_message_at) VALUES (?, ?, ?)
-			ON CONFLICT (jid) DO UPDATE SET last_message_at = max(last_message_at, excluded.last_message_at)`,
-			m.Chat, m.IsGroup, m.Timestamp.Unix()); err != nil {
-			return 0, fmt.Errorf("updating chat %s: %w", m.Chat, err)
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("saving messages: %w", err)
+		return nil
+	})
+	if err != nil {
+		return 0, err
 	}
 	return inserted, nil
+}
+
+// insertMessage seals and inserts m (indexing it for search) unless it's
+// already stored; it reports whether it was new.
+func (s *Store) insertMessage(ctx context.Context, tx *sql.Tx, m wa.Message) (bool, error) {
+	body, codecID, err := s.seal([]byte(m.Text), m.Chat, m.ID, colBody)
+	if err != nil {
+		return false, err
+	}
+	var media []byte
+	mediaCodec := 0
+	if m.Media != nil {
+		if media, mediaCodec, err = s.seal(m.Media.Data, m.Chat, m.ID, colMedia); err != nil {
+			return false, err
+		}
+	}
+	var rowid int64
+	err = tx.QueryRowContext(ctx, `
+		INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, push_name, ts, from_me, kind, body, codec, media, media_codec)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING rowid`,
+		m.Chat, m.ID, m.Sender, m.PushName, m.Timestamp.Unix(), m.FromMe, m.Kind, body, codecID, media, mediaCodec).Scan(&rowid)
+	switch {
+	case errors.Is(err, sql.ErrNoRows): // already stored
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("saving message %s: %w", m.ID, err)
+	}
+	return true, s.index(ctx, tx, rowid, m.Chat, m.ID, m.Text)
+}
+
+// bumpChat creates m's chat if needed and moves its last activity forward.
+// It runs in the caller's transaction, so a message and its chat update
+// commit together.
+func bumpChat(ctx context.Context, tx *sql.Tx, m wa.Message) error {
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO chats (jid, is_group, last_message_at) VALUES (?, ?, ?)
+		ON CONFLICT (jid) DO UPDATE SET last_message_at = max(last_message_at, excluded.last_message_at)`,
+		m.Chat, m.IsGroup, m.Timestamp.Unix()); err != nil {
+		return fmt.Errorf("updating chat %s: %w", m.Chat, err)
+	}
+	return nil
 }
 
 // Messages returns the newest limit messages in chat, oldest first. A limit
@@ -71,7 +87,7 @@ func (s *Store) Messages(ctx context.Context, chat string, limit int) ([]wa.Mess
 	if limit <= 0 {
 		limit = -1 // SQLite: no limit
 	}
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := queryAll(ctx, s.db, `
 		SELECT id, sender_jid, push_name, ts, from_me, kind, body, codec, is_group, sender_name, edited_at, deleted, media, media_codec FROM (
 			SELECT m.*, c.is_group,
 			       COALESCE(NULLIF(ct.name, ''), NULLIF(ct.push_name, ''), NULLIF(m.push_name, ''), ct.business_name, '') AS sender_name
@@ -79,52 +95,62 @@ func (s *Store) Messages(ctx context.Context, chat string, limit int) ([]wa.Mess
 			JOIN chats c ON c.jid = m.chat_jid
 			LEFT JOIN contacts ct ON ct.jid = m.sender_jid
 			WHERE m.chat_jid = ? ORDER BY m.ts DESC, m.id DESC LIMIT ?
-		) ORDER BY ts, id`, chat, limit)
+		) ORDER BY ts, id`, []any{chat, limit}, scanMessage)
 	if err != nil {
 		return nil, fmt.Errorf("loading messages: %w", err)
 	}
-	defer rows.Close()
-	var msgs []wa.Message
-	for rows.Next() {
-		m := wa.Message{Chat: chat}
-		var ts int64
-		var body []byte
-		var codecID int
-		var editedAt int64
-		var media []byte
-		var mediaCodec int
-		if err := rows.Scan(&m.ID, &m.Sender, &m.PushName, &ts, &m.FromMe, &m.Kind, &body, &codecID, &m.IsGroup, &m.SenderName, &editedAt, &m.Deleted, &media, &mediaCodec); err != nil {
-			return nil, fmt.Errorf("loading messages: %w", err)
+	msgs := make([]wa.Message, len(rows))
+	for i, r := range rows {
+		if msgs[i], err = s.decodeMessage(chat, r); err != nil {
+			return nil, err
 		}
-		m.Timestamp, m.Edited = time.Unix(ts, 0), editedAt > 0
-		if !m.Deleted {
-			text, err := s.open(body, codecID, chat, m.ID, colBody)
-			if err != nil {
-				return nil, err
-			}
-			m.Text = string(text)
-			if media != nil {
-				data, err := s.open(media, mediaCodec, chat, m.ID, colMedia)
-				if err != nil {
-					return nil, err
-				}
-				// An attachment we can't decode (e.g. after a protocol
-				// change) loses its download link but must not hide the
-				// message, let alone the chat.
-				if parsed, perr := wa.ParseMedia(data); perr == nil {
-					m.Media = parsed
-				}
-			}
-		}
-		msgs = append(msgs, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("loading messages: %w", err)
 	}
 	if err := s.attachReactions(ctx, chat, msgs); err != nil {
 		return nil, err
 	}
 	return msgs, nil
+}
+
+// storedMessage is a messages row as read, values still sealed.
+type storedMessage struct {
+	m                 wa.Message
+	ts, editedAt      int64
+	body, media       []byte
+	codec, mediaCodec int
+}
+
+func scanMessage(rows *sql.Rows) (storedMessage, error) {
+	var r storedMessage
+	err := rows.Scan(&r.m.ID, &r.m.Sender, &r.m.PushName, &r.ts, &r.m.FromMe, &r.m.Kind, &r.body, &r.codec,
+		&r.m.IsGroup, &r.m.SenderName, &r.editedAt, &r.m.Deleted, &r.media, &r.mediaCodec)
+	return r, err
+}
+
+// decodeMessage opens a stored row's sealed values.
+func (s *Store) decodeMessage(chat string, r storedMessage) (wa.Message, error) {
+	m := r.m
+	m.Chat, m.Timestamp, m.Edited = chat, time.Unix(r.ts, 0), r.editedAt > 0
+	if m.Deleted {
+		return m, nil // text and media were wiped
+	}
+	text, err := s.open(r.body, r.codec, chat, m.ID, colBody)
+	if err != nil {
+		return m, err
+	}
+	m.Text = string(text)
+	if r.media == nil {
+		return m, nil
+	}
+	data, err := s.open(r.media, r.mediaCodec, chat, m.ID, colMedia)
+	if err != nil {
+		return m, err
+	}
+	// An attachment we can't decode (e.g. after a protocol change) loses
+	// its download link but must not hide the message, let alone the chat.
+	if parsed, perr := wa.ParseMedia(data); perr == nil {
+		m.Media = parsed
+	}
+	return m, nil
 }
 
 // attachReactions fills in each message's reaction summary. Emoji are
@@ -137,79 +163,66 @@ func (s *Store) attachReactions(ctx context.Context, chat string, msgs []wa.Mess
 	for i, m := range msgs {
 		byID[m.ID] = i
 	}
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT message_id, sender_jid, emoji, codec, from_me, ts FROM reactions
+	rows, err := queryAll(ctx, s.db, `
+		SELECT message_id, sender_jid, emoji, codec, from_me FROM reactions
 		WHERE chat_jid = ? AND message_id IN (SELECT id FROM messages WHERE chat_jid = ? AND ts >= ?)
-		ORDER BY ts`,
-		chat, chat, msgs[0].Timestamp.Unix())
+		ORDER BY ts`, []any{chat, chat, msgs[0].Timestamp.Unix()},
+		func(rows *sql.Rows) (storedReaction, error) {
+			var r storedReaction
+			err := rows.Scan(&r.msgID, &r.sender, &r.emoji, &r.codec, &r.mine)
+			return r, err
+		})
 	if err != nil {
 		return fmt.Errorf("loading reactions: %w", err)
 	}
-	defer rows.Close()
-	type agg struct {
-		count int
-		mine  bool
-		order int // first seen, for ties
-	}
-	perMsg := map[string]map[string]*agg{}
-	seen := 0
-	for rows.Next() {
-		var id, sender string
-		var sealed []byte
-		var codec int
-		var mine bool
-		var ts int64
-		if err := rows.Scan(&id, &sender, &sealed, &codec, &mine, &ts); err != nil {
-			return fmt.Errorf("loading reactions: %w", err)
-		}
-		if _, ok := byID[id]; !ok {
+	opened := make([]openedReaction, 0, len(rows))
+	for _, r := range rows {
+		if _, ok := byID[r.msgID]; !ok {
 			continue
 		}
-		emoji, err := s.open(sealed, codec, chat, id, reactionColumn(sender))
+		emoji, err := s.open(r.emoji, r.codec, chat, r.msgID, reactionColumn(r.sender))
 		if err != nil {
 			return err
 		}
-		m := perMsg[id]
-		if m == nil {
-			m = map[string]*agg{}
-			perMsg[id] = m
-		}
-		a := m[string(emoji)]
-		if a == nil {
-			seen++
-			a = &agg{order: seen}
-			m[string(emoji)] = a
-		}
-		a.count++
-		a.mine = a.mine || mine
+		opened = append(opened, openedReaction{msgID: r.msgID, emoji: string(emoji), mine: r.mine})
 	}
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("loading reactions: %w", err)
-	}
-	for id, m := range perMsg {
-		var rcs []wa.ReactionCount
-		var order []int
-		for emoji, a := range m {
-			rcs = append(rcs, wa.ReactionCount{Emoji: emoji, Count: a.count, Mine: a.mine})
-			order = append(order, a.order)
-		}
-		idx := make([]int, len(rcs))
-		for i := range idx {
-			idx[i] = i
-		}
-		slices.SortFunc(idx, func(a, b int) int {
-			if rcs[a].Count != rcs[b].Count {
-				return rcs[b].Count - rcs[a].Count
-			}
-			return order[a] - order[b]
-		})
-		sorted := make([]wa.ReactionCount, len(rcs))
-		for i, j := range idx {
-			sorted[i] = rcs[j]
-		}
-		msgs[byID[id]].Reactions = sorted
+	for id, counts := range countReactions(opened) {
+		msgs[byID[id]].Reactions = counts
 	}
 	return nil
+}
+
+type storedReaction struct {
+	msgID, sender string
+	emoji         []byte
+	codec         int
+	mine          bool
+}
+
+type openedReaction struct {
+	msgID, emoji string
+	mine         bool
+}
+
+// countReactions summarises reactions (in arrival order) per message: most
+// popular emoji first, ties in order of first appearance.
+func countReactions(rs []openedReaction) map[string][]wa.ReactionCount {
+	perMsg := map[string][]wa.ReactionCount{}
+	for _, r := range rs {
+		counts := perMsg[r.msgID]
+		i := slices.IndexFunc(counts, func(c wa.ReactionCount) bool { return c.Emoji == r.emoji })
+		if i < 0 {
+			counts = append(counts, wa.ReactionCount{Emoji: r.emoji})
+			i = len(counts) - 1
+		}
+		counts[i].Count++
+		counts[i].Mine = counts[i].Mine || r.mine
+		perMsg[r.msgID] = counts
+	}
+	for _, counts := range perMsg {
+		slices.SortStableFunc(counts, func(a, b wa.ReactionCount) int { return b.Count - a.Count })
+	}
+	return perMsg
 }
 
 // EditMessage replaces a message's text with a newer edit. It reports
