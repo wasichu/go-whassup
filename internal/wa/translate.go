@@ -197,7 +197,7 @@ func addConversation(h *HistorySync, conv *waHistorySync.Conversation, parse web
 	h.Chats = append(h.Chats, Chat{
 		JID: chatKey, Name: name, IsGroup: chatJID.Server == types.GroupServer,
 		UnreadCount: int(conv.GetUnreadCount()),
-		MutedUntil:  muteEnd(int64(conv.GetMuteEndTime())), // forever arrives as -1 in a uint64
+		MutedUntil:  muteEnd(int64(conv.GetMuteEndTime())), // negative (e.g. -1 stored as a uint64) = forever
 	})
 	for _, hm := range conv.GetMessages() {
 		web := hm.GetMessage()

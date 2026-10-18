@@ -8,7 +8,7 @@ type NotifyProtocol int
 
 const (
 	NotifyNone   NotifyProtocol = iota // nothing reaches the terminal (see Hint)
-	NotifyOSC9                         // iTerm2, WezTerm, Windows Terminal, …: body only
+	NotifyOSC9                         // iTerm2, WezTerm, …: body only
 	NotifyOSC777                       // Ghostty, foot, urxvt: title and body
 	NotifyOSC99                        // kitty: title and body
 )

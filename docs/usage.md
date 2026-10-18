@@ -162,7 +162,7 @@ names stay readable on disk.**
 - Notifications go through the terminal, which shows them natively, so there's nothing
   to install and message text never appears on a command line. go-whassup picks the
   terminal's protocol: OSC 777 (Ghostty, foot, urxvt), OSC 99 (kitty), otherwise OSC 9
-  (iTerm2, WezTerm, Windows Terminal; terminals without support ignore it). Some
+  (iTerm2, WezTerm; terminals without support ignore it). Some
   terminals need notifications enabled in their own settings.
 - **In tmux**, notifications need `tmux set -g allow-passthrough on` (to reach the
   terminal) and `focus-events on` (to know you're away); the status line says so at
