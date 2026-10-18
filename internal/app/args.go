@@ -26,6 +26,7 @@ const usage = `Usage:
                                           <chat> is a name, phone number or JID
   go-whassup db search [-n N] <words>     search stored messages (newest N matches)
   go-whassup db reset                     delete stored messages and media (asks first)
+  go-whassup demo                         try it on made-up chats (no account; nothing is kept)
 
 Flags may come before or after the subcommand.
 `
@@ -39,6 +40,7 @@ var commands = map[string]struct{ min, max int }{
 	"db messages": {1, 1},
 	"db search":   {1, 64}, // words may be passed unquoted
 	"db reset":    {0, 0},
+	"demo":        {0, 0},
 }
 
 // parseArgs accepts flags before and/or after the subcommand, so

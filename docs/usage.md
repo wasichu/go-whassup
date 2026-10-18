@@ -10,6 +10,7 @@ go-whassup db messages [-n N] <chat>    show a stored chat's newest N messages (
 go-whassup db search [-n N] <words>     search stored messages, newest matches first
 go-whassup db reset                     delete messages.db and the media cache (type "yes");
                                         the way out if stored messages can't be unlocked
+go-whassup demo                         try it on made-up chats (no account; nothing is kept)
 ```
 
 - `login` and `listen` also **store** everything they receive, including the history

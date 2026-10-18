@@ -41,6 +41,15 @@ Or download a binary for macOS, Linux or Windows from the releases page and put 
 your `PATH`. Windows builds are untested, and the keychain key source isn't available
 there.
 
+## Try it without an account
+
+```sh
+go-whassup demo
+```
+
+runs the real interface on made-up chats (fictional people and numbers): nothing
+connects to WhatsApp, and it's all deleted when you quit.
+
 ## Getting started
 
 ```sh

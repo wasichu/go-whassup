@@ -1,4 +1,5 @@
-// Package watest provides a fake wa.Client for tests.
+// Package watest provides a fake wa.Client: for tests, and for the demo
+// (go-whassup demo), which runs the real UI on made-up chats.
 package watest
 
 import (
@@ -38,7 +39,12 @@ type Client struct {
 	Files        []SentFile
 	DownloadData []byte
 	DownloadErr  error
-	downloads    atomic.Int32
+	// DownloadFor, if set, chooses the downloaded content per attachment
+	// (overrides DownloadData).
+	DownloadFor func(wa.Media) []byte
+	// Now stamps sent messages; nil uses fixed dates (stable for tests).
+	Now       func() time.Time
+	downloads atomic.Int32
 	// MarkRead calls with a mode other than ReadLocal.
 	Reads []ReadCall
 	// Events emitted synchronously, in order, from a successful Pair,
@@ -142,7 +148,7 @@ func (c *Client) SendText(_ context.Context, chat, text string) error {
 		ID:        fmt.Sprintf("SENT%d", len(c.Sent)+1),
 		Chat:      chat,
 		Sender:    "me@s.whatsapp.net",
-		Timestamp: time.Date(2026, 1, 1, 0, 0, len(c.Sent), 0, time.UTC),
+		Timestamp: c.stamp(time.Date(2026, 1, 1, 0, 0, len(c.Sent), 0, time.UTC)),
 		FromMe:    true,
 		Kind:      wa.KindText,
 		Text:      text,
@@ -171,7 +177,7 @@ func (c *Client) SendFile(_ context.Context, chat, path, caption string) (string
 	c.mu.Unlock()
 	c.Emit(wa.Message{
 		ID: id, Chat: chat, Sender: "me@s.whatsapp.net", FromMe: true,
-		Timestamp: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC), Kind: wa.KindDocument,
+		Timestamp: c.stamp(time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)), Kind: wa.KindDocument,
 		Text:  filepath.Base(path),
 		Media: DocumentMedia(filepath.Base(path)),
 	})
@@ -186,12 +192,16 @@ func (c *Client) SentFiles() []SentFile {
 }
 
 // Download writes DownloadData to dst, or fails with DownloadErr.
-func (c *Client) Download(_ context.Context, _ wa.Media, dst *os.File) error {
+func (c *Client) Download(_ context.Context, m wa.Media, dst *os.File) error {
 	c.downloads.Add(1)
 	if c.DownloadErr != nil {
 		return c.DownloadErr
 	}
-	_, err := dst.Write(c.DownloadData)
+	data := c.DownloadData
+	if c.DownloadFor != nil {
+		data = c.DownloadFor(m)
+	}
+	_, err := dst.Write(data)
 	return err
 }
 
@@ -312,4 +322,12 @@ func PhotoMedia(thumb []byte) *wa.Media {
 		panic(err)
 	}
 	return m
+}
+
+// stamp is Now(), or fixed (the test default) when Now isn't set.
+func (c *Client) stamp(fixed time.Time) time.Time {
+	if c.Now != nil {
+		return c.Now()
+	}
+	return fixed
 }

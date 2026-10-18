@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/wasichu/go-whassup/internal/config"
+	"github.com/wasichu/go-whassup/internal/demo"
 	"github.com/wasichu/go-whassup/internal/encryption"
 	"github.com/wasichu/go-whassup/internal/headless"
 	"github.com/wasichu/go-whassup/internal/logging"
@@ -44,6 +45,9 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 	if inv.version {
 		_, err := fmt.Fprintln(stdio.Out, "go-whassup", version())
 		return err
+	}
+	if inv.cmd == "demo" {
+		return demo.Run(ctx) // touches none of the real config, data or log
 	}
 	p, err := paths.Resolve()
 	if err != nil {

@@ -14,7 +14,8 @@ cmd/go-whassup (main: signals + exit code only)
          ├─► internal/media     attachment cache, opener, saving copies
          ├─► internal/store     messages.db + Recorder      │
          └─► internal/wa        whatsmeow adapter         ◄─┘     └─► session.db
-                internal/wa/watest   fake wa.Client for tests
+                internal/wa/watest   fake wa.Client for tests and the demo
+                internal/demo        `go-whassup demo`: TUI on fictional, temporary data
                 internal/sqlite      shared SQLite open (driver, DSN, 0600) for both DBs
 ```
 

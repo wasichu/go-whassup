@@ -93,6 +93,7 @@ internal/crypt/      AES-256-GCM (with associated data), key wrapping, Argon2id
 internal/encryption/ at-rest encryption while running: key sources, unlock/create, the
                      Controller (re-seal at startup or live from Settings)
 internal/keysource/  keyring (security/secret-tool via stdin), password_command, prompt
+internal/demo/       `go-whassup demo`: the real TUI on seeded, fictional chats via watest (temp dir)
 internal/ui/         Bubble Tea models + Run. Root Model routes; screens other than main/login
                      implement `page` (page.go). Imports internal/wa, never whatsmeow.
 ```
