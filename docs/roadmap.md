@@ -17,7 +17,7 @@ step lands or the plan changes.
    - `wa-tui db chats` / `db messages`;
    - `wa-tui login -relink` to unlink and pair again.
 
-## In progress: step 3, minimal TUI (built; final live tests pending)
+## Done: step 3, minimal TUI (verified live 2026-10-18)
 
 - [x] Sending: `wa.SendText` (emitted as an event); push name announced as
   "unavailable" on connect.
@@ -25,9 +25,9 @@ step lands or the plan changes.
   connection state in the status line. Verified live.
 - [x] Keymap with generated hints and a `?` overlay.
 - [x] Login screen: phone code, QR choice (`rsc.io/qr`, half-blocks), Re-link, esc to
-  cancel. *(QR scan and TUI pairing: live test pending.)*
-- [x] Inline QR image via Kitty graphics (Ghostty/kitty), text-block fallback.
-  *(Live test pending.)*
+  cancel. Verified live: TUI re-link and QR scan.
+- [x] Inline QR image via Kitty graphics (Ghostty/kitty, including through tmux with
+  passthrough), text-block fallback. Verified live in Ghostty + tmux 3.8.
 - [x] Settings screen: generic over `Config.Fields()`, validated, saved atomically and
   applied live. *(Live test pending.)*
 - **Login screen:**
