@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"os"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -376,16 +375,4 @@ func (s *settings) footer(width int) string {
 		parts = append(parts, "", onlineStyle.Render(s.saved))
 	}
 	return strings.Join(parts, "\n")
-}
-
-// tildePath shortens a path under the home directory to ~/....
-func tildePath(p string) string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return p
-	}
-	if rest, ok := strings.CutPrefix(p, home+string(os.PathSeparator)); ok {
-		return "~/" + rest
-	}
-	return p
 }
