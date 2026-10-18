@@ -86,6 +86,21 @@ There are two kinds of consumers:
   whatsmeow's `ParseWebMessage`. Empty batches aren't emitted. App-state sync,
   receipts and presence are still only logged at debug level.
 
+## TUI structure (`internal/ui`)
+
+- **One root `Model`** with a `screen` (main, login), a `?` help overlay, and sub-state
+  per screen (`chatList`, `conversation`, `login`). Everything changes only in `Update`.
+- **`keys.go` is the single keymap.** Handlers use `key.Matches`, and hints/help render
+  the same bindings with `bubbles/help`.
+- **Focus gates shortcuts.** Keys reach the message input only when it's focused, and
+  global shortcuts only fire from the list.
+- **Colours** use the 16-colour ANSI palette, so they follow the user's terminal
+  theme. The only fixed colours are the QR's black/white, because scanners need them
+  and themes remap ANSI black/white.
+- **Pairing** commands use the app-lifetime context (it bounds the resulting
+  connection). Esc cancels with `wa.Client.CancelPairing`, never by cancelling that
+  context.
+
 ## Terminal ownership
 
 While the TUI runs, Bubble Tea owns stdout/stderr. All logging goes through `slog`

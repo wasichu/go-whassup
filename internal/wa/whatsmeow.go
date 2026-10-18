@@ -221,6 +221,11 @@ func (w *WhatsApp) startPairing(ctx context.Context) (<-chan whatsmeow.QRChannel
 		return nil, ErrAlreadyPaired
 	}
 	w.CancelPairing() // at most one pairing at a time
+	// After a remote logout whatsmeow has deleted the device; its stores
+	// are no-ops, so pair on a fresh one.
+	if w.client().Store.Deleted {
+		w.setDevice(w.container.NewDevice())
+	}
 	w.applyDeviceProps()
 
 	pairCtx, cancel := context.WithCancel(ctx)

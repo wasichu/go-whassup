@@ -18,4 +18,5 @@ var (
 	statusStyle    = lipgloss.NewStyle().Foreground(muted)
 	errorStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
 	onlineStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	codeStyle      = lipgloss.NewStyle().Bold(true).Foreground(accent).Padding(0, 2)
 )

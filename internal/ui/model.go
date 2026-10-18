@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -17,6 +19,13 @@ import (
 
 // Minimum usable terminal size.
 const minWidth, minHeight = 60, 12
+
+type screen int
+
+const (
+	screenMain screen = iota
+	screenLogin
+)
 
 type focus int
 
@@ -42,6 +51,8 @@ type Model struct {
 	sub  *wa.Subscription
 
 	width, height int
+	screen        screen
+	showHelp      bool
 	focus         focus
 	conn          connState
 	notice        string // last error or hint, shown in the status line
@@ -49,15 +60,21 @@ type Model struct {
 
 	chats chatList
 	conv  conversation
+	login login
+	help  help.Model
 }
 
 // New returns the root model. sub must be a subscription on deps.Client,
 // registered after any store recorder so events are stored before the UI
 // reloads from the store.
 func New(ctx context.Context, deps Deps, sub *wa.Subscription) Model {
-	m := Model{ctx: ctx, deps: deps, sub: sub, conv: newConversation(), conn: connConnecting}
+	h := help.New()
+	h.Styles.ShortKey, h.Styles.FullKey = statusStyle.Bold(true), senderStyle
+	h.Styles.ShortDesc, h.Styles.ShortSeparator = statusStyle, statusStyle
+	m := Model{ctx: ctx, deps: deps, sub: sub, conv: newConversation(), login: newLogin(), conn: connConnecting, help: h}
 	if !deps.Client.IsPaired() {
 		m.conn = connNotPaired
+		m = m.openLogin("")
 	}
 	return m
 }
@@ -74,12 +91,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m.help.SetWidth(msg.Width)
 		m.layout()
 		return m, nil
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	case eventMsg:
 		return m.handleEvent(msg.evt)
+	case pairCodeMsg, pairQRStartedMsg, logoutMsg:
+		return m.loginResult(msg)
 	case chatsLoadedMsg:
 		if msg.err != nil {
 			m.setError("loading chats", msg.err)
@@ -119,36 +139,46 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Anything else (e.g. cursor blink) goes to the focused input.
-	if m.focus == focusInput {
-		var cmd tea.Cmd
+	// Anything else (e.g. cursor blink) goes to whichever input has focus.
+	var cmd tea.Cmd
+	switch {
+	case m.screen == screenLogin && m.login.step == loginPhone:
+		m.login.phone, cmd = m.login.phone.Update(msg)
+	case m.screen == screenMain && m.focus == focusInput:
 		m.conv.input, cmd = m.conv.input.Update(msg)
-		return m, cmd
 	}
-	return m, nil
+	return m, cmd
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	key := msg.String()
-	if key == "ctrl+c" {
+	if key.Matches(msg, keys.ForceQuit) {
+		m.deps.Client.CancelPairing()
 		return m, tea.Quit
 	}
-	switch key {
-	case "pgup":
+	if m.showHelp {
+		m.showHelp = false // any key closes the overlay
+		return m, nil
+	}
+	if m.screen == screenLogin {
+		return m.loginKey(msg)
+	}
+
+	switch {
+	case key.Matches(msg, keys.PageUp):
 		m.conv.viewport.PageUp()
 		return m, nil
-	case "pgdown":
+	case key.Matches(msg, keys.PageDown):
 		m.conv.viewport.PageDown()
 		return m, nil
 	}
 
 	if m.focus == focusInput {
-		switch key {
-		case "esc":
+		switch {
+		case key.Matches(msg, keys.Blur):
 			m.focus = focusList
 			m.conv.input.Blur()
 			return m, nil
-		case "enter":
+		case key.Matches(msg, keys.Send):
 			text := strings.TrimSpace(m.conv.input.Value())
 			if text == "" || m.conv.chat.JID == "" {
 				return m, nil
@@ -157,20 +187,24 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.notice = ""
 			return m, send(m.ctx, m.deps.Client, m.conv.chat.JID, text)
 		}
-		// Only the focused input sees typing, so "q" here is just a letter.
+		// Only the focused input sees typing, so q , ? L are just characters.
 		var cmd tea.Cmd
 		m.conv.input, cmd = m.conv.input.Update(msg)
 		return m, cmd
 	}
 
-	switch key {
-	case "q":
+	switch {
+	case key.Matches(msg, keys.Quit):
 		return m, tea.Quit
-	case "up", "k":
+	case key.Matches(msg, keys.Help):
+		m.showHelp = true
+	case key.Matches(msg, keys.Login):
+		return m.openLogin(""), nil
+	case key.Matches(msg, keys.Up):
 		return m.selectChat(-1)
-	case "down", "j":
+	case key.Matches(msg, keys.Down):
 		return m.selectChat(1)
-	case "enter", "tab", "right", "l":
+	case key.Matches(msg, keys.Open):
 		if m.conv.chat.JID == "" {
 			return m, nil
 		}
@@ -191,14 +225,22 @@ func (m Model) selectChat(delta int) (tea.Model, tea.Cmd) {
 
 func (m Model) handleEvent(evt wa.Event) (tea.Model, tea.Cmd) {
 	next := waitEvent(m.ctx, m.sub)
+	if m.screen == screenLogin {
+		var done bool
+		if m, done = m.loginEvent(evt); done {
+			m.screen = screenMain
+			m.notice, m.noticeIsErr = "Linked. History will appear as your phone sends it.", false
+		}
+	}
 	switch v := evt.(type) {
 	case wa.Connected:
 		m.conn = connOnline
+		return m, tea.Batch(next, loadChats(m.ctx, m.deps.Store))
 	case wa.Disconnected:
 		m.conn = connOffline
 	case wa.LoggedOut:
 		m.conn = connLoggedOut
-		m.notice, m.noticeIsErr = "Logged out ("+v.Reason+"). Run `wa-tui login -relink` to pair again.", true
+		m = m.openLogin("Logged out by WhatsApp (" + v.Reason + "). Link again to keep receiving messages.")
 	case wa.Message:
 		// The recorder stored it before this event reached us; reload.
 		cmds := []tea.Cmd{next, loadChats(m.ctx, m.deps.Store)}
@@ -244,12 +286,26 @@ func (m Model) render() string {
 	if m.width < minWidth || m.height < minHeight {
 		return fmt.Sprintf("Terminal too small (%dx%d); need at least %dx%d.", m.width, m.height, minWidth, minHeight)
 	}
-	mainH := m.height - 1
-	left := m.chats.view(m.listWidth(), mainH, m.focus == focusList)
-	sep := separatorStyle.Render(strings.TrimSuffix(strings.Repeat("│\n", mainH), "\n"))
-	right := m.conv.view(m.width-m.listWidth()-1, mainH)
-	body := lipgloss.JoinHorizontal(lipgloss.Top, left, sep, right)
+	bodyH := m.height - 1
+	var body string
+	switch {
+	case m.showHelp:
+		body = m.helpView(bodyH)
+	case m.screen == screenLogin:
+		body = m.loginView(m.width, bodyH)
+	default:
+		left := m.chats.view(m.listWidth(), bodyH, m.focus == focusList)
+		sep := separatorStyle.Render(strings.TrimSuffix(strings.Repeat("│\n", bodyH), "\n"))
+		right := m.conv.view(m.width-m.listWidth()-1, bodyH)
+		body = lipgloss.JoinHorizontal(lipgloss.Top, left, sep, right)
+	}
 	return body + "\n" + m.statusLine()
+}
+
+func (m Model) helpView(height int) string {
+	content := paneTitleStyle.Render("Keys") + "\n\n" + m.help.FullHelpView(fullMainHelp) +
+		"\n\n" + faintStyle.Render("q , ? and L only act from the chat list; in the message box they're typed. Press any key to close.")
+	return lipgloss.NewStyle().Width(m.width).Height(height).MaxHeight(height).Padding(0, 1).Render(content)
 }
 
 func (m Model) statusLine() string {
@@ -262,7 +318,10 @@ func (m Model) statusLine() string {
 	case connOffline:
 		state = errorStyle.Render("○ offline")
 	case connNotPaired:
-		state = errorStyle.Render("○ not paired: run `wa-tui login`")
+		state = errorStyle.Render("○ not linked")
+		if m.screen != screenLogin {
+			state = errorStyle.Render("○ not linked: press L")
+		}
 	case connLoggedOut:
 		state = errorStyle.Render("○ logged out")
 	}
@@ -277,10 +336,30 @@ func (m Model) statusLine() string {
 		}
 		parts = append(parts, style.Render(m.notice))
 	}
-	hints := "↑↓ chats · enter write · q quit"
-	if m.focus == focusInput {
-		hints = "enter send · esc chats · pgup/pgdn scroll"
-	}
-	parts = append(parts, statusStyle.Render(hints))
+	parts = append(parts, m.help.ShortHelpView(m.contextHelp()))
 	return lipgloss.NewStyle().MaxWidth(m.width).Render(strings.Join(parts, "  "))
+}
+
+// contextHelp returns the bindings that apply right now.
+func (m Model) contextHelp() []key.Binding {
+	switch {
+	case m.showHelp:
+		return nil
+	case m.screen == screenLogin:
+		switch m.login.step {
+		case loginPhone, loginFailed:
+			return formHelp
+		case loginRequesting, loginCode, loginQR:
+			return waitHelp
+		case loginUnlinking, loginFinishing:
+			return nil
+		case loginConfirm:
+			return []key.Binding{keys.Back}
+		}
+		return menuHelp
+	case m.focus == focusInput:
+		return inputHelp
+	default:
+		return listHelp
+	}
 }

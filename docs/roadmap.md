@@ -22,8 +22,10 @@ step lands or the plan changes.
 - [x] Sending: `wa.SendText` (emitted as an event); push name announced as
   "unavailable" on connect.
 - [x] Chat list | message pane | input; send text; works offline from the store;
-  connection state in the status line. *(Live test pending.)*
-- [ ] Login screen, Re-link, QR choice (below).
+  connection state in the status line. Verified live.
+- [x] Keymap with generated hints and a `?` overlay.
+- [x] Login screen: phone code, QR choice (`rsc.io/qr`, half-blocks), Re-link, esc to
+  cancel. *(QR scan and TUI pairing: live test pending.)*
 - [ ] Settings screen (below).
 - **Login screen:**
   - Phone-code pairing (the step-1 flow) by default.

@@ -1,0 +1,49 @@
+package ui
+
+import "charm.land/bubbles/v2/key"
+
+// keys is the single source of truth for key bindings: handlers match
+// against it and the status-line hints and ? overlay are generated from it.
+var keys = struct {
+	// Chat list (main screen, list focused).
+	Up, Down, Open, Quit, Login, Settings, Help key.Binding
+	// Message input focused.
+	Send, Blur key.Binding
+	// Main screen, either focus.
+	PageUp, PageDown key.Binding
+	// Lists on the login and settings screens.
+	Select, Back, Submit, Cancel key.Binding
+	// Everywhere.
+	ForceQuit key.Binding
+}{
+	Up:        key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "previous")),
+	Down:      key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "next")),
+	Open:      key.NewBinding(key.WithKeys("enter", "tab", "right", "l"), key.WithHelp("enter", "write")),
+	Quit:      key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+	Login:     key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "link/re-link")),
+	Settings:  key.NewBinding(key.WithKeys(","), key.WithHelp(",", "settings")),
+	Help:      key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
+	Send:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "send")),
+	Blur:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "chats")),
+	PageUp:    key.NewBinding(key.WithKeys("pgup"), key.WithHelp("pgup", "scroll up")),
+	PageDown:  key.NewBinding(key.WithKeys("pgdown"), key.WithHelp("pgdn", "scroll down")),
+	Select:    key.NewBinding(key.WithKeys("enter", " "), key.WithHelp("enter", "select")),
+	Back:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
+	Submit:    key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "continue")),
+	Cancel:    key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
+	ForceQuit: key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("ctrl+c", "quit")),
+}
+
+// Binding sets per context, rendered with help.ShortHelpView/FullHelpView.
+var (
+	listHelp     = []key.Binding{keys.Up, keys.Down, keys.Open, keys.Login, keys.Help, keys.Quit}
+	inputHelp    = []key.Binding{keys.Send, keys.Blur, keys.PageUp, keys.PageDown}
+	menuHelp     = []key.Binding{keys.Up, keys.Down, keys.Select, keys.Back}
+	formHelp     = []key.Binding{keys.Submit, keys.Back}
+	waitHelp     = []key.Binding{keys.Cancel}
+	fullMainHelp = [][]key.Binding{
+		{keys.Up, keys.Down, keys.Open, keys.Quit},
+		{keys.Send, keys.Blur, keys.PageUp, keys.PageDown},
+		{keys.Login, keys.Help, keys.ForceQuit},
+	}
+)

@@ -1,0 +1,329 @@
+package ui
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+
+	"github.com/wasichu/go-whassup/internal/wa"
+)
+
+type loginStep int
+
+const (
+	loginChoose     loginStep = iota // pick a method, or re-link when paired
+	loginConfirm                     // confirm re-link
+	loginUnlinking                   // Logout in flight
+	loginPhone                       // entering the phone number
+	loginRequesting                  // waiting for the server's pairing code
+	loginCode                        // code shown; waiting for the phone
+	loginQR                          // QR shown; waiting for a scan
+	loginFinishing                   // linked; waiting for Connected
+	loginFailed
+)
+
+type loginOption int
+
+const (
+	optPhone loginOption = iota
+	optQR
+	optRelink
+)
+
+// login is the login screen's state. It lives in Model and changes only
+// in Update.
+type login struct {
+	step    loginStep
+	choice  int
+	phone   textinput.Model
+	code    string // phone pairing code
+	qr      string // current QR payload
+	notice  string // context or result, e.g. "Logged out by the phone"
+	err     string
+	jid     string // linked account, after PairSuccess
+	unlinkd bool   // last re-link removed the device from the phone
+}
+
+func newLogin() login {
+	in := textinput.New()
+	in.Prompt = "Phone: "
+	in.Placeholder = "+1 555 123 4567"
+	in.SetVirtualCursor(true)
+	in.CharLimit = 32
+	in.SetWidth(24)
+	return login{phone: in}
+}
+
+// options lists what the choose step offers.
+func (l login) options(paired bool) []loginOption {
+	if paired {
+		return []loginOption{optRelink}
+	}
+	return []loginOption{optPhone, optQR}
+}
+
+func (o loginOption) label() string {
+	switch o {
+	case optPhone:
+		return "Link with a phone number code"
+	case optQR:
+		return "Link with a QR code"
+	default:
+		return "Re-link this device (unlink it, then pair again)"
+	}
+}
+
+// Commands. Pairing uses the app-lifetime ctx: it bounds the connection a
+// successful pairing leaves behind. Cancelling uses CancelPairing instead.
+type (
+	pairCodeMsg struct {
+		code string
+		err  error
+	}
+	pairQRStartedMsg struct{ err error }
+	logoutMsg        struct {
+		phoneUnlinked bool
+		err           error
+	}
+)
+
+func pairPhone(ctx context.Context, client wa.Client, phone string) tea.Cmd {
+	return func() tea.Msg {
+		code, err := client.Pair(ctx, phone)
+		return pairCodeMsg{code: code, err: err}
+	}
+}
+
+func pairQR(ctx context.Context, client wa.Client) tea.Cmd {
+	return func() tea.Msg { return pairQRStartedMsg{err: client.PairQR(ctx)} }
+}
+
+func logout(ctx context.Context, client wa.Client) tea.Cmd {
+	return func() tea.Msg {
+		unlinked, err := client.Logout(ctx)
+		return logoutMsg{phoneUnlinked: unlinked, err: err}
+	}
+}
+
+func cancelPairing(client wa.Client) tea.Cmd {
+	return func() tea.Msg { client.CancelPairing(); return nil }
+}
+
+// openLogin shows the login screen, starting from the choose step.
+func (m Model) openLogin(notice string) Model {
+	m.screen = screenLogin
+	m.login = newLogin()
+	m.login.notice = notice
+	m.focus = focusList
+	m.conv.input.Blur()
+	return m
+}
+
+func (m Model) loginKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	l := &m.login
+	waiting := l.step == loginRequesting || l.step == loginCode || l.step == loginQR
+
+	if key.Matches(msg, keys.Back) {
+		switch {
+		case waiting:
+			// First esc cancels the pairing; a second leaves the screen.
+			l.step, l.code, l.qr, l.err = loginChoose, "", "", ""
+			return m, cancelPairing(m.deps.Client)
+		case l.step == loginPhone || l.step == loginConfirm || l.step == loginFailed:
+			l.step, l.err = loginChoose, ""
+			return m, nil
+		case l.step == loginUnlinking || l.step == loginFinishing:
+			return m, nil // can't abandon these halfway
+		}
+		m.screen = screenMain
+		return m, nil
+	}
+
+	switch l.step {
+	case loginChoose:
+		opts := l.options(m.deps.Client.IsPaired())
+		switch {
+		case key.Matches(msg, keys.Up):
+			l.choice = max(l.choice-1, 0)
+		case key.Matches(msg, keys.Down):
+			l.choice = min(l.choice+1, len(opts)-1)
+		case key.Matches(msg, keys.Select):
+			switch opts[min(l.choice, len(opts)-1)] {
+			case optPhone:
+				l.step = loginPhone
+				return m, l.phone.Focus()
+			case optQR:
+				l.step, l.err = loginQR, ""
+				return m, pairQR(m.ctx, m.deps.Client)
+			case optRelink:
+				l.step = loginConfirm
+			}
+		}
+	case loginConfirm:
+		if msg.String() == "y" {
+			l.step = loginUnlinking
+			return m, logout(m.ctx, m.deps.Client)
+		}
+		if msg.String() == "n" {
+			l.step = loginChoose
+		}
+	case loginPhone:
+		if key.Matches(msg, keys.Select) && msg.String() == "enter" {
+			if _, err := wa.NormalizePhone(l.phone.Value()); err != nil {
+				l.err = err.Error()
+				return m, nil
+			}
+			l.step, l.err = loginRequesting, ""
+			return m, pairPhone(m.ctx, m.deps.Client, l.phone.Value())
+		}
+		var cmd tea.Cmd
+		l.phone, cmd = l.phone.Update(msg)
+		return m, cmd
+	case loginFailed:
+		if key.Matches(msg, keys.Select) {
+			l.step, l.err = loginChoose, ""
+		}
+	}
+	return m, nil
+}
+
+// loginResult handles the login commands' results.
+func (m Model) loginResult(msg tea.Msg) (Model, tea.Cmd) {
+	l := &m.login
+	switch msg := msg.(type) {
+	case pairCodeMsg:
+		if l.step != loginRequesting {
+			return m, nil // cancelled meanwhile
+		}
+		if msg.err != nil {
+			l.step, l.err = loginFailed, msg.err.Error()
+			return m, nil
+		}
+		l.step, l.code = loginCode, msg.code
+	case pairQRStartedMsg:
+		if msg.err != nil && l.step == loginQR {
+			l.step, l.err = loginFailed, msg.err.Error()
+		}
+	case logoutMsg:
+		if msg.err != nil && !errors.Is(msg.err, wa.ErrNotPaired) {
+			l.step, l.err = loginFailed, "unlinking: "+msg.err.Error()
+			return m, nil
+		}
+		l.unlinkd = msg.phoneUnlinked
+		l.notice = "Unlinked. Your stored messages are kept."
+		if !msg.phoneUnlinked {
+			l.notice = "Couldn't reach WhatsApp, so only the local session was deleted.\nRemove the old go-whassup entry from your phone's Linked devices."
+		}
+		l.step, l.choice = loginChoose, 0
+		m.conn = connNotPaired
+	}
+	return m, nil
+}
+
+// loginEvent updates the login screen from a protocol event. done reports
+// that pairing finished and the main screen should take over.
+func (m Model) loginEvent(evt wa.Event) (Model, bool) {
+	l := &m.login
+	switch v := evt.(type) {
+	case wa.PairQRCode:
+		if l.step == loginQR {
+			l.qr = v.Code
+		}
+	case wa.PairSuccess:
+		l.step, l.jid = loginFinishing, v.JID
+	case wa.PairFailed:
+		if l.step == loginCode || l.step == loginQR || l.step == loginRequesting {
+			l.step, l.err = loginFailed, v.Reason
+		}
+	case wa.Connected:
+		if l.step == loginFinishing {
+			return m, true
+		}
+	}
+	return m, false
+}
+
+func (m Model) loginView(width, height int) string {
+	l := m.login
+	title := paneTitleStyle.Render("Link go-whassup to WhatsApp")
+	var body []string
+	if l.notice != "" {
+		body = append(body, faintStyle.Render(l.notice), "")
+	}
+
+	switch l.step {
+	case loginChoose:
+		paired := m.deps.Client.IsPaired()
+		if paired {
+			body = append(body, "This device is linked.", "")
+		}
+		for i, o := range l.options(paired) {
+			line := "  " + o.label()
+			if i == l.choice {
+				line = activeSelStyle.Render("› " + o.label())
+			}
+			body = append(body, line)
+		}
+	case loginConfirm:
+		body = append(body,
+			"Re-link removes go-whassup from your phone's Linked devices and deletes",
+			"the session here, then pairs again. Your stored messages are kept, and",
+			"the phone sends a fresh history sync.",
+			"", senderStyle.Render("Re-link now? (y/n)"))
+	case loginUnlinking:
+		body = append(body, "Unlinking…")
+	case loginPhone:
+		body = append(body, "Your WhatsApp number, with country code:", "", l.phone.View())
+	case loginRequesting:
+		body = append(body, "Requesting a pairing code…")
+	case loginCode:
+		body = append(body,
+			"On your phone: Settings › Linked devices › Link a device ›",
+			"“Link with phone number instead”, then enter:", "",
+			codeStyle.Render(spaced(l.code)), "",
+			faintStyle.Render("The code expires in about 3 minutes."))
+	case loginQR:
+		body = append(body, m.qrView(width, height-4)...)
+	case loginFinishing:
+		body = append(body, onlineStyle.Render("Linked as "+l.jid), "Finishing setup…")
+	case loginFailed:
+		body = append(body, errorStyle.Render("Pairing failed: "+l.err), "", "Press enter to try again.")
+	}
+	if l.err != "" && l.step == loginPhone {
+		body = append(body, "", errorStyle.Render(l.err))
+	}
+	content := title + "\n\n" + strings.Join(body, "\n")
+	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Padding(0, 1).Render(content)
+}
+
+func (m Model) qrView(width, height int) []string {
+	l := m.login
+	if l.qr == "" {
+		return []string{"Generating a QR code…"}
+	}
+	qr, w, h, err := renderQR(l.qr)
+	if err != nil {
+		return []string{errorStyle.Render(err.Error())}
+	}
+	if w > width-2 || h+2 > height {
+		return []string{
+			errorStyle.Render(fmt.Sprintf("The QR code needs a %dx%d terminal; this one is %dx%d.", w+4, h+8, m.width, m.height)),
+			"Enlarge the window, or press esc and link with a phone number code.",
+		}
+	}
+	return []string{
+		"On your phone: Settings › Linked devices › Link a device, then scan:", "",
+		qr,
+	}
+}
+
+// spaced renders "ABCD-EFGH" as "A B C D - E F G H" for easier reading.
+func spaced(code string) string {
+	return strings.Join(strings.Split(code, ""), " ")
+}

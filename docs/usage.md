@@ -29,16 +29,35 @@ wa-tui db messages [-n N] <chat>    show a stored chat's newest N messages (defa
 
 ## TUI
 
-Left: chats, most recent first. Right: the selected chat's messages and an input box.
-The TUI works offline from `messages.db`, connects in the background, and shows the
-connection state in the status line. Pairing still happens via `wa-tui login` until
-the login screen lands.
+`wa-tui` opens on the **chat list** (left) and the selected chat (right). It works
+offline from `messages.db` and connects in the background; the connection state is in
+the status line. If the device isn't linked, it opens the **login screen** instead.
 
-| Key | Chat list focused | Input focused |
+### Main screen
+
+| Key | Chat list focused | Message box focused |
 | --- | --- | --- |
-| `↑`/`↓`, `k`/`j` | select chat | (typing) |
-| `enter`, `tab`, `→`, `l` | write in this chat | send message |
+| `↑`/`↓`, `k`/`j` | select chat | (typed) |
+| `enter`, `tab`, `→`, `l` | write in this chat | `enter` sends |
 | `esc` | | back to chat list |
 | `pgup`/`pgdn` | scroll messages | scroll messages |
-| `q` | quit | (typing) |
+| `L` | login screen: link, or re-link | (typed) |
+| `?` | key help (any key closes) | (typed) |
+| `q` | quit | (typed) |
 | `ctrl+c` | quit | quit |
+
+Shortcuts only act from the chat list. In the message box `q`, `L` and `?` are just
+characters. Hints in the status line are generated from the same keymap as the
+handlers (`internal/ui/keys.go`), so they can't drift.
+
+### Login screen
+
+- **Not linked:** choose *phone number code* (type your number and enter the
+  8-character code on the phone) or *QR code* (scan from Linked devices › Link a device).
+  - The QR is drawn black-on-white whatever your theme, and needs roughly a 61×37
+    terminal. If the window is smaller, the screen says so; use the phone code instead.
+- **Linked:** *Re-link*, after a y/n confirmation. It does the same as
+  `wa-tui login -relink`.
+- **Esc:** while waiting for the code or a scan, cancels pairing; otherwise goes back.
+- **After you're logged out remotely** (e.g. from the phone), the login screen opens with
+  the reason.
