@@ -103,6 +103,12 @@ agent are fine, a curses pinentry is not.
 | `enabled` | `true` | Raise a desktop notification for new messages while the terminal isn't focused (not for muted chats). See `usage.md` › "Desktop notifications". |
 | `preview` | `"full"` | What a notification shows: `full` = chat, sender and text; `sender` = who wrote, not what; `none` = only that a message arrived. Your OS may keep notifications in its history. |
 
+### `[media]`
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `save_dir` | `"~/Downloads/go-whassup"` | Where `d` in the attachments view saves a copy. Created `0700`; copies are `0600` and never overwrite (`name (1).ext`). Copies aren't encrypted, even with encryption on. |
+
 ## Planned sections
 
 - More `[ui]` settings: theme and keybindings, as the TUI grows.

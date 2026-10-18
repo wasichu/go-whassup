@@ -33,8 +33,11 @@ type attach struct {
 }
 
 type (
+	// mediaOpenedMsg reports an attachment fetched and opened, or (save)
+	// fetched and copied to the save folder (path is the copy).
 	mediaOpenedMsg struct {
 		chat, id, path string
+		save           bool
 		err            error
 	}
 	fileSentMsg struct{ err error }
@@ -77,7 +80,9 @@ func (p *picker) key(r rootAPI, k tea.KeyPressMsg) (bool, tea.Cmd) {
 	case key.Matches(k, keys.Down):
 		return false, p.move(r, 1)
 	case key.Matches(k, keys.Select):
-		return false, r.download(p.items[p.selected])
+		return false, r.download(p.items[p.selected], false)
+	case key.Matches(k, saveKey):
+		return false, r.download(p.items[p.selected], true)
 	}
 	return false, nil
 }
@@ -123,12 +128,12 @@ func attachmentPreview(cache MediaCache, chat string, it wa.Message, cols, rows 
 	return previewBytes(it.Media.Thumbnail, cols, rows)
 }
 
-func (*picker) help() []key.Binding { return menuHelp }
+func (*picker) help() []key.Binding { return pickerHelp }
 
 // download fetches (if not cached) and opens an attachment of the open
 // chat; the result arrives as mediaOpenedMsg, even if the picker has
 // closed by then.
-func (m *Model) download(item wa.Message) tea.Cmd {
+func (m *Model) download(item wa.Message, save bool) tea.Cmd {
 	if m.downloading[item.ID] {
 		return nil // already on its way
 	}
@@ -137,8 +142,31 @@ func (m *Model) download(item wa.Message) tea.Cmd {
 		return nil
 	}
 	m.downloading[item.ID] = true
+	if save {
+		m.notice, m.noticeIsErr = "Saving "+mediaLabel(item)+"…", false
+		return fetchAndSave(m.ctx, m.deps, m.conv.chat.JID, item)
+	}
 	m.notice, m.noticeIsErr = "Downloading "+mediaLabel(item)+"…", false
 	return fetchAndOpen(m.ctx, m.deps, m.conv.chat.JID, item)
+}
+
+// fetchAndSave downloads an attachment if it isn't cached, then copies it
+// to the save folder (config [media] save_dir) under a readable name.
+func fetchAndSave(ctx context.Context, deps Deps, chat string, msg wa.Message) tea.Cmd {
+	return func() tea.Msg {
+		out := mediaOpenedMsg{chat: chat, id: msg.ID, save: true}
+		cached, err := deps.Media.Fetch(ctx, deps.Client, chat, msg.ID, *msg.Media)
+		if err != nil {
+			out.err = err
+			return out
+		}
+		dir, err := expandHome(deps.Config.Media.SaveDir)
+		if err == nil {
+			out.path, err = media.SaveCopy(cached, dir, media.SaveName(*msg.Media, msg.Kind, msg.Timestamp))
+		}
+		out.err = err
+		return out
+	}
 }
 
 // fetchAndOpen downloads an attachment if it isn't cached, then opens it.
@@ -157,6 +185,13 @@ func (m Model) mediaOpened(msg mediaOpenedMsg) (Model, tea.Cmd) {
 	switch {
 	case errors.Is(msg.err, wa.ErrMediaExpired):
 		m.notice, m.noticeIsErr = "That file is no longer on WhatsApp's servers; ask the sender to send it again.", false
+	case msg.err != nil && msg.save:
+		m.setError("saving attachment", msg.err)
+	case msg.save:
+		m.notice, m.noticeIsErr = "Saved to "+tildePath(msg.path), false
+		if m.deps.Config.Encryption.Enabled {
+			m.notice += " (not encrypted)"
+		}
 	case errors.Is(msg.err, media.ErrNotOpenable):
 		// Lead with the outcome: the status line truncates long notices.
 		m.notice, m.noticeIsErr = "Not opened (unrecognised file type); saved to "+tildePath(msg.path), false

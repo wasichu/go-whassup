@@ -25,6 +25,12 @@ type Config struct {
 	Encryption Encryption `toml:"encryption" comment:"Encryption of stored messages at rest. See docs/storage.md."`
 	// Last, so existing settings keep their place in the Settings list.
 	Notifications Notifications `toml:"notifications" comment:"Desktop notifications for new messages. See docs/usage.md."`
+	Media         Media         `toml:"media" comment:"Attachments."`
+}
+
+// Media controls attachments.
+type Media struct {
+	SaveDir string `toml:"save_dir" text:"true" comment:"Where d in the attachments view saves a copy (~ is your home folder).\nCopies aren't encrypted, even with encryption on."`
 }
 
 // Preview modes for Notifications.Preview.
@@ -89,6 +95,7 @@ func Default() Config {
 		Privacy:       Privacy{MarkRead: MarkReadLocalOnly},
 		Encryption:    Encryption{KeySource: KeySourceKeyring},
 		Notifications: Notifications{Enabled: true, Preview: PreviewFull},
+		Media:         Media{SaveDir: "~/Downloads/go-whassup"},
 	}
 }
 
@@ -107,6 +114,9 @@ func (c Config) Validate() error {
 	case MarkReadLocalOnly, MarkReadReceiptsOff, MarkReadReceiptsOn:
 	default:
 		errs = append(errs, fmt.Errorf("privacy.mark_read must be %s, got %q", markReadChoicesForError, c.Privacy.MarkRead))
+	}
+	if strings.TrimSpace(c.Media.SaveDir) == "" {
+		errs = append(errs, errors.New("media.save_dir can't be empty"))
 	}
 	switch c.Notifications.Preview {
 	case PreviewFull, PreviewSender, PreviewNone:

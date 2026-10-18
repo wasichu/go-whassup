@@ -80,6 +80,8 @@ var (
 		key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "type a path")),
 		keys.Back,
 	}
+	saveKey          = key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "save a copy"))
+	pickerHelp       = []key.Binding{keys.Up, keys.Down, hint(keys.Select, "open"), saveKey, keys.Back}
 	settingsHelp     = []key.Binding{keys.Up, keys.Down, keys.Edit, settingsPrev, keys.Back}
 	mainHelpSections = []helpSection{
 		{"Chat list", []key.Binding{keys.Up, keys.Down, keys.Open, keys.Find, keys.Search, keys.Info, keys.Login, keys.Settings, keys.Help, keys.Quit}},

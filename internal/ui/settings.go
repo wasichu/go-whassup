@@ -304,7 +304,6 @@ func (s *settings) view(r rootAPI, width, height int) string {
 	if s.pass != nil {
 		return s.pass.view(width, height)
 	}
-	fields := s.shown().Fields()
 	if s.pending != nil {
 		// A confirmation gets the whole screen so it fits small terminals.
 		c := s.confirm
@@ -314,9 +313,23 @@ func (s *settings) view(r rootAPI, width, height int) string {
 			senderStyle.Render("n") + "  " + c.No
 		return pageStyle(width, height).Render(content)
 	}
-	var b strings.Builder
-	b.WriteString(paneTitleStyle.Render("Settings") + "  " + faintStyle.Render(tildePath(r.deps().ConfigPath)) + "\n")
+	// Measure the header and footer as wrapped inside the page's padding:
+	// the list scrolls so the selected setting's description and any
+	// message below it always fit.
+	inner := lipgloss.NewStyle().Width(max(width-2, 1))
+	head := inner.Render(paneTitleStyle.Render("Settings") + "  " + faintStyle.Render(tildePath(r.deps().ConfigPath)))
+	foot := inner.Render(s.footer(width))
+	rows := max(height-lipgloss.Height(head)-lipgloss.Height(foot), 3)
+	lines, at := s.fieldLines()
+	start := min(max(at-rows/2, 0), max(len(lines)-rows, 0))
+	list := strings.Join(lines[start:min(start+rows, len(lines))], "\n")
+	body := lipgloss.NewStyle().Height(rows).MaxHeight(rows).Render(list)
+	return pageStyle(width, height).Render(head + "\n" + body + "\n" + foot)
+}
 
+// fieldLines lists the settings by section, and which line is selected.
+func (s *settings) fieldLines() (lines []string, selectedLine int) {
+	fields := s.shown().Fields()
 	keyW := 0
 	for _, f := range fields {
 		keyW = max(keyW, lipgloss.Width(f.Key))
@@ -325,7 +338,7 @@ func (s *settings) view(r rootAPI, width, height int) string {
 	for i, f := range fields {
 		if f.Section != section {
 			section = f.Section
-			b.WriteString("\n" + senderStyle.Render("["+section+"]") + "\n")
+			lines = append(lines, "", senderStyle.Render("["+section+"]"))
 		}
 		value := f.Value()
 		if f.Kind == config.KindChoice {
@@ -337,26 +350,32 @@ func (s *settings) view(r rootAPI, width, height int) string {
 		row := "  " + f.Key + strings.Repeat(" ", keyW-lipgloss.Width(f.Key)) + "  " + value
 		if i == s.selected {
 			row = activeSelStyle.Render("›" + row[1:])
+			selectedLine = len(lines)
 		}
-		b.WriteString(row + "\n")
+		lines = append(lines, row)
 	}
+	return lines, selectedLine
+}
 
-	if s.selected < len(fields) {
+// footer is the selected setting's description, and the latest message.
+func (s *settings) footer(width int) string {
+	var parts []string
+	if fields := s.shown().Fields(); s.selected < len(fields) {
 		f := fields[s.selected]
-		b.WriteString("\n" + lipgloss.NewStyle().Width(min(width-4, 80)).Render(strings.ReplaceAll(f.Comment, "\n", " ")) + "\n")
+		parts = append(parts, "", lipgloss.NewStyle().Width(min(width-4, 80)).Render(strings.ReplaceAll(f.Comment, "\n", " ")))
 		if f.PairingOnly {
-			b.WriteString(faintStyle.Render("Applies the next time you link (L › Re-link).") + "\n")
+			parts = append(parts, faintStyle.Render("Applies the next time you link (L › Re-link)."))
 		}
 	}
 	switch {
 	case s.err != "":
-		b.WriteString("\n" + errorStyle.Render(s.err) + "\n")
+		parts = append(parts, "", lipgloss.NewStyle().Width(min(width-4, 80)).Render(errorStyle.Render(s.err)))
 	case s.busy != "":
-		b.WriteString("\n" + faintStyle.Render(s.busy) + "\n")
+		parts = append(parts, "", faintStyle.Render(s.busy))
 	case s.saved != "":
-		b.WriteString("\n" + onlineStyle.Render(s.saved) + "\n")
+		parts = append(parts, "", onlineStyle.Render(s.saved))
 	}
-	return pageStyle(width, height).Render(b.String())
+	return strings.Join(parts, "\n")
 }
 
 // tildePath shortens a path under the home directory to ~/....

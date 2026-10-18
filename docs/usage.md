@@ -121,6 +121,13 @@ names stay readable on disk.**
     opened**; the status line says where it was saved.
   - Media older than WhatsApp keeps on its servers can't be downloaded; you'll be told
     to ask the sender to resend it.
+  - Where the terminal can show images, a **preview** appears beside the list: the
+    downloaded photo, else WhatsApp's small embedded thumbnail (photos, videos and
+    documents received from now on), so nothing is downloaded just to preview.
+  - **`d` saves a copy** to `[media] save_dir` (default `~/Downloads/go-whassup`) under
+    the sender's file name, or a name like `WhatsApp Image 2026-10-18 at 17.38.12.jpg`.
+    It never overwrites, and the extension is always one from the allowlist below.
+    Copies aren't encrypted.
 - **`ctrl+t`** (in the message box) sends a file. Where the terminal can show images (Kitty graphics: Ghostty,
   kitty; with true color and `[ui] inline_images` on) it opens a **file browser**:
   `↑`/`↓` choose, `enter` opens a folder or picks a file, `←` goes up, `.` shows hidden

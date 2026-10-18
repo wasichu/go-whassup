@@ -259,3 +259,32 @@ func TestAttachmentsPreviewThumbnails(t *testing.T) {
 		t.Error("esc should close attachments")
 	}
 }
+
+func TestSaveAttachmentCopy(t *testing.T) {
+	h := newHarness(t, true)
+	h.client.DownloadData = []byte("%PDF-1.7")
+	save := filepath.Join(t.TempDir(), "Downloads", "go-whassup")
+	m := h.model()
+	m.deps.Config.Media.SaveDir = save
+	h.m = m
+	h.seedAttachment("doc1", "report.pdf")
+	h.key("enter") // into the message box
+	h.key("ctrl+o")
+	h.key("d")
+	h.settle()
+	data, err := os.ReadFile(filepath.Join(save, "report.pdf"))
+	if err != nil || string(data) != "%PDF-1.7" {
+		t.Fatalf("saved copy = %q, %v", data, err)
+	}
+	if n := h.model().notice; !strings.HasPrefix(n, "Saved to ") || !strings.HasSuffix(n, "report.pdf") {
+		t.Errorf("notice = %q", n)
+	}
+	h.key("d") // again: a second copy, not an overwrite
+	h.settle()
+	if _, err := os.Stat(filepath.Join(save, "report (1).pdf")); err != nil {
+		t.Errorf("second save: %v", err)
+	}
+	if h.client.Downloads() != 1 {
+		t.Errorf("downloads = %d; the second save should use the cached file", h.client.Downloads())
+	}
+}

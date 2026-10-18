@@ -101,4 +101,5 @@ func (r rootAPI) attachPath(path string, toCaption bool) tea.Cmd {
 }
 
 // download fetches and opens an attachment (see Model.download).
-func (r rootAPI) download(item wa.Message) tea.Cmd { return r.m.download(item) }
+// (save: copy it to the save folder instead of opening it.)
+func (r rootAPI) download(item wa.Message, save bool) tea.Cmd { return r.m.download(item, save) }

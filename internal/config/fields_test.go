@@ -12,7 +12,7 @@ func TestFieldsDiscoveryAndEditing(t *testing.T) {
 	for _, f := range fields {
 		names = append(names, f.Name())
 	}
-	want := "history.request_full_sync history.full_sync_days history.keep_days history.max_messages_per_chat ui.inline_images privacy.mark_read encryption.enabled encryption.key_source notifications.enabled notifications.preview" // password_command only with key_source = password-command
+	want := "history.request_full_sync history.full_sync_days history.keep_days history.max_messages_per_chat ui.inline_images privacy.mark_read encryption.enabled encryption.key_source notifications.enabled notifications.preview media.save_dir" // password_command only with key_source = password-command
 	if got := strings.Join(names, " "); got != want {
 		t.Fatalf("fields = %s, want %s", got, want)
 	}

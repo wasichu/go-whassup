@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/wasichu/go-whassup/internal/wa"
 )
@@ -170,5 +171,45 @@ func TestSwitchableFollowsDir(t *testing.T) {
 	s.SetDir(a)
 	if p, ok := s.Lookup("c", "1"); !ok || filepath.Dir(p) != a {
 		t.Errorf("back in the first directory: %q %v", p, ok)
+	}
+}
+
+func TestSaveNameAndCopy(t *testing.T) {
+	at := time.Date(2026, 10, 18, 17, 38, 12, 0, time.Local)
+	for _, tt := range []struct {
+		m    wa.Media
+		kind string
+		want string
+	}{
+		{wa.Media{FileName: "Report Q3.pdf"}, wa.KindDocument, "Report Q3.pdf"},
+		{wa.Media{FileName: "../../etc/passwd.txt"}, wa.KindDocument, "passwd.txt"},
+		{wa.Media{FileName: "invoice.command", Mime: "application/pdf"}, wa.KindDocument, "invoice.command.pdf"},
+		{wa.Media{FileName: ".bashrc"}, wa.KindDocument, "bashrc.bin"},
+		{wa.Media{Mime: "image/jpeg"}, wa.KindImage, "WhatsApp Image 2026-10-18 at 17.38.12.jpg"},
+		{wa.Media{Mime: "audio/ogg; codecs=opus"}, "audio", "WhatsApp Audio 2026-10-18 at 17.38.12.ogg"},
+	} {
+		if got := SaveName(tt.m, tt.kind, at); got != tt.want {
+			t.Errorf("SaveName(%+v) = %q, want %q", tt.m, got, tt.want)
+		}
+	}
+
+	src := filepath.Join(t.TempDir(), "x")
+	if err := os.WriteFile(src, []byte("%PDF"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(t.TempDir(), "Downloads", "go-whassup")
+	first, err := SaveCopy(src, dir, "Report.pdf")
+	if err != nil || filepath.Base(first) != "Report.pdf" {
+		t.Fatalf("first save = %q, %v", first, err)
+	}
+	second, err := SaveCopy(src, dir, "Report.pdf")
+	if err != nil || filepath.Base(second) != "Report (1).pdf" {
+		t.Fatalf("second save = %q, %v; must not overwrite", second, err)
+	}
+	if fi, err := os.Stat(second); err != nil || fi.Mode().Perm() != 0o600 {
+		t.Errorf("mode = %v, %v", fi.Mode().Perm(), err)
+	}
+	if d, err := os.Stat(dir); err != nil || d.Mode().Perm() != 0o700 {
+		t.Errorf("dir mode = %v, %v", d.Mode().Perm(), err)
 	}
 }
