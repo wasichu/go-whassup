@@ -86,7 +86,8 @@ internal/headless/   login/listen/db commands (Console: In/Out/Log)
 internal/termcaps/   terminal capability detection (Kitty graphics, incl. via tmux); read-only
 internal/sqlite/     the only place that opens SQLite (driver, DSN, 0600)
 internal/store/      OUR messages.db + Recorder. whatsmeow does NOT persist messages.
-                     Message text goes through Codec only (sealBody/openBody).
+                     Message text and media keys go through Codec only (seal/open).
+internal/media/      attachment cache (hashed names, 0600) + system opener
 internal/ui/         Bubble Tea models + Run. Imports internal/wa, never whatsmeow.
 ```
 

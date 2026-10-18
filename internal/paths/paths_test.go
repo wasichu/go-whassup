@@ -21,6 +21,9 @@ func TestResolveUsesXDGEnv(t *testing.T) {
 	if want := "/tmp/xdg-config/go-whassup/config.toml"; p.ConfigFile != want {
 		t.Errorf("ConfigFile = %q, want %q", p.ConfigFile, want)
 	}
+	if want := "/tmp/xdg-data/go-whassup/media"; p.MediaDir != want {
+		t.Errorf("MediaDir = %q, want %q", p.MediaDir, want)
+	}
 	if want := "/tmp/xdg-data/go-whassup/messages.db"; p.MessagesDB != want {
 		t.Errorf("MessagesDB = %q, want %q", p.MessagesDB, want)
 	}

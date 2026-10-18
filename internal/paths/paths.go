@@ -21,6 +21,7 @@ type Paths struct {
 	StateDir   string // logs and other disposable state
 	SessionDB  string // whatsmeow's store: device identity and Signal keys
 	MessagesDB string // our chat/message store
+	MediaDir   string // downloaded attachments (created on first use, 0700)
 	LogFile    string
 }
 
@@ -42,6 +43,7 @@ func Resolve() (Paths, error) {
 	p.ConfigFile = filepath.Join(p.ConfigDir, "config.toml")
 	p.SessionDB = filepath.Join(p.DataDir, "session.db")
 	p.MessagesDB = filepath.Join(p.DataDir, "messages.db")
+	p.MediaDir = filepath.Join(p.DataDir, "media")
 	p.LogFile = filepath.Join(p.StateDir, "wa.log")
 	return p, nil
 }

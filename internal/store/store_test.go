@@ -176,13 +176,16 @@ func TestPrune(t *testing.T) {
 		msg(ada, "new", now.Add(-time.Hour), "x"),
 		msg(bob, "b-old", t0, "x"))
 
-	n, err := st.Prune(ctx, Retention{KeepDays: 7}, now)
-	if err != nil || n != 2 {
-		t.Fatalf("Prune keep_days = %d, %v; want 2", n, err)
+	removed, err := st.Prune(ctx, Retention{KeepDays: 7}, now)
+	if err != nil || len(removed) != 2 {
+		t.Fatalf("Prune keep_days = %v, %v; want 2", removed, err)
 	}
-	n, err = st.Prune(ctx, Retention{MaxPerChat: 1}, now)
-	if err != nil || n != 1 {
-		t.Fatalf("Prune max_per_chat = %d, %v; want 1", n, err)
+	if !slices.Contains(removed, MessageRef{Chat: bob, ID: "b-old"}) {
+		t.Errorf("removed = %v, should name what went", removed)
+	}
+	removed, err = st.Prune(ctx, Retention{MaxPerChat: 1}, now)
+	if err != nil || len(removed) != 1 {
+		t.Fatalf("Prune max_per_chat = %v, %v; want 1", removed, err)
 	}
 	got, err := st.Messages(ctx, ada, 0)
 	if err != nil {
@@ -191,8 +194,8 @@ func TestPrune(t *testing.T) {
 	if want := []string{"new"}; !slices.Equal(ids(got), want) {
 		t.Errorf("remaining = %v, want %v", ids(got), want)
 	}
-	if n, err := st.Prune(ctx, Retention{}, now); err != nil || n != 0 {
-		t.Errorf("zero retention pruned %d, %v", n, err)
+	if removed, err := st.Prune(ctx, Retention{}, now); err != nil || len(removed) != 0 {
+		t.Errorf("zero retention pruned %v, %v", removed, err)
 	}
 }
 
@@ -786,5 +789,72 @@ func TestMigrateV4ToV5RemovesMetaMessages(t *testing.T) {
 	}
 	if got := ids(msgs); !slices.Equal(got, []string{"img", "keep"}) {
 		t.Errorf("after cleanup = %v, want [img keep]", got)
+	}
+}
+
+func mediaMsg(chat, id string, at time.Time) wa.Message {
+	m := msg(chat, id, at, "cat")
+	m.Kind = wa.KindImage
+	m.Media = &wa.Media{Data: mustMediaData()}
+	return m
+}
+
+// mustMediaData is a real serialized media message (wa.ParseMedia must
+// accept it): an image with a media key.
+func mustMediaData() []byte {
+	return []byte("\x1a\x13\x12\x0aimage/jpeg\x3a\x05mkey1")
+}
+
+func TestMediaStoredSealedAndRoundTrips(t *testing.T) {
+	st := openStore(t, "", reverseCodec{})
+	ctx := t.Context()
+	if _, err := wa.ParseMedia(mustMediaData()); err != nil {
+		t.Fatalf("test fixture isn't valid media: %v", err)
+	}
+	mustSave(t, st, mediaMsg(ada, "1", t0))
+
+	var raw []byte
+	var codecID int
+	if err := st.db.QueryRowContext(ctx, `SELECT media, media_codec FROM messages WHERE id = '1'`).Scan(&raw, &codecID); err != nil {
+		t.Fatalf("raw: %v", err)
+	}
+	if codecID != 7 || bytes.Equal(raw, mustMediaData()) {
+		t.Errorf("media must be sealed like text: codec=%d", codecID)
+	}
+	m := onlyMessage(t, st, ada, "1")
+	if m.Media == nil || m.Media.Mime != "image/jpeg" {
+		t.Fatalf("media after round trip = %+v", m.Media)
+	}
+
+	if err := st.DeleteMessage(ctx, wa.MessageDeleted{Chat: ada, ID: "1"}); err != nil {
+		t.Fatalf("DeleteMessage: %v", err)
+	}
+	var media []byte
+	if err := st.db.QueryRowContext(ctx, `SELECT media FROM messages WHERE id = '1'`).Scan(&media); err != nil || media != nil {
+		t.Errorf("deleting for everyone must wipe the media key: %q (%v)", media, err)
+	}
+}
+
+type fakeCache struct{ removed []MessageRef }
+
+func (f *fakeCache) Remove(chat, id string) error {
+	f.removed = append(f.removed, MessageRef{chat, id})
+	return nil
+}
+
+func TestRecorderRemovesCachedMedia(t *testing.T) {
+	st := openStore(t, "", nil)
+	cache := &fakeCache{}
+	client := &watest.Client{}
+	rec := &Recorder{Store: st, Media: cache, Retention: Retention{MaxPerChat: 1},
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Now: func() time.Time { return t0 }}
+	rec.Attach(client)
+	client.Emit(mediaMsg(ada, "old", t0))
+	client.Emit(mediaMsg(ada, "new", t0.Add(time.Minute)))
+	client.Emit(wa.MessageDeleted{Chat: ada, ID: "new"})
+	rec.Prune(t.Context())
+	want := []MessageRef{{ada, "new"}, {ada, "old"}}
+	if !slices.Equal(cache.removed, want) {
+		t.Errorf("removed from cache = %v, want %v", cache.removed, want)
 	}
 }

@@ -6,6 +6,7 @@
 | --- | --- |
 | `$XDG_DATA_HOME/go-whassup/` (default `~/.local/share/go-whassup/`) | Databases. Directory created `0700`. |
 | `…/messages.db` | **Our** chats, messages and contact names (`internal/store`). Created `0600`. Safe to delete: it refills from live messages and the next history sync (which only happens on re-link). |
+| `…/media/` | Downloaded attachments: directory `0700`, files `0600`, named by a hash of chat+message ID. **Plaintext on disk** (see below). |
 | `…/session.db` | whatsmeow's store: device identity, Signal keys, contacts, app state. **Secret.** Created `0600`. Deleting it forces a re-pair; the old entry stays in the phone's Linked devices until you remove it there. |
 | `$XDG_STATE_HOME/go-whassup/wa.log` (default `~/.local/state/go-whassup/wa.log`) | Log, `0600`. Message *metadata* at info level; message *text* only with `-debug`. |
 

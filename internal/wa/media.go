@@ -76,6 +76,20 @@ func mediaOf(msg *waE2E.Message) *Media {
 	return &Media{Data: data, Mime: mimeType, FileName: name, Size: int64(size)}
 }
 
+// ParseMedia rebuilds a Media from its Data (as stored), recovering the
+// MIME type, file name and size so only the sealed blob needs persisting.
+func ParseMedia(data []byte) (*Media, error) {
+	var msg waE2E.Message
+	if err := proto.Unmarshal(data, &msg); err != nil {
+		return nil, fmt.Errorf("decoding media: %w", err)
+	}
+	m := mediaOf(&msg)
+	if m == nil {
+		return nil, errors.New("no attachment in media data")
+	}
+	return m, nil
+}
+
 // downloadable recovers the typed attachment whatsmeow needs to download.
 func downloadable(m Media) (whatsmeow.DownloadableMessage, error) {
 	var msg waE2E.Message

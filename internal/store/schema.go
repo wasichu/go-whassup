@@ -69,6 +69,12 @@ DELETE FROM messages WHERE kind IN (
 	'secret encrypted', 'poll update', 'enc reaction', 'enc event response',
 	'enc comment', 'keep in chat', 'pin in chat', 'placeholder');
 `,
+	// 6: attachments. media holds wa.Media.Data (it contains the media key),
+	// sealed like body but tracked by its own codec column.
+	`
+ALTER TABLE messages ADD COLUMN media BLOB;
+ALTER TABLE messages ADD COLUMN media_codec INTEGER NOT NULL DEFAULT 0;
+`,
 }
 
 // migrate brings the schema up to date inside one transaction.

@@ -16,9 +16,17 @@ type Recorder struct {
 	Store     *Store
 	Retention Retention // initial policy; change it later with SetRetention
 	Log       *slog.Logger
-	Now       func() time.Time // for tests; nil means time.Now
+	// Media, if set, has cached attachments removed when their message is
+	// deleted or pruned, so "deleted" means gone from disk.
+	Media MediaCache
+	Now   func() time.Time // for tests; nil means time.Now
 
 	mu sync.Mutex // guards Retention after Attach
+}
+
+// MediaCache is the part of the media cache the recorder needs.
+type MediaCache interface {
+	Remove(chat, id string) error
 }
 
 // SetRetention changes the policy; it is safe while events are flowing.
@@ -63,6 +71,7 @@ func (r *Recorder) Handle(evt wa.Event) {
 		if err := r.Store.DeleteMessage(ctx, v); err != nil {
 			r.Log.Error("recording delete", "id", v.ID, "err", err)
 		}
+		r.removeMedia(v.Chat, v.ID)
 	case wa.Reaction:
 		if err := r.Store.SaveReactions(ctx, []wa.Reaction{v}); err != nil {
 			r.Log.Error("recording reaction", "id", v.MessageID, "err", err)
@@ -103,13 +112,25 @@ func (r *Recorder) Prune(ctx context.Context) {
 	if r.Now != nil {
 		now = r.Now
 	}
-	n, err := r.Store.Prune(ctx, ret, now())
+	removed, err := r.Store.Prune(ctx, ret, now())
 	if err != nil {
 		r.Log.Error("pruning messages", "err", err)
 		return
 	}
-	if n > 0 {
-		r.Log.Info("pruned messages", "count", n)
+	for _, ref := range removed {
+		r.removeMedia(ref.Chat, ref.ID)
+	}
+	if len(removed) > 0 {
+		r.Log.Info("pruned messages", "count", len(removed))
+	}
+}
+
+func (r *Recorder) removeMedia(chat, id string) {
+	if r.Media == nil {
+		return
+	}
+	if err := r.Media.Remove(chat, id); err != nil {
+		r.Log.Error("removing cached media", "chat", chat, "id", id, "err", err)
 	}
 }
 

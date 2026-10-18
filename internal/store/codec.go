@@ -21,24 +21,25 @@ func (Plaintext) Open(sealed []byte) ([]byte, error) {
 	return sealed, nil
 }
 
-// sealBody is the single write site for message text.
-func (s *Store) sealBody(text string) (body []byte, codecID int, err error) {
-	body, err = s.codec.Seal([]byte(text))
+// seal is the single write site for sensitive message data (text, media
+// keys): everything stored at rest goes through the current codec.
+func (s *Store) seal(plain []byte) (sealed []byte, codecID int, err error) {
+	sealed, err = s.codec.Seal(plain)
 	if err != nil {
-		return nil, 0, fmt.Errorf("sealing message body: %w", err)
+		return nil, 0, fmt.Errorf("sealing message data: %w", err)
 	}
-	return body, s.codec.ID(), nil
+	return sealed, s.codec.ID(), nil
 }
 
-// openBody is the single read site for message text.
-func (s *Store) openBody(body []byte, codecID int) (string, error) {
+// open is the single read site for sealed message data.
+func (s *Store) open(sealed []byte, codecID int) ([]byte, error) {
 	c, ok := s.codecs[codecID]
 	if !ok {
-		return "", fmt.Errorf("message sealed with unknown codec %d", codecID)
+		return nil, fmt.Errorf("message sealed with unknown codec %d", codecID)
 	}
-	plain, err := c.Open(body)
+	plain, err := c.Open(sealed)
 	if err != nil {
-		return "", fmt.Errorf("opening message body (codec %d): %w", codecID, err)
+		return nil, fmt.Errorf("opening message data (codec %d): %w", codecID, err)
 	}
-	return string(plain), nil
+	return plain, nil
 }

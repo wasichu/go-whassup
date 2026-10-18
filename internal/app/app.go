@@ -15,6 +15,7 @@ import (
 	"github.com/wasichu/go-whassup/internal/config"
 	"github.com/wasichu/go-whassup/internal/headless"
 	"github.com/wasichu/go-whassup/internal/logging"
+	"github.com/wasichu/go-whassup/internal/media"
 	"github.com/wasichu/go-whassup/internal/paths"
 	"github.com/wasichu/go-whassup/internal/store"
 	"github.com/wasichu/go-whassup/internal/termcaps"
@@ -82,10 +83,12 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 	// UI reloads from the store when an event arrives, which only works if
 	// the recorder (an earlier handler) has already written it. It is never
 	// lossy.
+	cache := media.Cache{Dir: p.MediaDir}
 	rec := &store.Recorder{
 		Store:     st,
 		Retention: retention(cfg),
 		Log:       log,
+		Media:     cache,
 	}
 	rec.Prune(ctx)
 	rec.Attach(client)

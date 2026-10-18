@@ -65,14 +65,21 @@ func (s *Store) SaveMessages(ctx context.Context, msgs []wa.Message) (int, error
 
 	inserted := 0
 	for _, m := range msgs {
-		body, codecID, err := s.sealBody(m.Text)
+		body, codecID, err := s.seal([]byte(m.Text))
 		if err != nil {
 			return 0, err
 		}
+		var media []byte
+		mediaCodec := 0
+		if m.Media != nil {
+			if media, mediaCodec, err = s.seal(m.Media.Data); err != nil {
+				return 0, err
+			}
+		}
 		res, err := tx.ExecContext(ctx, `
-			INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, push_name, ts, from_me, kind, body, codec)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			m.Chat, m.ID, m.Sender, m.PushName, m.Timestamp.Unix(), m.FromMe, m.Kind, body, codecID)
+			INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, push_name, ts, from_me, kind, body, codec, media, media_codec)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			m.Chat, m.ID, m.Sender, m.PushName, m.Timestamp.Unix(), m.FromMe, m.Kind, body, codecID, media, mediaCodec)
 		if err != nil {
 			return 0, fmt.Errorf("saving message %s: %w", m.ID, err)
 		}
@@ -278,7 +285,7 @@ func (s *Store) Messages(ctx context.Context, chat string, limit int) ([]wa.Mess
 		limit = -1 // SQLite: no limit
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, sender_jid, push_name, ts, from_me, kind, body, codec, is_group, sender_name, edited_at, deleted FROM (
+		SELECT id, sender_jid, push_name, ts, from_me, kind, body, codec, is_group, sender_name, edited_at, deleted, media, media_codec FROM (
 			SELECT m.*, c.is_group,
 			       COALESCE(NULLIF(ct.name, ''), NULLIF(ct.push_name, ''), NULLIF(m.push_name, ''), ct.business_name, '') AS sender_name
 			FROM messages m
@@ -297,13 +304,26 @@ func (s *Store) Messages(ctx context.Context, chat string, limit int) ([]wa.Mess
 		var body []byte
 		var codecID int
 		var editedAt int64
-		if err := rows.Scan(&m.ID, &m.Sender, &m.PushName, &ts, &m.FromMe, &m.Kind, &body, &codecID, &m.IsGroup, &m.SenderName, &editedAt, &m.Deleted); err != nil {
+		var media []byte
+		var mediaCodec int
+		if err := rows.Scan(&m.ID, &m.Sender, &m.PushName, &ts, &m.FromMe, &m.Kind, &body, &codecID, &m.IsGroup, &m.SenderName, &editedAt, &m.Deleted, &media, &mediaCodec); err != nil {
 			return nil, fmt.Errorf("loading messages: %w", err)
 		}
 		m.Timestamp, m.Edited = time.Unix(ts, 0), editedAt > 0
 		if !m.Deleted {
-			if m.Text, err = s.openBody(body, codecID); err != nil {
+			text, err := s.open(body, codecID)
+			if err != nil {
 				return nil, err
+			}
+			m.Text = string(text)
+			if media != nil {
+				data, err := s.open(media, mediaCodec)
+				if err != nil {
+					return nil, err
+				}
+				if m.Media, err = wa.ParseMedia(data); err != nil {
+					return nil, fmt.Errorf("message %s: %w", m.ID, err)
+				}
 			}
 		}
 		msgs = append(msgs, m)
@@ -354,9 +374,9 @@ func (s *Store) attachReactions(ctx context.Context, chat string, msgs []wa.Mess
 
 // EditMessage replaces a message's text with a newer edit. It reports
 // whether the message was found (an edit can arrive before its original).
-// Text goes through sealBody like every other write.
+// Text goes through seal like every other write.
 func (s *Store) EditMessage(ctx context.Context, e wa.MessageEdited) (bool, error) {
-	body, codecID, err := s.sealBody(e.Text)
+	body, codecID, err := s.seal([]byte(e.Text))
 	if err != nil {
 		return false, err
 	}
@@ -380,7 +400,7 @@ func (s *Store) DeleteMessage(ctx context.Context, d wa.MessageDeleted) error {
 				return err
 			}
 		} else if _, err := tx.ExecContext(ctx, `
-			UPDATE messages SET body = x'', codec = 0, deleted = 1 WHERE chat_jid = ? AND id = ?`,
+			UPDATE messages SET body = x'', codec = 0, media = NULL, media_codec = 0, deleted = 1 WHERE chat_jid = ? AND id = ?`,
 			d.Chat, d.ID); err != nil {
 			return err
 		}
@@ -481,32 +501,48 @@ type Retention struct {
 	MaxPerChat int
 }
 
-// Prune deletes messages outside r, relative to now, and returns how many.
-func (s *Store) Prune(ctx context.Context, r Retention, now time.Time) (int64, error) {
-	var total int64
+// MessageRef identifies a stored message.
+type MessageRef struct{ Chat, ID string }
+
+// Prune deletes messages outside r, relative to now, and returns the ones
+// it removed (so callers can clean up anything kept outside the database,
+// like cached media).
+func (s *Store) Prune(ctx context.Context, r Retention, now time.Time) ([]MessageRef, error) {
+	var removed []MessageRef
+	collect := func(tx *sql.Tx, q string, args ...any) error {
+		rows, err := tx.QueryContext(ctx, q+` RETURNING chat_jid, id`, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var ref MessageRef
+			if err := rows.Scan(&ref.Chat, &ref.ID); err != nil {
+				return err
+			}
+			removed = append(removed, ref)
+		}
+		return rows.Err()
+	}
 	err := s.inTx(ctx, "pruning messages", func(tx *sql.Tx) error {
 		if r.KeepDays > 0 {
 			cutoff := now.AddDate(0, 0, -r.KeepDays).Unix()
-			res, err := tx.ExecContext(ctx, `DELETE FROM messages WHERE ts < ?`, cutoff)
-			if err != nil {
+			if err := collect(tx, `DELETE FROM messages WHERE ts < ?`, cutoff); err != nil {
 				return err
 			}
-			total += rowsAffected(res)
 		}
 		if r.MaxPerChat > 0 {
-			res, err := tx.ExecContext(ctx, `
+			if err := collect(tx, `
 				DELETE FROM messages WHERE rowid IN (
 					SELECT rowid FROM (
 						SELECT rowid, row_number() OVER (PARTITION BY chat_jid ORDER BY ts DESC, id DESC) AS n
 						FROM messages
 					) WHERE n > ?
-				)`, r.MaxPerChat)
-			if err != nil {
+				)`, r.MaxPerChat); err != nil {
 				return err
 			}
-			total += rowsAffected(res)
 		}
-		if total == 0 {
+		if len(removed) == 0 {
 			return nil
 		}
 		// Reactions to pruned messages go with them.
@@ -514,7 +550,10 @@ func (s *Store) Prune(ctx context.Context, r Retention, now time.Time) (int64, e
 			SELECT 1 FROM messages m WHERE m.chat_jid = reactions.chat_jid AND m.id = reactions.message_id)`)
 		return err
 	})
-	return total, err
+	if err != nil {
+		return nil, err
+	}
+	return removed, nil
 }
 
 func rowsAffected(res sql.Result) int64 {
