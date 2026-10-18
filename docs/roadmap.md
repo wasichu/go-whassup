@@ -97,8 +97,9 @@ step lands or the plan changes.
 ## Last, before going public
 
 - [x] **LICENSE: MPL-2.0**, matching whatsmeow (decided 2026-10-18).
-- **README for users:** what it is, an "unofficial; against WhatsApp's terms" warning,
-  install steps, a screenshot. AGENTS.md and `docs/` stay contributor-facing.
+- [x] **README for users:** what it is, an "unofficial; against WhatsApp's terms" warning,
+  install steps. AGENTS.md and `docs/` stay contributor-facing. Still to add: a
+  screenshot (needs a real session).
 - [x] **CI:** GitHub Actions running `just check` via the mise action, so CI uses the same
   pinned tools (`.github/workflows/check.yml`; Linux and macOS).
 - [x] **Release binaries:** cgo-free cross-compiles for darwin/linux/windows ×
