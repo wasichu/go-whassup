@@ -61,7 +61,6 @@ linters:
       # Known offenders, being refactored (code-quality pass, 2026-10-18).
       # Each refactor commit deletes the entries it fixes; don't add new ones.
       - {path: internal/ui/login\.go, linters: [gocognit, funlen], text: "loginKey|loginView"}
-      - {path: internal/ui/model\.go, linters: [gocognit, funlen], text: "Update|handleKey"}
 
 formatters:
   enable:

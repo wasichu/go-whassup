@@ -129,13 +129,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.BlurMsg:
 		m.termFocused = false
 		return m, nil
-	case readTickMsg:
-		return m.readTick(msg)
-	case readDoneMsg:
-		if msg.err != nil {
-			m.setError("marking read", msg.err)
-		}
-		return m, loadChats(m.ctx, m.deps.Store)
 	case tea.ColorProfileMsg:
 		m.trueColor = msg.Profile == colorprofile.TrueColor
 		return m, nil
@@ -143,91 +136,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 	case eventMsg:
 		return m.handleEvent(msg.evt)
+	case readTickMsg:
+		return m.readTick(msg)
 	case pairCodeMsg, pairQRStartedMsg, logoutMsg:
 		return m.loginResult(msg)
 	case configSavedMsg:
-		var reload tea.Cmd
-		if msg.saved {
-			// Adopted even if the settings page has closed meanwhile.
-			m.deps.Config = msg.cfg
-			reload = loadChats(m.ctx, m.deps.Store) // retention may have pruned messages
-		}
-		m, cmd, _ := m.updatePage(msg)
-		return m, tea.Batch(reload, cmd)
+		return m.configSaved(msg)
 	case mediaOpenedMsg:
 		return m.mediaOpened(msg)
-	case fileSentMsg:
-		if msg.err != nil {
-			m.setError("sending file", msg.err)
-		} else {
-			m.notice = ""
-		}
-		return m, nil
 	case chatsLoadedMsg:
-		if msg.err != nil {
-			m.setError("loading chats", msg.err)
-			return m, nil
-		}
-		before := m.chats.selectedJID()
-		m.chats.setChats(msg.chats)
-		if m.draft != "" {
-			// A draft becomes a regular chat once its first message is stored.
-			if !m.chats.selectJID(m.draft) {
-				return m, nil
-			}
-			m.draft = ""
-			c, _ := m.chats.selectedChat()
-			m.conv.setChat(c)
-			cmd := tea.Batch(loadMessages(m.ctx, m.deps, c.JID), m.scheduleRead()) // evaluate before m is copied into the return
-			return m, cmd
-		}
-		if c, ok := m.chats.selectedChat(); ok {
-			m.conv.setChat(c)
-			if c.JID != before || len(m.conv.msgs) == 0 {
-				cmd := tea.Batch(loadMessages(m.ctx, m.deps, c.JID), m.scheduleRead()) // evaluate before m is copied into the return
-				return m, cmd
-			}
-			if c.Unread > 0 {
-				cmd := m.scheduleRead() // new messages arrived in the open chat; call before returning m
-				return m, cmd
-			}
-		}
-		return m, nil
+		return m.chatsLoaded(msg)
 	case messagesLoadedMsg:
-		if msg.err != nil {
-			m.setError("loading messages", msg.err)
-			return m, nil
-		}
-		if msg.chat == m.conv.chat.JID {
-			m.conv.cached, m.conv.mentions, m.conv.own = msg.cached, msg.mentions, m.ownJID
-			m.conv.setMessages(msg.msgs)
-			if h := m.conv.highlight; h != "" {
-				if _, ok := m.conv.lineOf[h]; !ok {
-					m.notice, m.noticeIsErr = fmt.Sprintf("That message is older than the %d loaded here.", messagesPerChat), false
-					m.conv.highlight = ""
-				}
-			}
-		}
-		return m, nil
+		return m.messagesLoaded(msg), nil
 	case connectResultMsg:
-		switch {
-		case errors.Is(msg.err, wa.ErrNotPaired):
-			m.conn = connNotPaired
-		case msg.err != nil:
-			m.conn = connOffline
-			m.setError("connecting", msg.err)
-		}
-		return m, nil
-	case sendResultMsg:
-		if msg.err != nil {
-			m.setError("sending", msg.err)
-		}
-		return m, nil
+		return m.connectResult(msg), nil
+	case readDoneMsg, fileSentMsg, sendResultMsg:
+		return m.actionDone(msg)
 	}
+	return m.forward(msg)
+}
 
-	// Anything else (a page's results, cursor blink) goes to the active
-	// page, or to whichever input has focus. Results for a page that has
-	// closed are dropped.
+// forward sends anything else (a page's results, cursor blink) to the
+// active page, or to whichever input has focus. Results for a page that
+// has closed are dropped.
+func (m Model) forward(msg tea.Msg) (Model, tea.Cmd) {
 	if m, cmd, ok := m.updatePage(msg); ok {
 		return m, cmd
 	}
@@ -239,6 +171,109 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.conv.input, cmd = m.conv.input.Update(msg)
 	}
 	return m, cmd
+}
+
+// configSaved adopts a saved config (even if the settings page has closed
+// meanwhile) and lets the page show the outcome.
+func (m Model) configSaved(msg configSavedMsg) (Model, tea.Cmd) {
+	var reload tea.Cmd
+	if msg.saved {
+		m.deps.Config = msg.cfg
+		reload = loadChats(m.ctx, m.deps.Store) // retention may have pruned messages
+	}
+	m, cmd, _ := m.updatePage(msg)
+	return m, tea.Batch(reload, cmd)
+}
+
+// actionDone reports the outcome of a send, file send or mark-read.
+func (m Model) actionDone(msg tea.Msg) (Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case readDoneMsg:
+		if msg.err != nil {
+			m.setError("marking read", msg.err)
+		}
+		return m, loadChats(m.ctx, m.deps.Store)
+	case fileSentMsg:
+		if msg.err != nil {
+			m.setError("sending file", msg.err)
+		} else {
+			m.notice = ""
+		}
+	case sendResultMsg:
+		if msg.err != nil {
+			m.setError("sending", msg.err)
+		}
+	}
+	return m, nil
+}
+
+// chatsLoaded refreshes the chat list, keeping the selection (or turning a
+// draft into a regular chat once it's stored), and reloads the open chat
+// when it changed.
+func (m Model) chatsLoaded(msg chatsLoadedMsg) (Model, tea.Cmd) {
+	if msg.err != nil {
+		m.setError("loading chats", msg.err)
+		return m, nil
+	}
+	before := m.chats.selectedJID()
+	m.chats.setChats(msg.chats)
+	if m.draft != "" {
+		// A draft becomes a regular chat once its first message is stored.
+		if !m.chats.selectJID(m.draft) {
+			return m, nil
+		}
+		m.draft = ""
+		c, _ := m.chats.selectedChat()
+		m.conv.setChat(c)
+		cmd := tea.Batch(loadMessages(m.ctx, m.deps, c.JID), m.scheduleRead()) // evaluate before m is copied into the return
+		return m, cmd
+	}
+	c, ok := m.chats.selectedChat()
+	if !ok {
+		return m, nil
+	}
+	m.conv.setChat(c)
+	if c.JID != before || len(m.conv.msgs) == 0 {
+		cmd := tea.Batch(loadMessages(m.ctx, m.deps, c.JID), m.scheduleRead()) // evaluate before m is copied into the return
+		return m, cmd
+	}
+	if c.Unread > 0 {
+		cmd := m.scheduleRead() // new messages arrived in the open chat; call before returning m
+		return m, cmd
+	}
+	return m, nil
+}
+
+// messagesLoaded shows the open chat's messages (ignoring a load for a
+// chat that's no longer open).
+func (m Model) messagesLoaded(msg messagesLoadedMsg) Model {
+	if msg.err != nil {
+		m.setError("loading messages", msg.err)
+		return m
+	}
+	if msg.chat != m.conv.chat.JID {
+		return m
+	}
+	m.conv.cached, m.conv.mentions, m.conv.own = msg.cached, msg.mentions, m.ownJID
+	m.conv.setMessages(msg.msgs)
+	if h := m.conv.highlight; h != "" {
+		if _, ok := m.conv.lineOf[h]; !ok {
+			m.notice, m.noticeIsErr = fmt.Sprintf("That message is older than the %d loaded here.", messagesPerChat), false
+			m.conv.highlight = ""
+		}
+	}
+	return m
+}
+
+func (m Model) connectResult(msg connectResultMsg) Model {
+	switch {
+	case errors.Is(msg.err, wa.ErrNotPaired):
+		m.conn = connNotPaired
+	case msg.err != nil:
+		m.conn = connOffline
+		m.setError("connecting", msg.err)
+	}
+	return m
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -258,7 +293,6 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m, cmd, ok := m.updatePage(msg); ok {
 		return m, cmd
 	}
-
 	switch {
 	case key.Matches(msg, keys.PageUp):
 		m.conv.viewport.PageUp()
@@ -267,28 +301,37 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.conv.viewport.PageDown()
 		return m, nil
 	}
-
 	if m.focus == focusInput {
-		switch {
-		case key.Matches(msg, keys.Blur):
-			m.focus = focusList
-			m.conv.input.Blur()
-			return m, nil
-		case key.Matches(msg, keys.Send):
-			text := strings.TrimSpace(m.conv.input.Value())
-			if text == "" || m.conv.chat.JID == "" {
-				return m, nil
-			}
-			m.conv.input.Reset()
-			m.notice = ""
-			return m, send(m.ctx, m.deps.Client, m.conv.chat.JID, text)
-		}
-		// Only the focused input sees typing, so q , ? L are just characters.
-		var cmd tea.Cmd
-		m.conv.input, cmd = m.conv.input.Update(msg)
-		return m, cmd
+		return m.inputKey(msg)
 	}
+	return m.listKey(msg)
+}
 
+// inputKey handles keys while the message input has focus. Only it sees
+// typing, so q , ? L are just characters here.
+func (m Model) inputKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, keys.Blur):
+		m.focus = focusList
+		m.conv.input.Blur()
+		return m, nil
+	case key.Matches(msg, keys.Send):
+		text := strings.TrimSpace(m.conv.input.Value())
+		if text == "" || m.conv.chat.JID == "" {
+			return m, nil
+		}
+		m.conv.input.Reset()
+		m.notice = ""
+		return m, send(m.ctx, m.deps.Client, m.conv.chat.JID, text)
+	}
+	var cmd tea.Cmd
+	m.conv.input, cmd = m.conv.input.Update(msg)
+	return m, cmd
+}
+
+// listKey handles keys while the chat list has focus: navigation and the
+// global shortcuts.
+func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Quit):
 		return m, tea.Quit
