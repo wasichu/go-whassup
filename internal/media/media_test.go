@@ -152,3 +152,23 @@ func TestCacheDirWithGlobCharacters(t *testing.T) {
 		t.Error("remove failed in a dir with glob metacharacters")
 	}
 }
+
+func TestSwitchableFollowsDir(t *testing.T) {
+	a, b := t.TempDir(), t.TempDir()
+	s := NewSwitchable(a)
+	src := filepath.Join(t.TempDir(), "x.pdf")
+	if err := os.WriteFile(src, []byte("%PDF"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Put("c", "1", src, wa.Media{FileName: "x.pdf"}); err != nil {
+		t.Fatal(err)
+	}
+	s.SetDir(b)
+	if _, ok := s.Lookup("c", "1"); ok || s.Dir() != b {
+		t.Error("after SetDir, lookups should use the new directory")
+	}
+	s.SetDir(a)
+	if p, ok := s.Lookup("c", "1"); !ok || filepath.Dir(p) != a {
+		t.Errorf("back in the first directory: %q %v", p, ok)
+	}
+}

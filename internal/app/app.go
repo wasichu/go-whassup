@@ -85,10 +85,11 @@ type env struct {
 	p       paths.Paths
 	cfg     config.Config
 	log     *slog.Logger
-	waLog   *slog.Logger // capped at info while encrypted
+	waLog   *slog.Logger // whatsmeow's: capped by logCap
+	logCap  *logging.Cap // info while encrypted: whatsmeow's debug output has message text
 	st      *store.Store
 	enc     encryption
-	cache   media.Cache
+	cache   *media.Switchable
 	console headless.Console
 }
 
@@ -107,7 +108,8 @@ func openEnv(ctx context.Context, inv invocation, p paths.Paths, stdio IO, clean
 	cleanup.add(logCloser.Close)
 	slog.SetDefault(log)
 	log.Info("starting", "cmd", inv.cmd, "data_dir", p.DataDir, "config", fmt.Sprintf("%+v", e.cfg))
-	e.log, e.waLog = log, log
+	e.logCap = &logging.Cap{}
+	e.log, e.waLog = log, logging.Capped(log, e.logCap)
 
 	if e.st, err = store.Open(ctx, p.MessagesDB, nil); err != nil {
 		return e, err
@@ -129,7 +131,7 @@ func openEnv(ctx context.Context, inv invocation, p paths.Paths, stdio IO, clean
 	}
 	if e.enc.on {
 		// No message text (or whatsmeow chatter) in the log.
-		e.waLog = logging.AtLeast(log, slog.LevelInfo)
+		e.logCap.Set(slog.LevelInfo)
 	}
 	e.console = headless.Console{In: stdio.In, Out: stdio.Out, Log: log, NoText: e.enc.on}
 	return e, nil
@@ -138,16 +140,16 @@ func openEnv(ctx context.Context, inv invocation, p paths.Paths, stdio IO, clean
 // mediaCache is the attachment cache: the data dir normally, or a
 // temporary directory removed on exit while encrypted (cached files would
 // be plaintext).
-func mediaCache(p paths.Paths, enc encryption, cleanup *cleanups) (media.Cache, error) {
+func mediaCache(p paths.Paths, enc encryption, cleanup *cleanups) (*media.Switchable, error) {
 	if !enc.on {
-		return media.Cache{Dir: p.MediaDir}, nil
+		return media.NewSwitchable(p.MediaDir), nil
 	}
 	tmp, err := os.MkdirTemp("", "go-whassup-media-")
 	if err != nil {
-		return media.Cache{}, fmt.Errorf("creating temporary media dir: %w", err)
+		return nil, fmt.Errorf("creating temporary media dir: %w", err)
 	}
 	cleanup.add(func() error { return os.RemoveAll(tmp) })
-	return media.Cache{Dir: tmp}, nil
+	return media.NewSwitchable(tmp), nil
 }
 
 // runDB runs the offline `db` commands.
@@ -222,7 +224,7 @@ func encryptionNotice(e encryption) string {
 // tuiDeps wires the TUI's collaborators. It's a separate function so a test
 // can check every field is set: the UI's own tests inject their own deps and
 // would not notice a field the app forgot.
-func tuiDeps(cfg config.Config, p paths.Paths, client *wa.WhatsApp, st *store.Store, rec *store.Recorder, cache media.Cache, log *slog.Logger) ui.Deps {
+func tuiDeps(cfg config.Config, p paths.Paths, client *wa.WhatsApp, st *store.Store, rec *store.Recorder, cache *media.Switchable, log *slog.Logger) ui.Deps {
 	return ui.Deps{
 		Client:     client,
 		Store:      st,

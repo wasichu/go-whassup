@@ -32,7 +32,7 @@ func TestTUIDepsFullyWired(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = client.Close() }) //nolint:errcheck // test cleanup
 	deps := tuiDeps(config.Default(), paths.Paths{ConfigFile: filepath.Join(dir, "c.toml")}, client, st,
-		&store.Recorder{Store: st, Log: log}, media.Cache{Dir: dir}, log)
+		&store.Recorder{Store: st, Log: log}, media.NewSwitchable(dir), log)
 
 	// Every field must be listed: a new ui.Deps field forces a decision
 	// here instead of silently being left unset.

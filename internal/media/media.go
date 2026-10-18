@@ -19,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	"sync/atomic"
+
 	"github.com/wasichu/go-whassup/internal/wa"
 )
 
@@ -216,4 +218,35 @@ func Open(path string) error {
 	case <-time.After(openWait):
 	}
 	return nil
+}
+
+// Switchable is a Cache whose directory can change while the app runs:
+// turning encryption on moves downloads to a temporary directory (cached
+// files are plaintext), turning it off moves them back. Safe for
+// concurrent use; an operation uses the directory current when it starts.
+type Switchable struct{ dir atomic.Pointer[string] }
+
+// NewSwitchable returns a Switchable caching in dir.
+func NewSwitchable(dir string) *Switchable {
+	s := &Switchable{}
+	s.SetDir(dir)
+	return s
+}
+
+// SetDir switches the cache to dir. Files already cached elsewhere stay
+// there (the caller removes them if needed).
+func (s *Switchable) SetDir(dir string) { s.dir.Store(&dir) }
+
+// Dir is the current directory.
+func (s *Switchable) Dir() string { return *s.dir.Load() }
+
+func (s *Switchable) cache() Cache { return Cache{Dir: s.Dir()} }
+
+func (s *Switchable) Lookup(chat, id string) (string, bool) { return s.cache().Lookup(chat, id) }
+func (s *Switchable) Put(chat, id, src string, m wa.Media) error {
+	return s.cache().Put(chat, id, src, m)
+}
+func (s *Switchable) Remove(chat, id string) error { return s.cache().Remove(chat, id) }
+func (s *Switchable) Fetch(ctx context.Context, d Downloader, chat, id string, m wa.Media) (string, error) {
+	return s.cache().Fetch(ctx, d, chat, id, m)
 }

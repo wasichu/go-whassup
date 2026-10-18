@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sync/atomic"
 )
 
 // Open returns a logger appending to path (created 0600). Debug enables
@@ -25,21 +26,40 @@ func Open(path string, debug bool) (*slog.Logger, io.Closer, error) {
 	return slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: level})), f, nil
 }
 
-// AtLeast returns a logger that drops records below min, whatever log's own
-// level. Used to keep a library's debug output out of the log (e.g.
-// whatsmeow while messages are encrypted).
-func AtLeast(log *slog.Logger, min slog.Level) *slog.Logger {
-	return slog.New(minLevel{h: log.Handler(), min: min})
+// Cap is a minimum level for a logger made with Capped, changeable while
+// the app runs (it's checked for every record). The zero value lets
+// everything through. Used to keep a library's debug output out of the log
+// while messages are encrypted (whatsmeow's includes message text).
+type Cap struct {
+	on  atomic.Bool
+	min atomic.Int64
 }
 
-type minLevel struct {
-	h   slog.Handler
-	min slog.Level
+// Set drops records below min from now on.
+func (c *Cap) Set(min slog.Level) {
+	c.min.Store(int64(min))
+	c.on.Store(true)
 }
 
-func (m minLevel) Enabled(ctx context.Context, l slog.Level) bool {
-	return l >= m.min && m.h.Enabled(ctx, l)
+// Clear lets every record through again.
+func (c *Cap) Clear() { c.on.Store(false) }
+
+func (c *Cap) allows(l slog.Level) bool { return !c.on.Load() || int64(l) >= c.min.Load() }
+
+// Capped returns a logger that drops records below c's level, whatever
+// log's own level.
+func Capped(log *slog.Logger, c *Cap) *slog.Logger {
+	return slog.New(capped{h: log.Handler(), c: c})
 }
-func (m minLevel) Handle(ctx context.Context, r slog.Record) error { return m.h.Handle(ctx, r) }
-func (m minLevel) WithAttrs(a []slog.Attr) slog.Handler            { return minLevel{m.h.WithAttrs(a), m.min} }
-func (m minLevel) WithGroup(g string) slog.Handler                 { return minLevel{m.h.WithGroup(g), m.min} }
+
+type capped struct {
+	h slog.Handler
+	c *Cap
+}
+
+func (m capped) Enabled(ctx context.Context, l slog.Level) bool {
+	return m.c.allows(l) && m.h.Enabled(ctx, l)
+}
+func (m capped) Handle(ctx context.Context, r slog.Record) error { return m.h.Handle(ctx, r) }
+func (m capped) WithAttrs(a []slog.Attr) slog.Handler            { return capped{m.h.WithAttrs(a), m.c} }
+func (m capped) WithGroup(g string) slog.Handler                 { return capped{m.h.WithGroup(g), m.c} }
