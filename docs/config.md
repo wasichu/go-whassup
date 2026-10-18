@@ -24,8 +24,10 @@ TUI's Settings screen (`,`) reads and writes it.
   variables are not supported (add them only when there's a real need).
 - **Settings screen.** `Config.Fields()` discovers settings by reflection over the
   struct tags: bool and int fields; string fields with a `choices:"a,b"` tag (enter or
-  →/← cycles through them) or `text:"true"` (free text). A `confirm:"…"` tag makes Settings
-  ask y/n with that text before changing the value. Tag `applies:"pairing"` marks link-time-only settings.
+  →/← cycles through them) or `text:"true"` (free text). A `confirm:"…"` tag makes Settings ask y/n
+  before the value changes, and `confirm_off:"…"` asks a different question when a
+  bool is turned off. Both take `question|explanation|yes label|no label` (later parts
+  optional; a lone text gets "Change <name>?" and Yes/No). Tag `applies:"pairing"` marks link-time-only settings.
   `shown_when:"key=value"` lists a setting only while a sibling has that value
   (`password_command` only with `key_source = password-command`). A choice that reveals an
   empty text setting asks for it at once, and Esc drops the choice too. The TUI renders and edits them generically, so a new setting appears there
@@ -83,7 +85,7 @@ encryption off, let it finish, then turn it on with the new source.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `enabled` | `false` | Encrypt message text, reactions and attachment keys in `messages.db`. **Encrypts message text only: who you talk to, when, and contact names stay readable on disk.** Message search is off while it's on. Turning it on re-encrypts stored messages; turning it off decrypts them back. The Settings toggle asks for confirmation first. |
+| `enabled` | `false` | Encrypt message text, reactions and attachment keys in `messages.db`. **Encrypts message text only: who you talk to, when, and contact names stay readable on disk.** Message search is off while it's on. Turning it on re-encrypts stored messages; turning it off decrypts them back. The Settings toggle asks first, with its own question each way (encrypt / decrypt at next start). |
 | `key_source` | `"keyring"` | `keyring` (OS keychain, no prompt), `password-command` (runs `password_command`; its output is the passphrase), or `prompt` (asks at startup). |
 | `password_command` | `""` | Shell command that prints the passphrase, e.g. `pass show whatsapp`. Required with `key_source = password-command` (even while encryption is off), and only listed in Settings then; choosing that source asks for it. |
 

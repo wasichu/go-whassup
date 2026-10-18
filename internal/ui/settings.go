@@ -19,8 +19,8 @@ type settings struct {
 	cfg      config.Config
 	selected int
 	editing  bool
-	pending  *config.Config // a change awaiting y/n because its field has a Confirm text
-	confirm  string
+	pending  *config.Config // a change awaiting y/n (see config.Field.ConfirmationFor)
+	confirm  config.Confirmation
 	// staged is a change that revealed an empty setting (key_source =
 	// password-command shows password_command): it's held, and shown,
 	// until that setting is filled in. Esc drops both. stagedFrom is the
@@ -134,10 +134,10 @@ func (s *settings) confirmKey(r rootAPI, msg tea.KeyPressMsg) tea.Cmd {
 	next := *s.pending
 	switch msg.String() {
 	case "y":
-		s.pending, s.confirm = nil, ""
+		s.pending, s.confirm = nil, config.Confirmation{}
 		return s.commit(r, next)
 	case "n", "esc":
-		s.pending, s.confirm = nil, ""
+		s.pending, s.confirm = nil, config.Confirmation{}
 	}
 	return nil
 }
@@ -182,14 +182,15 @@ func (s *settings) change(r rootAPI, f config.Field, dir int) tea.Cmd {
 		s.staged, s.stagedFrom, s.selected = &next, s.selected, i
 		return s.edit(next.Fields()[i])
 	}
-	if f.Confirm == "" {
+	c, ask := f.ConfirmationFor(next.Fields()[s.selected].Value())
+	if !ask {
 		return s.commit(r, next)
 	}
 	if err := next.Validate(); err != nil {
 		s.err = err.Error()
 		return nil
 	}
-	s.pending, s.confirm = &next, f.Confirm
+	s.pending, s.confirm = &next, c
 	return nil
 }
 
@@ -251,10 +252,11 @@ func (s *settings) view(r rootAPI, width, height int) string {
 	fields := s.shown().Fields()
 	if s.pending != nil {
 		// A confirmation gets the whole screen so it fits small terminals.
-		name := fields[s.selected].Name()
-		content := paneTitleStyle.Render("Change "+name+"?") + "\n\n" +
-			lipgloss.NewStyle().Width(min(width-4, 80)).Render(s.confirm) + "\n\n" +
-			senderStyle.Render("y = yes, n = no")
+		c := s.confirm
+		content := paneTitleStyle.Render(c.Question) + "\n\n" +
+			lipgloss.NewStyle().Width(min(width-4, 80)).Render(c.Text) + "\n\n" +
+			senderStyle.Render("y") + "  " + c.Yes + "\n" +
+			senderStyle.Render("n") + "  " + c.No
 		return pageStyle(width, height).Render(content)
 	}
 	var b strings.Builder

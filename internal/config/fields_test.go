@@ -78,6 +78,15 @@ func TestEncryptionFields(t *testing.T) {
 	if f := byName["encryption.enabled"]; f.Kind != KindBool || !strings.Contains(f.Confirm, "who you talk to") {
 		t.Errorf("enabled field = %+v; want a bool with the metadata warning as confirmation", f)
 	}
+	on, ok1 := byName["encryption.enabled"].ConfirmationFor("true")
+	off, ok2 := byName["encryption.enabled"].ConfirmationFor("false")
+	if !ok1 || !ok2 || on.Question != "Turn on encryption?" || on.Yes != "Encrypt at next start" ||
+		off.Question != "Turn off encryption?" || off.Yes != "Decrypt at next start" || off.No != "Keep them encrypted" {
+		t.Errorf("confirmations: on %+v, off %+v", on, off)
+	}
+	if _, ask := byName["ui.inline_images"].ConfirmationFor("false"); ask {
+		t.Error("a setting without a confirm tag asked")
+	}
 	if f := byName["encryption.key_source"]; f.Kind != KindChoice || f.Value() != KeySourceKeyring {
 		t.Errorf("key_source = %+v (%q)", f, f.Value())
 	}

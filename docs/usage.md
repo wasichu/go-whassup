@@ -75,7 +75,11 @@ Turn on `[encryption] enabled` in Settings (`,`). It asks first, because it **en
 message text, reactions and attachment keys only: who you talk to, when, and contact
 names stay readable on disk.**
 - On the next start, stored messages are encrypted in the background; the status line
-  says so. Turning it off decrypts them back the same way.
+  says so.
+- **Turning it off** asks separately (`y` decrypt at next start, `n` keep them
+  encrypted). On the next start the key is unlocked one last time, messages are
+  decrypted back in the background, then the key is forgotten and search returns. A
+  keychain entry, if you used one, is left in place.
 - **Key sources** (`key_source`):
   - `keyring`: your OS keychain; no prompt.
   - `password-command`: e.g. `pass show whatsapp`.

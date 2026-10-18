@@ -30,9 +30,43 @@ type Field struct {
 	PairingOnly bool
 	// Choices lists the allowed values of a KindChoice field, in display order.
 	Choices []string
-	// Confirm, if set, is shown for confirmation before the value changes.
-	Confirm string
-	v       reflect.Value
+	// Confirm, if set, is asked before the value changes; ConfirmOff instead
+	// when a bool is turned off. See ConfirmationFor.
+	Confirm, ConfirmOff string
+	v                   reflect.Value
+}
+
+// Confirmation is a question asked before a setting changes, from a
+// confirm or confirm_off tag: "question|explanation|yes label|no label"
+// (later parts optional).
+type Confirmation struct {
+	Question, Text, Yes, No string
+}
+
+// ConfirmationFor returns what to ask before f takes the value next (as
+// Value renders it), or false if the change needs no confirmation.
+func (f Field) ConfirmationFor(next string) (Confirmation, bool) {
+	raw := f.Confirm
+	if f.Kind == KindBool && next == "false" && f.ConfirmOff != "" {
+		raw = f.ConfirmOff
+	}
+	if raw == "" {
+		return Confirmation{}, false
+	}
+	c := Confirmation{Question: "Change " + f.Name() + "?", Yes: "Yes", No: "No"}
+	parts := strings.SplitN(raw, "|", 4)
+	if len(parts) == 1 {
+		c.Text = parts[0]
+		return c, true
+	}
+	c.Question, c.Text = parts[0], parts[1]
+	if len(parts) > 2 {
+		c.Yes = parts[2]
+	}
+	if len(parts) > 3 {
+		c.No = parts[3]
+	}
+	return c, true
 }
 
 // Name is the dotted name used in messages, e.g. "history.keep_days".
@@ -121,6 +155,7 @@ func (c *Config) Fields() []Field {
 				Comment:     sf.Tag.Get("comment"),
 				PairingOnly: sf.Tag.Get("applies") == "pairing",
 				Confirm:     sf.Tag.Get("confirm"),
+				ConfirmOff:  sf.Tag.Get("confirm_off"),
 				v:           sv.Field(j),
 			}
 			switch sf.Type.Kind() {
