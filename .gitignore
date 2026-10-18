@@ -1,0 +1,15 @@
+# build output
+/bin/
+
+# runtime data should live under XDG dirs, but never commit stray copies
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.log
+
+# local tooling state
+/.claude/settings.local.json
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/

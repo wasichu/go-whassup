@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "graft": {
+      "command": "graft",
+      "args": [
+        "mcp"
+      ]
+    },
+    "gopls": {
+      "command": "mise",
+      "args": [
+        "exec",
+        "--",
+        "gopls",
+        "mcp"
+      ]
+    }
+  }
+}
