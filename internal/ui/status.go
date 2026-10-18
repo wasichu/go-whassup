@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -68,6 +69,22 @@ func (m Model) contextHelp() []key.Binding {
 	case m.focus == focusInput:
 		return inputHelp
 	default:
-		return listHelp
+		return m.listHelp()
 	}
+}
+
+// listHelp is the chat list's hints, without the chat shortcuts that
+// can't do anything right now: o / a / i need a selected chat, and a
+// draft has no attachments or info yet (but can be sent a file).
+func (m Model) listHelp() []key.Binding {
+	var hide []key.Binding
+	switch {
+	case m.conv.chat.JID == "":
+		hide = []key.Binding{keys.Media, keys.Attach, keys.Info}
+	case m.draft != "":
+		hide = []key.Binding{keys.Media, keys.Info}
+	}
+	return slices.DeleteFunc(slices.Clone(listHelp), func(b key.Binding) bool {
+		return slices.ContainsFunc(hide, func(h key.Binding) bool { return h.Help().Key == b.Help().Key })
+	})
 }

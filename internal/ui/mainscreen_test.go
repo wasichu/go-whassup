@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
@@ -252,5 +253,35 @@ func TestEditsDeletesReactionsRender(t *testing.T) {
 	}
 	if strings.Contains(v, "secret plans") {
 		t.Error("deleted text still shown")
+	}
+}
+
+func TestListHintsOnlyOfferWhatApplies(t *testing.T) {
+	keysOf := func(bs []key.Binding) string {
+		var out []string
+		for _, b := range bs {
+			out = append(out, b.Help().Key)
+		}
+		return strings.Join(out, " ")
+	}
+	h := newHarness(t, true)
+	if got := keysOf(h.model().contextHelp()); !strings.Contains(got, " o a i ") {
+		t.Errorf("chat selected: hints %q should offer o a i", got)
+	}
+
+	h.addContact(wa.Contact{JID: carol, Name: "Carol"})
+	h.key("/")
+	h.key("car")
+	h.key("enter")
+	h.key("esc") // a draft, on the list
+	if got := keysOf(h.model().contextHelp()); !strings.Contains(got, " a ") || strings.Contains(got, " o ") || strings.Contains(got, " i ") {
+		t.Errorf("draft: hints %q should offer a only", got)
+	}
+
+	m := h.model()
+	m.setDraft(nil)
+	m.conv.chat = store.ChatSummary{} // nothing selected (no chats yet)
+	if got := keysOf(m.contextHelp()); strings.Contains(got, " o ") || strings.Contains(got, " a ") || strings.Contains(got, " i ") {
+		t.Errorf("no chat: hints %q should offer none of o a i", got)
 	}
 }
