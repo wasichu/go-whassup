@@ -140,7 +140,16 @@ func TestAttachCompletesPaths(t *testing.T) {
 	h := newHarness(t, true)
 	h.key("a")
 	value := func() string { return h.model().attach.path.Value() }
+	// typeKeys types s, setting any long directory prefix directly (each
+	// typed key parks a cursor-blink command in the harness).
 	typeKeys := func(s string) {
+		if strings.HasPrefix(s, dir) {
+			m := h.model()
+			m.attach.path.SetValue(m.attach.path.Value() + dir)
+			m.attach.path.CursorEnd()
+			h.m = m
+			s = strings.TrimPrefix(s, dir)
+		}
 		h.key(s)
 		h.settle() // directory listings arrive asynchronously
 	}

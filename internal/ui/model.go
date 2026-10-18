@@ -33,6 +33,7 @@ const (
 	screenAttach
 	screenInfo
 	screenSearch
+	screenBrowse
 )
 
 type focus int
@@ -67,17 +68,19 @@ type Model struct {
 	noticeIsErr   bool
 	trueColor     bool // terminal renders 24-bit color (inline images need it)
 
-	chats    chatList
-	conv     conversation
-	login    login
-	settings settings
-	finder   finder
-	picker   picker
-	attach   attach
-	info     info
-	search   search
-	draft    string // JID of an open chat that has no messages yet
-	ownJID   string // the linked account, for labelling the chat with yourself
+	chats     chatList
+	conv      conversation
+	login     login
+	settings  settings
+	finder    finder
+	picker    picker
+	attach    attach
+	info      info
+	search    search
+	browser   browser
+	browseDir string // last folder a file was picked from (browser)
+	draft     string // JID of an open chat that has no messages yet
+	ownJID    string // the linked account, for labelling the chat with yourself
 
 	downloading map[string]bool // attachment downloads in flight, by message ID
 
@@ -298,7 +301,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if key.Matches(msg, keys.ForceQuit) {
 		m.deps.Client.CancelPairing()
 		m, hide, _ := m.hideQRImage()
-		return m, tea.Sequence(hide, tea.Quit)
+		hidePreview := m.browser.hide()
+		return m, tea.Sequence(hide, hidePreview, tea.Quit)
 	}
 	if m.showHelp {
 		m.showHelp = false // any key closes the overlay

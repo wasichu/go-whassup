@@ -119,7 +119,14 @@ names stay readable on disk.**
     opened**; the status line says where it was saved.
   - Media older than WhatsApp keeps on its servers can't be downloaded; you'll be told
     to ask the sender to resend it.
-- **`a`** sends a file: type a path (`~` works) and `enter` to send.
+- **`a`** sends a file. Where the terminal can show images (Kitty graphics: Ghostty,
+  kitty; with true color and `[ui] inline_images` on) it opens a **file browser**:
+  `↑`/`↓` choose, `enter` opens a folder or picks a file, `←` goes up, `.` shows hidden
+  files, `/` switches to typing a path. Resting on a JPEG, PNG or GIF shows a preview
+  (WebP and HEIC don't preview; phone photos may appear unrotated). It reopens in the
+  last folder you picked from. Picking a file fills in the path and moves to the
+  caption; `enter` sends.
+- Elsewhere (or after `/`), type a path (`~` works) and `enter` to send.
   - **`tab` completes the path** like a shell: it fills in what all matches share
     (ignoring case, using the real spelling), then the highlighted match; matches are
     listed below and `↑`/`↓` choose. Dotfiles appear once you type a `.`.

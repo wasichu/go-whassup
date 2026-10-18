@@ -39,6 +39,8 @@ func (m *Model) page() page {
 		return &m.info
 	case screenSearch:
 		return &m.search
+	case screenBrowse:
+		return &m.browser
 	}
 	return nil
 }
@@ -81,6 +83,20 @@ func (r rootAPI) openChat(c store.ChatSummary) tea.Cmd {
 func (r rootAPI) jumpTo(hit store.SearchHit) tea.Cmd {
 	var cmd tea.Cmd
 	*r.m, cmd = r.m.jumpTo(hit)
+	return cmd
+}
+
+// size is the terminal's size in cells.
+func (r rootAPI) size() (width, height int) { return r.m.width, r.m.height }
+
+// inlineImages reports whether images can be shown (see Model.inlineImages).
+func (r rootAPI) inlineImages() bool { return r.m.inlineImages() }
+
+// attachPath opens the send-file form with path filled in (see
+// Model.attachPath).
+func (r rootAPI) attachPath(path string, toCaption bool) tea.Cmd {
+	var cmd tea.Cmd
+	*r.m, cmd = r.m.attachPath(path, toCaption)
 	return cmd
 }
 

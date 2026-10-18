@@ -123,7 +123,8 @@ There are two kinds of consumers:
   finder that has no messages yet (`setDraft` also gives the chat list its placeholder
   row); it turns into a normal selection when the chat appears in the store.
 - **Every other screen is a `page`** (`page.go`): finder, search, attachments (picker),
-  send file (attach), chat info and settings. A page implements `update`, `view` and
+  send file (attach, typed with completion; browser, with image previews), chat info and
+  settings. A page implements `update`, `view` and
   `help`, and the root just routes: `m.page()` maps `screen` to the active page, keys
   and any message the root doesn't handle go to it, and `done` returns to main.
   A page's own async results (directory, search hits, chat details) reach it only

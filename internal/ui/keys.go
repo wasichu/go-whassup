@@ -63,6 +63,14 @@ var (
 	// passing through one that asks for more (key_source = password-command).
 	settingsPrev = key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/→", "cycle"))
 	settingsNext = key.NewBinding(key.WithKeys("right", "l"))
+	browserHelp  = []key.Binding{
+		key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "choose")),
+		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open/pick")),
+		key.NewBinding(key.WithKeys("left"), key.WithHelp("←", "up a folder")),
+		key.NewBinding(key.WithKeys("."), key.WithHelp(".", "hidden")),
+		key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "type a path")),
+		keys.Back,
+	}
 	settingsHelp = []key.Binding{keys.Up, keys.Down, keys.Edit, settingsPrev, keys.Back}
 	fullMainHelp = [][]key.Binding{
 		{keys.Up, keys.Down, keys.Open, keys.Find, keys.Search, keys.Quit},

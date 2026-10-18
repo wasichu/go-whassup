@@ -177,12 +177,36 @@ func newAttach(width int) attach {
 	return attach{path: path, caption: caption}
 }
 
+// openAttach starts sending a file: the browser with previews when the
+// terminal can show images, else the typed path with tab completion.
 func (m Model) openAttach() (Model, tea.Cmd) {
 	if m.conv.chat.JID == "" {
 		return m, nil
 	}
+	if m.inlineImages() {
+		return m.openBrowser()
+	}
 	m.screen, m.attach = screenAttach, newAttach(m.width)
 	cmd := m.attach.path.Focus() // evaluate before m is copied into the return
+	return m, cmd
+}
+
+// attachPath opens the send-file form with path filled in: a file picked
+// in the browser (caption focused), or its folder to type from.
+func (m Model) attachPath(path string, toCaption bool) (Model, tea.Cmd) {
+	m.browseDir = filepath.Dir(path)
+	if strings.HasSuffix(path, string(filepath.Separator)) {
+		m.browseDir = filepath.Clean(path)
+	}
+	m.screen, m.attach = screenAttach, newAttach(m.width)
+	m.attach.path.SetValue(path)
+	m.attach.path.CursorEnd()
+	if toCaption {
+		m.attach.onCaption = true
+		cmd := m.attach.caption.Focus() // evaluate before m is copied into the return
+		return m, cmd
+	}
+	cmd := tea.Batch(m.attach.path.Focus(), m.attach.complete.refresh(&m.attach.path)) // evaluate before m is copied into the return
 	return m, cmd
 }
 
