@@ -86,8 +86,9 @@ migration (implemented in `internal/store/codec.go`):
 - **Metadata stays plaintext:** chat, sender, timestamps, message IDs. Listing and
   sorting keep working in SQL. The trade-off is that metadata (who you talk to and
   when) isn't protected.
-- **Search** over encrypted text decrypts in memory, so there's no SQL `LIKE`/FTS on
-  sealed rows.
+- **Turning encryption on re-encrypts existing rows** (decided 2026-10-18). The per-row
+  `codec` column makes this resumable. **Search is unavailable while encryption is
+  on**; the UI says so rather than searching partially.
 - **Crypto:** AES-GCM from the standard library or XChaCha20-Poly1305 from
   `x/crypto` (already in the module graph). No new dependency for the cipher itself.
 

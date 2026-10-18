@@ -57,12 +57,12 @@ step lands or the plan changes.
 4. **Media:** download images and documents; open them with `open` / `xdg-open`; and
    **send files** (pick a path, send as a document or image).
 5. **Groups:** names from group info, participants, mentions.
-6. **Search.** Decide the encryption trade-off first, because SQLite FTS can't index
-   sealed rows.
+6. **Search.** Unavailable while encryption is on (decided); the UI says so.
 7. **Encryption at rest** via the `store.Codec` seam:
    - an `[encryption]` config section (on/off, key source);
    - key sources in order: OS keyring, then a pianobar-style `password_command`, then a
      prompt;
+   - turning it on re-encrypts existing rows (decided);
    - see `storage.md`.
 8. **Read receipts** (opt-in; never automatic, because of ban risk) and **desktop
    notifications**.
