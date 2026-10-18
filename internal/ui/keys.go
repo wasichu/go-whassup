@@ -6,9 +6,10 @@ import "charm.land/bubbles/v2/key"
 // against it and the status-line hints and ? overlay are generated from it.
 var keys = struct {
 	// Chat list (main screen, list focused).
-	Up, Down, Open, Quit, Find, Search, Media, Attach, Info, Login, Settings, Help key.Binding
-	// Message input focused.
-	Send, Blur key.Binding
+	Up, Down, Open, Quit, Find, Search, Info, Login, Settings, Help key.Binding
+	// Message input focused. Attachments use ctrl keys there: plain
+	// letters are typed.
+	Send, Blur, Media, Attach key.Binding
 	// Main screen, either focus.
 	PageUp, PageDown key.Binding
 	// Lists on the login and settings screens.
@@ -22,8 +23,8 @@ var keys = struct {
 	Quit:      key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 	Find:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "find/new chat")),
 	Search:    key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "search messages")),
-	Media:     key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "attachments")),
-	Attach:    key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "send file")),
+	Media:     key.NewBinding(key.WithKeys("ctrl+o"), key.WithHelp("ctrl+o", "attachments")),
+	Attach:    key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "send file")),
 	Info:      key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "chat info")),
 	Login:     key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "link/re-link")),
 	Settings:  key.NewBinding(key.WithKeys(","), key.WithHelp(",", "settings")),
@@ -42,8 +43,8 @@ var keys = struct {
 
 // Binding sets per context, rendered with help.ShortHelpView/FullHelpView.
 var (
-	listHelp   = []key.Binding{keys.Up, keys.Down, keys.Open, keys.Find, keys.Search, keys.Media, keys.Attach, keys.Info, keys.Login, keys.Settings, keys.Help, keys.Quit}
-	inputHelp  = []key.Binding{keys.Send, keys.Blur, keys.PageUp, keys.PageDown}
+	listHelp   = []key.Binding{keys.Up, keys.Down, keys.Open, keys.Find, keys.Search, keys.Info, keys.Login, keys.Settings, keys.Help, keys.Quit}
+	inputHelp  = []key.Binding{keys.Send, keys.Blur, keys.Media, keys.Attach, keys.PageUp, keys.PageDown}
 	menuHelp   = []key.Binding{keys.Up, keys.Down, keys.Select, keys.Back}
 	formHelp   = []key.Binding{keys.Submit, keys.Back}
 	waitHelp   = []key.Binding{keys.Cancel}
@@ -73,9 +74,8 @@ var (
 	}
 	settingsHelp = []key.Binding{keys.Up, keys.Down, keys.Edit, settingsPrev, keys.Back}
 	fullMainHelp = [][]key.Binding{
-		{keys.Up, keys.Down, keys.Open, keys.Find, keys.Search, keys.Quit},
-		{keys.Media, keys.Attach, keys.Info},
-		{keys.Send, keys.Blur, keys.PageUp, keys.PageDown},
+		{keys.Up, keys.Down, keys.Open, keys.Find, keys.Search, keys.Info, keys.Quit},
+		{keys.Send, keys.Blur, keys.Media, keys.Attach, keys.PageUp, keys.PageDown},
 		{keys.Login, keys.Settings, keys.Help, keys.ForceQuit},
 	}
 )

@@ -332,6 +332,10 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // typing, so q , ? L are just characters here.
 func (m Model) inputKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	switch {
+	case key.Matches(msg, keys.Media):
+		return m.openPicker()
+	case key.Matches(msg, keys.Attach):
+		return m.openAttach()
 	case key.Matches(msg, keys.Blur):
 		m.focus = focusList
 		m.conv.input.Blur()
@@ -364,10 +368,6 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.openSettings(), nil
 	case key.Matches(msg, keys.Find):
 		return m.openFinder()
-	case key.Matches(msg, keys.Media):
-		return m.openPicker()
-	case key.Matches(msg, keys.Attach):
-		return m.openAttach()
 	case key.Matches(msg, keys.Info):
 		return m.openInfo()
 	case key.Matches(msg, keys.Search):

@@ -256,32 +256,49 @@ func TestEditsDeletesReactionsRender(t *testing.T) {
 	}
 }
 
-func TestListHintsOnlyOfferWhatApplies(t *testing.T) {
+func TestAttachmentKeysLiveInTheMessageBox(t *testing.T) {
 	keysOf := func(bs []key.Binding) string {
 		var out []string
 		for _, b := range bs {
 			out = append(out, b.Help().Key)
 		}
-		return strings.Join(out, " ")
+		return " " + strings.Join(out, " ") + " "
 	}
 	h := newHarness(t, true)
-	if got := keysOf(h.model().contextHelp()); !strings.Contains(got, " o a i ") {
-		t.Errorf("chat selected: hints %q should offer o a i", got)
+	if got := keysOf(h.model().contextHelp()); strings.Contains(got, "ctrl+o") || strings.Contains(got, " o ") || !strings.Contains(got, " i ") {
+		t.Errorf("chat list hints %q: info yes, attachments no", got)
+	}
+	h.key("o") // no longer a list shortcut
+	if h.model().screen != screenMain {
+		t.Error("o on the chat list should do nothing now")
 	}
 
+	h.key("enter") // into the message box
+	if got := keysOf(h.model().contextHelp()); !strings.Contains(got, " ctrl+o ") || !strings.Contains(got, " ctrl+t ") {
+		t.Errorf("message box hints %q should offer ctrl+o and ctrl+t", got)
+	}
+	h.key("oa") // plain letters are typed
+	if v := h.model().conv.input.Value(); v != "oa" || h.model().screen != screenMain {
+		t.Errorf("o and a should be typed: input %q, screen %v", v, h.model().screen)
+	}
+	h.key("ctrl+t")
+	if h.model().screen != screenAttach {
+		t.Errorf("ctrl+t should start sending a file (screen %v)", h.model().screen)
+	}
+
+	h = newHarness(t, true)
 	h.addContact(wa.Contact{JID: carol, Name: "Carol"})
 	h.key("/")
 	h.key("car")
-	h.key("enter")
-	h.key("esc") // a draft, on the list
-	if got := keysOf(h.model().contextHelp()); !strings.Contains(got, " a ") || strings.Contains(got, " o ") || strings.Contains(got, " i ") {
-		t.Errorf("draft: hints %q should offer a only", got)
+	h.key("enter") // a draft, in the message box
+	if got := keysOf(h.model().contextHelp()); !strings.Contains(got, " ctrl+t ") || strings.Contains(got, " ctrl+o ") {
+		t.Errorf("draft hints %q should offer ctrl+t only", got)
 	}
 
 	m := h.model()
 	m.setDraft(nil)
 	m.conv.chat = store.ChatSummary{} // nothing selected (no chats yet)
-	if got := keysOf(m.contextHelp()); strings.Contains(got, " o ") || strings.Contains(got, " a ") || strings.Contains(got, " i ") {
-		t.Errorf("no chat: hints %q should offer none of o a i", got)
+	if got := keysOf(m.contextHelp()); strings.Contains(got, "ctrl+") {
+		t.Errorf("no chat: hints %q should offer neither", got)
 	}
 }

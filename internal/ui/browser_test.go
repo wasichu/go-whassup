@@ -58,7 +58,8 @@ func TestBrowserPreviewsAndPicks(t *testing.T) {
 	m := h.model()
 	m.browseDir = dir
 	h.m = m
-	h.key("a")
+	h.key("enter") // into the message box
+	h.key("ctrl+t")
 	h.settle()
 	if h.model().screen != screenBrowse {
 		t.Fatalf("with image support, a should open the browser:\n%s", h.view())
@@ -104,7 +105,8 @@ func TestBrowserPreviewsAndPicks(t *testing.T) {
 	}
 
 	h.key("esc")
-	h.key("a") // reopens where we were
+	h.key("enter")  // into the message box
+	h.key("ctrl+t") // reopens where we were
 	h.settle()
 	if h.model().browser.dir != dir {
 		t.Errorf("browser reopened in %q, want %q", h.model().browser.dir, dir)
@@ -123,7 +125,8 @@ func TestBrowserFolders(t *testing.T) {
 	m := h.model()
 	m.browseDir = dir
 	h.m = m
-	h.key("a")
+	h.key("enter") // into the message box
+	h.key("ctrl+t")
 	h.settle()
 	h.key("enter") // into Pictures/
 	h.settle()
@@ -143,7 +146,8 @@ func TestBrowserFolders(t *testing.T) {
 
 func TestAttachWithoutImagesIsTyped(t *testing.T) {
 	h := newHarness(t, true) // no graphics
-	h.key("a")
+	h.key("enter")           // into the message box
+	h.key("ctrl+t")
 	if h.model().screen != screenAttach {
 		t.Errorf("without image support, a should open the typed form (screen %v)", h.model().screen)
 	}

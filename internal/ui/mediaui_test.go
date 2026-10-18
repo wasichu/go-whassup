@@ -34,7 +34,8 @@ func TestOpenAttachment(t *testing.T) {
 		t.Fatalf("attachment should show its size, not cached yet:\n%s", v)
 	}
 
-	h.key("o")
+	h.key("enter") // into the message box
+	h.key("ctrl+o")
 	if h.model().screen != screenPicker || !strings.Contains(h.view(), "report.pdf") {
 		t.Fatalf("picker not shown:\n%s", h.view())
 	}
@@ -59,7 +60,8 @@ func TestOpenAttachmentProblems(t *testing.T) {
 	h := newHarness(t, true)
 	h.seedAttachment("gone", "old.pdf")
 	h.client.DownloadErr = wa.ErrMediaExpired
-	h.key("o")
+	h.key("enter") // into the message box
+	h.key("ctrl+o")
 	h.key("enter")
 	h.settle()
 	if v := h.view(); !strings.Contains(v, "no longer on WhatsApp's servers") {
@@ -70,7 +72,8 @@ func TestOpenAttachmentProblems(t *testing.T) {
 	h2.client.DownloadData = []byte("#!/bin/sh")
 	h2.openErr = media.ErrNotOpenable
 	h2.seedAttachment("sh", "run.command")
-	h2.key("o")
+	h2.key("enter") // into the message box
+	h2.key("ctrl+o")
 	h2.key("enter")
 	h2.settle()
 	if v := h2.view(); !strings.Contains(v, "Not opened (unrecognised file type)") {
@@ -78,7 +81,8 @@ func TestOpenAttachmentProblems(t *testing.T) {
 	}
 
 	h3 := newHarness(t, true)
-	h3.key("o")
+	h3.key("enter") // into the message box
+	h3.key("ctrl+o")
 	if h3.model().screen != screenMain || !strings.Contains(h3.view(), "No attachments") {
 		t.Errorf("empty picker should just say so:\n%s", h3.view())
 	}
@@ -90,7 +94,8 @@ func TestAttachSendsAndCaches(t *testing.T) {
 	if err := os.WriteFile(src, []byte("hello"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	h.key("a")
+	h.key("enter") // into the message box
+	h.key("ctrl+t")
 	if h.model().screen != screenAttach {
 		t.Fatalf("attach screen not open:\n%s", h.view())
 	}
@@ -114,7 +119,8 @@ func TestAttachSendsAndCaches(t *testing.T) {
 
 func TestAttachRejectsMissingFile(t *testing.T) {
 	h := newHarness(t, true)
-	h.key("a")
+	h.key("enter") // into the message box
+	h.key("ctrl+t")
 	h.key("/nope/missing.jpg")
 	h.key("enter")
 	if h.model().screen != screenAttach || !strings.Contains(h.view(), "No such file") {
@@ -138,7 +144,8 @@ func TestAttachCompletesPaths(t *testing.T) {
 		}
 	}
 	h := newHarness(t, true)
-	h.key("a")
+	h.key("enter") // into the message box
+	h.key("ctrl+t")
 	value := func() string { return h.model().attach.path.Value() }
 	// typeKeys types s, setting any long directory prefix directly (each
 	// typed key parks a cursor-blink command in the harness).

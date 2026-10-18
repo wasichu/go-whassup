@@ -46,8 +46,8 @@ the status line. If the device isn't linked, it opens the **login screen** inste
 | `pgup`/`pgdn` | scroll messages | scroll messages |
 | `/` | find a chat or contact (new chats too) | (typed) |
 | `s` | search message text | (typed) |
-| `o` | this chat's attachments: open (downloads if needed) | (typed) |
-| `a` | send a file to this chat | (typed) |
+| `ctrl+o` | | this chat's attachments: open (downloads if needed) |
+| `ctrl+t` | | send a file to this chat |
 | `i` | chat info: number, or a group's topic and members | (typed) |
 | `L` | login screen: link, or re-link | (typed) |
 | `,` | settings | (typed) |
@@ -55,8 +55,10 @@ the status line. If the device isn't linked, it opens the **login screen** inste
 | `q` | quit | (typed) |
 | `ctrl+c` | quit | quit |
 
-Shortcuts only act from the chat list. In the message box `q`, `/`, `s`, `o`, `a`, `i`, `L`, `,` and `?` are just
-characters. Hints in the status line are generated from the same keymap as the
+Letter shortcuts only act from the chat list; in the message box `q`, `/`, `s`, `i`, `L`, `,`
+and `?` are just characters. Attachments are handled while writing, like the attach button
+in WhatsApp's compose bar, so they use `ctrl+o` and `ctrl+t` (Ctrl+A is the line start, and
+a common tmux prefix). Hints in the status line are generated from the same keymap as the
 handlers (`internal/ui/keys.go`), so they can't drift.
 
 ### Search (`s`)
@@ -110,7 +112,7 @@ names stay readable on disk.**
 ### Attachments
 
 - Messages with an attachment show its size, and a ✓ once it's downloaded.
-- **`o`** lists the open chat's attachments, newest first. `enter` downloads one if
+- **`ctrl+o`** (in the message box) lists the open chat's attachments, newest first. `enter` downloads one if
   needed (into `~/.local/share/go-whassup/media/`) and opens it with your system's
   default app.
   - **Only ordinary document and media types are opened** (images, video, audio, PDF,
@@ -119,7 +121,7 @@ names stay readable on disk.**
     opened**; the status line says where it was saved.
   - Media older than WhatsApp keeps on its servers can't be downloaded; you'll be told
     to ask the sender to resend it.
-- **`a`** sends a file. Where the terminal can show images (Kitty graphics: Ghostty,
+- **`ctrl+t`** (in the message box) sends a file. Where the terminal can show images (Kitty graphics: Ghostty,
   kitty; with true color and `[ui] inline_images` on) it opens a **file browser**:
   `↑`/`↓` choose, `enter` opens a folder or picks a file, `←` goes up, `.` shows hidden
   files, `/` switches to typing a path. Resting on a JPEG, PNG or GIF shows a preview

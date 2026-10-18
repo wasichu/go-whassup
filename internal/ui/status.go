@@ -11,7 +11,7 @@ import (
 
 func (m Model) helpView(height int) string {
 	content := paneTitleStyle.Render("Keys") + "\n\n" + m.help.FullHelpView(fullMainHelp) +
-		"\n\n" + faintStyle.Render("q / s o a i , ? and L only act from the chat list; in the message box they're typed. Press any key to close.")
+		"\n\n" + faintStyle.Render("q / s i , ? and L only act from the chat list; in the message box they're typed. ctrl+o and ctrl+t work while writing. Press any key to close.")
 	return pageStyle(m.width, height).Render(content)
 }
 
@@ -67,16 +67,16 @@ func (m Model) contextHelp() []key.Binding {
 	case m.page() != nil:
 		return m.page().help()
 	case m.focus == focusInput:
-		return inputHelp
+		return m.mainHelp(inputHelp)
 	default:
-		return m.listHelp()
+		return m.mainHelp(listHelp)
 	}
 }
 
-// listHelp is the chat list's hints, without the chat shortcuts that
-// can't do anything right now: o / a / i need a selected chat, and a
-// draft has no attachments or info yet (but can be sent a file).
-func (m Model) listHelp() []key.Binding {
+// mainHelp is the main screen's hints, without the chat shortcuts that
+// can't do anything right now: attachments and info need a selected chat,
+// and a draft has no attachments or info yet (but can be sent a file).
+func (m Model) mainHelp(bindings []key.Binding) []key.Binding {
 	var hide []key.Binding
 	switch {
 	case m.conv.chat.JID == "":
@@ -84,7 +84,7 @@ func (m Model) listHelp() []key.Binding {
 	case m.draft != "":
 		hide = []key.Binding{keys.Media, keys.Info}
 	}
-	return slices.DeleteFunc(slices.Clone(listHelp), func(b key.Binding) bool {
+	return slices.DeleteFunc(slices.Clone(bindings), func(b key.Binding) bool {
 		return slices.ContainsFunc(hide, func(h key.Binding) bool { return h.Help().Key == b.Help().Key })
 	})
 }
