@@ -50,10 +50,12 @@ step lands or the plan changes.
 ## After step 3: features (in this order)
 
 1. **Contact names** from the phone's address book (whatsmeow's contact store), so the
-   chat list shows real names.
+   chat list shows real names. Also **contact search / new chat**: fuzzy-find any
+   contact and message someone you haven't chatted with yet.
 2. **Unread counts and new-message markers** in the chat list.
 3. **Edits, deletes and reactions** applied to stored messages.
-4. **Media:** download images and documents; open them with `open` / `xdg-open`.
+4. **Media:** download images and documents; open them with `open` / `xdg-open`; and
+   **send files** (pick a path, send as a document or image).
 5. **Groups:** names from group info, participants, mentions.
 6. **Search.** Decide the encryption trade-off first, because SQLite FTS can't index
    sealed rows.
