@@ -18,6 +18,8 @@ func fakeTmux(termname, features, passthrough string) Runner {
 			return features, nil
 		case "show-options -gv allow-passthrough":
 			return passthrough, nil
+		case "show-options -gv focus-events":
+			return "off", nil
 		}
 		return "", errors.New("unexpected tmux call: " + strings.Join(args, " "))
 	}
@@ -55,5 +57,21 @@ func TestDetectGraphics(t *testing.T) {
 				t.Errorf("hint = %q, want containing %q", got.Hint, tt.wantHint)
 			}
 		})
+	}
+}
+
+func TestFocusHint(t *testing.T) {
+	inTmux := env(map[string]string{"TMUX": "/tmp/tmux-501/default,1,0"})
+	focus := func(v string) Runner {
+		return func(args ...string) (string, error) { return v, nil }
+	}
+	if h := FocusHint(env(map[string]string{}), noTmux); h != "" {
+		t.Errorf("outside tmux: %q", h)
+	}
+	if h := FocusHint(inTmux, focus("on")); h != "" {
+		t.Errorf("focus-events on: %q", h)
+	}
+	if h := FocusHint(inTmux, focus("off")); !strings.Contains(h, "tmux set -g focus-events on") {
+		t.Errorf("focus-events off: %q", h)
 	}
 }

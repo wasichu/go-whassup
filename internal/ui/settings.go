@@ -109,7 +109,8 @@ func (m Model) settingsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		s.editing, s.err = true, ""
 		s.input.SetValue(f.Value())
 		s.input.CursorEnd()
-		return m, s.input.Focus()
+		cmd := s.input.Focus() // evaluate before m is copied into the return
+		return m, cmd
 	}
 	return m, nil
 }

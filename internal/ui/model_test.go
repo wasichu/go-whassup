@@ -932,3 +932,30 @@ func TestOpeningLongUnreadChatStartsAtDivider(t *testing.T) {
 		t.Errorf("should open at the divider, not the bottom:\n%s", v)
 	}
 }
+
+func TestLaunchAloneReadsNothing(t *testing.T) {
+	h := newHarness(t, true)
+	h.seedUnread(ada, 1)
+	h.client.Emit(wa.HistorySync{})
+	h.settle() // ada is open on screen, but no key has been pressed
+	if got := h.unread(ada); got != 1 {
+		t.Errorf("launching marked the open chat read: unread = %d", got)
+	}
+	h.send(tea.KeyPressMsg{Code: tea.KeyPgDown}) // any key counts as being here
+	h.client.Emit(wa.HistorySync{})
+	h.settle()
+	if got := h.unread(ada); got != 0 {
+		t.Errorf("after a key press the open chat should be read: unread = %d", got)
+	}
+}
+
+func TestFocusHintShown(t *testing.T) {
+	h := newHarness(t, true)
+	m := h.model()
+	m2 := New(m.ctx, Deps{Client: m.deps.Client, Store: m.deps.Store, Log: m.deps.Log, Config: m.deps.Config, FocusHint: "tmux set -g focus-events on"}, m.sub)
+	h.m = m2
+	h.send(tea.WindowSizeMsg{Width: 200, Height: 30})
+	if !strings.Contains(h.view(), "focus-events on") {
+		t.Errorf("focus hint not shown:\n%s", h.view())
+	}
+}

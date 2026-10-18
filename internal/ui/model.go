@@ -71,6 +71,7 @@ type Model struct {
 	ownJID   string // the linked account, for labelling the chat with yourself
 
 	termFocused bool // terminal window has focus; reads only count while it does
+	interacted  bool // a key was pressed; nothing is read on launch alone
 	readSeq     int  // generation of the pending read timer (see scheduleRead)
 	help        help.Model
 }
@@ -83,6 +84,9 @@ func New(ctx context.Context, deps Deps, sub *wa.Subscription) Model {
 	h.Styles.ShortKey, h.Styles.FullKey = statusStyle.Bold(true), senderStyle
 	h.Styles.ShortDesc, h.Styles.ShortSeparator = statusStyle, statusStyle
 	m := Model{ctx: ctx, deps: deps, sub: sub, conv: newConversation(), login: newLogin(), conn: connConnecting, help: h, ownJID: deps.Client.OwnJID(), termFocused: true}
+	if deps.FocusHint != "" {
+		m.notice = deps.FocusHint
+	}
 	if !deps.Client.IsPaired() {
 		m.conn = connNotPaired
 		m = m.openLogin("")
@@ -107,7 +111,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.FocusMsg:
 		m.termFocused = true
-		return m, m.scheduleRead()
+		cmd := m.scheduleRead() // evaluate before m is copied into the return
+		return m, cmd
 	case tea.BlurMsg:
 		m.termFocused = false
 		return m, nil
@@ -146,15 +151,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.draft = ""
 			c, _ := m.chats.selectedChat()
 			m.conv.setChat(c)
-			return m, tea.Batch(loadMessages(m.ctx, m.deps.Store, c.JID), m.scheduleRead())
+			cmd := tea.Batch(loadMessages(m.ctx, m.deps.Store, c.JID), m.scheduleRead()) // evaluate before m is copied into the return
+			return m, cmd
 		}
 		if c, ok := m.chats.selectedChat(); ok {
 			m.conv.setChat(c)
 			if c.JID != before || len(m.conv.msgs) == 0 {
-				return m, tea.Batch(loadMessages(m.ctx, m.deps.Store, c.JID), m.scheduleRead())
+				cmd := tea.Batch(loadMessages(m.ctx, m.deps.Store, c.JID), m.scheduleRead()) // evaluate before m is copied into the return
+				return m, cmd
 			}
 			if c.Unread > 0 {
-				return m, m.scheduleRead() // new messages arrived in the open chat
+				cmd := m.scheduleRead() // new messages arrived in the open chat; call before returning m
+				return m, cmd
 			}
 		}
 		return m, nil
@@ -199,6 +207,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	m.interacted = true
 	if key.Matches(msg, keys.ForceQuit) {
 		m.deps.Client.CancelPairing()
 		m, hide, _ := m.hideQRImage()
@@ -267,7 +276,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.focus = focusInput
-		return m, m.conv.input.Focus()
+		cmd := m.conv.input.Focus() // evaluate before m is copied into the return
+		return m, cmd
 	}
 	return m, nil
 }
@@ -286,7 +296,8 @@ func (m Model) selectChat(delta int) (tea.Model, tea.Cmd) {
 	}
 	c, _ := m.chats.selectedChat()
 	m.conv.setChat(c)
-	return m, tea.Batch(loadMessages(m.ctx, m.deps.Store, c.JID), m.scheduleRead())
+	cmd := tea.Batch(loadMessages(m.ctx, m.deps.Store, c.JID), m.scheduleRead()) // evaluate before m is copied into the return
+	return m, cmd
 }
 
 func (m Model) handleEvent(evt wa.Event) (tea.Model, tea.Cmd) {

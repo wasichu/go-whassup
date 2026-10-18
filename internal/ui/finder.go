@@ -49,7 +49,8 @@ func (m Model) openFinder() (Model, tea.Cmd) {
 	m.finder = newFinder()
 	m.finder.own = m.ownJID
 	m.finder.input.SetWidth(max(m.width-12, 10))
-	return m, tea.Batch(m.finder.input.Focus(), loadDirectory(m.ctx, m.deps.Store))
+	cmd := tea.Batch(m.finder.input.Focus(), loadDirectory(m.ctx, m.deps.Store)) // evaluate before m is copied into the return
+	return m, cmd
 }
 
 func (m Model) finderLoaded(msg directoryLoadedMsg) (Model, tea.Cmd) {
@@ -101,13 +102,15 @@ func (m Model) openChat(c store.ChatSummary) (Model, tea.Cmd) {
 		sel, _ := m.chats.selectedChat()
 		m.conv.setChat(sel)
 		m.focus = focusInput
-		return m, tea.Batch(m.conv.input.Focus(), loadMessages(m.ctx, m.deps.Store, sel.JID), m.scheduleRead())
+		cmd := tea.Batch(m.conv.input.Focus(), loadMessages(m.ctx, m.deps.Store, sel.JID), m.scheduleRead()) // evaluate before m is copied into the return
+		return m, cmd
 	}
 	m.draft = c.JID
 	m.conv.setChat(c)
 	m.conv.setMessages(nil)
 	m.focus = focusInput
-	return m, m.conv.input.Focus()
+	cmd := m.conv.input.Focus() // evaluate before m is copied into the return
+	return m, cmd
 }
 
 func (m Model) finderView(width, height int) string {

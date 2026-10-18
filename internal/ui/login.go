@@ -159,7 +159,8 @@ func (m Model) loginKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			switch opts[min(l.choice, len(opts)-1)] {
 			case optPhone:
 				l.step = loginPhone
-				return m, l.phone.Focus()
+				cmd := l.phone.Focus() // evaluate before m is copied into the return
+				return m, cmd
 			case optQR:
 				l.step, l.err = loginQR, ""
 				return m, pairQR(m.ctx, m.deps.Client)

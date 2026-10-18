@@ -38,6 +38,9 @@ type Deps struct {
 	// Graphics is the terminal's inline-image support (termcaps); images are
 	// used when it allows and Config.UI.InlineImages is set.
 	Graphics termcaps.Graphics
+	// FocusHint, if set, explains why focus tracking won't work (tmux);
+	// shown once in the status line.
+	FocusHint string
 }
 
 // messagesPerChat is how many recent messages the conversation pane loads.

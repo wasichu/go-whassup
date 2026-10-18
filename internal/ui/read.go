@@ -34,7 +34,9 @@ func (m *Model) scheduleRead() tea.Cmd {
 }
 
 func (m Model) readTick(msg readTickMsg) (tea.Model, tea.Cmd) {
-	if msg.seq != m.readSeq || msg.chat != m.conv.chat.JID || !m.termFocused || m.screen != screenMain || m.showHelp {
+	// Launching shows the top chat, but that alone isn't reading it (the
+	// phone opens on the list): wait for a key press first.
+	if !m.interacted || msg.seq != m.readSeq || msg.chat != m.conv.chat.JID || !m.termFocused || m.screen != screenMain || m.showHelp {
 		return m, nil
 	}
 	if m.conv.chat.Unread == 0 {

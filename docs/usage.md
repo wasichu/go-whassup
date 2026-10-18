@@ -57,13 +57,20 @@ handlers (`internal/ui/keys.go`), so they can't drift.
 - Chats with unread messages are **bold with a count badge**. Opening one shows a
   "── N new ──" divider and starts there if the new messages don't fit on screen.
 - A chat counts as read once it has been **on screen about 1.5 s with the terminal
-  focused**. Arrowing past chats doesn't read them, and messages arriving while you're
+  focused**, and only after you've pressed a key. Launching the app shows the top chat
+  but doesn't read it. Arrowing past chats doesn't read them, and messages arriving while you're
   in another window stay unread. Replying also marks a chat read. Reading a chat on your
   phone clears it here too.
 - **What gets sent** is `[privacy] mark_read` (Settings `,`):
   - `local` (default): nothing;
   - `devices`: your phone and other devices are told, with no blue ticks;
-  - `everyone`: read receipts, like the official apps.
+  - `everyone`: read receipts, like the official apps. If read receipts are off in your
+    phone's WhatsApp privacy settings, whatsmeow sends `read-self` instead, so your
+    phone's setting is respected. (Groups whose members are addressed by privacy ID are
+    untested with `everyone`.)
+- **In tmux**, focus tracking needs `tmux set -g focus-events on` (add it to
+  `~/.tmux.conf`). Without it, the status line shows a tip at launch, and chats count as
+  read even while you're in another window.
 - When you link, the phone's unread counts are adopted. Chats that existed before this
   feature start out read.
 
