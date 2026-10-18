@@ -58,6 +58,12 @@ whatsmeow does **not** persist message content, so we do.
   `Store.Prune` on startup and after every history sync batch. The per-chat cap uses a
   `row_number()` window.
 - **Opening a newer schema** than the build knows is an error, not a silent downgrade.
+- **History arrives only when linking.** The phone pushes its history sync right after
+  pairing, and whatsmeow doesn't replay it. To backfill an existing install:
+  1. Unlink go-whassup on the phone.
+  2. `rm ~/.local/share/go-whassup/session.db`.
+  3. Set any `[history] request_*` options.
+  4. `wa-tui login` again, and leave it running until the `history sync` lines stop.
 
 ### Built so encryption can be added later
 

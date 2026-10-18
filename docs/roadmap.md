@@ -9,7 +9,7 @@ step lands or the plan changes.
    invariants, graft + gopls MCP.
 2. **Headless pairing and listening:** phone-code pairing (`wa-tui login`),
    `wa-tui listen`. Verified live on 2026-10-18.
-3. **Storage (step 2):**
+3. **Storage (step 2)**, live verification pending:
    - `messages.db` with an encryption-ready codec seam;
    - recording of live messages and history sync, with privacy-ID-stable keys;
    - retention limits;
