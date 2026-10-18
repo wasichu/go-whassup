@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -150,5 +151,35 @@ func TestAttachWithoutImagesIsTyped(t *testing.T) {
 	h.key("ctrl+t")
 	if h.model().screen != screenAttach {
 		t.Errorf("without image support, a should open the typed form (screen %v)", h.model().screen)
+	}
+}
+
+// A wide terminal once made a preview wider than the placeholder table
+// can address, and drawing it panicked.
+func TestBrowserPreviewFitsPlaceholderTable(t *testing.T) {
+	for _, w := range []int{80, 150, 220, 400} {
+		_, cols, rows := browserLayout(w, 120)
+		if cols > maxPlacement || rows > maxPlacement {
+			t.Errorf("width %d: preview %d×%d exceeds %d", w, cols, rows, maxPlacement)
+		}
+	}
+	if out := kittyPlaceholders(previewImageID, 100, 2); strings.Count(out, "\U0010EEEE") != 2*maxPlacement {
+		t.Errorf("oversized placeholders should clamp to %d columns", maxPlacement)
+	}
+
+	dir := browseFixture(t)
+	h := newHarness(t, true)
+	h.send(tea.WindowSizeMsg{Width: 220, Height: 60})
+	h.withGraphics()
+	m := h.model()
+	m.browseDir = dir
+	h.m = m
+	h.key("enter") // into the message box
+	h.key("ctrl+t")
+	h.settle()
+	h.key("down") // cat.png
+	h.waitPreview()
+	if !strings.Contains(h.view(), "\U0010EEEE") {
+		t.Errorf("no preview at 220 columns:\n%s", ansi.Strip(h.view()))
 	}
 }

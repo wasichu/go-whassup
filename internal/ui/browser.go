@@ -233,8 +233,8 @@ func (*browser) help() []key.Binding { return browserHelp }
 // area in cells.
 func browserLayout(width, height int) (listW, cols, rows int) {
 	listW = min(max(width*2/5, 24), 50)
-	cols = max(min(width-listW-4, 70), 4)
-	rows = max(min(height-6, 35), 2)
+	cols = max(min(width-listW-4, 70, maxPlacement), 4)
+	rows = max(min(height-6, 35, maxPlacement), 2)
 	return listW, cols, rows
 }
 

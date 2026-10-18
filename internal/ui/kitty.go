@@ -80,6 +80,9 @@ func passthrough(seq string, tmux bool) string {
 // kittyPlaceholders renders the cols x rows block of placeholder cells that
 // displays image id.
 func kittyPlaceholders(id uint32, cols, rows int) string {
+	// Rows and columns are encoded by diacritics from a fixed table, so a
+	// placement can't be bigger than it (callers size within maxPlacement).
+	cols, rows = min(cols, maxPlacement), min(rows, maxPlacement)
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color(fmt.Sprintf("#%06x", id&0xFFFFFF)))
 	lines := make([]string, rows)
 	for r := range rows {
@@ -96,6 +99,9 @@ func kittyPlaceholders(id uint32, cols, rows int) string {
 
 // placeholderDiacritics are the first entries of kitty's rowcolumn-diacritics
 // table (gen/rowcolumn-diacritics.txt): the Nth encodes row or column N.
+// maxPlacement is the largest placement, in cells, placeholders can address.
+const maxPlacement = len(placeholderDiacritics)
+
 var placeholderDiacritics = [...]rune{
 	0x0305, 0x030D, 0x030E, 0x0310, 0x0312, 0x033D, 0x033E, 0x033F,
 	0x0346, 0x034A, 0x034B, 0x034C, 0x0350, 0x0351, 0x0352, 0x0357,
