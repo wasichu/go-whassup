@@ -99,7 +99,7 @@ func (w *WhatsApp) applyDeviceProps() {
 
 // setDevice builds a whatsmeow client for device and makes it current.
 func (w *WhatsApp) setDevice(device *store.Device) {
-	cli := whatsmeow.NewClient(device, newLogger(w.log, "client"))
+	cli := whatsmeow.NewClient(device, slogLogger{log: w.log.With("module", "client"), onError: w.clientError})
 	cli.AddEventHandler(w.handleEvent)
 	w.mu.Lock()
 	defer w.mu.Unlock()

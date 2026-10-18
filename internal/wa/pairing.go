@@ -141,3 +141,32 @@ func qrFailureReason(item whatsmeow.QRChannelItem) string {
 		return item.Event
 	}
 }
+
+// whatsmeow handles a phone-code pairing answer in its own goroutine and,
+// when the phone rejects the code, only logs it (no event), so pairing
+// would wait for the ~3-minute timeout. clientError spots that log record
+// by its format and the typed error, and fails the pairing right away.
+// TestCodePairRejectionStillLogged guards these against whatsmeow changes.
+const (
+	codePairFailedFormat = "Failed to handle code pair notification: %s"
+	codePairRejectedTag  = "link_code_pairing_wrapped_primary_ephemeral_pub"
+)
+
+// codeRejected is shown when the phone rejects a pairing code.
+const codeRejected = "your phone rejected the code. Check the number is the one WhatsApp on that phone uses " +
+	"(not WhatsApp Business), then try again with a new code in a few minutes."
+
+func (w *WhatsApp) clientError(format string, args []any) {
+	if format != codePairFailedFormat || len(args) != 1 {
+		return
+	}
+	err, _ := args[0].(error)
+	var missing *whatsmeow.ElementMissingError
+	if !errors.As(err, &missing) || missing.Tag != codePairRejectedTag {
+		return
+	}
+	w.emit(PairFailed{Reason: codeRejected})
+	// Stop waiting (it emits nothing more). Not on whatsmeow's goroutine:
+	// cancelling may disconnect the client.
+	go w.CancelPairing()
+}

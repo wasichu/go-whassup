@@ -153,6 +153,11 @@ causes: the code was entered in an app registered to a different number (e.g. Wh
 Business), a mistyped or stale code, or a transient server issue. Retry with a new code,
 spaced a few minutes apart, because pairing requests are rate-limited (`ErrIQRateOverLimit`).
 
-**Known gap:** whatsmeow only *logs* this failure and emits no event, so `login`
-keeps waiting until the server closes the login socket (~160 s) or our 3-minute
-timer fires. Surfacing it right away would need a whatsmeow hook or patch.
+**Reported immediately.** whatsmeow only *logs* this failure and emits no event, so on
+its own pairing would wait for the server to close the login socket (~160 s) or our
+3-minute timer. Our whatsmeow logger adapter passes error records, unformatted, to
+`WhatsApp.clientError` (`internal/wa/pairing.go`), which recognises this one by its
+format string and the typed `*whatsmeow.ElementMissingError` for the missing tag, emits
+`PairFailed` ("your phone rejected the code…") and cancels the pairing. A canary test
+(`TestCodePairRejectionStillLogged`) reads whatsmeow's source and fails if that log line
+or tag changes, so a whatsmeow upgrade can't silently undo this.

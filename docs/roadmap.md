@@ -91,8 +91,8 @@ step lands or the plan changes.
 8. [x] **Desktop notifications** through the terminal (OSC 777/99/9, tmux passthrough),
    only while unfocused, never for muted chats; `[notifications]` preview levels.
    (Read receipts shipped as `mark_read = "read-receipts-on"`, opt-in.)
-9. Surface the "code rejected" pairing failure immediately (needs a whatsmeow hook;
-   see `pairing.md`).
+9. [x] Surface the "code rejected" pairing failure immediately (via the whatsmeow log
+   adapter, no patch; see `pairing.md`).
 
 ## Last, before going public
 
