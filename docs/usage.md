@@ -112,8 +112,11 @@ names stay readable on disk.**
     opened**; the status line says where it was saved.
   - Media older than WhatsApp keeps on its servers can't be downloaded; you'll be told
     to ask the sender to resend it.
-- **`a`** sends a file: type a path (`~` works), `tab` to add an optional caption,
-  `enter` to send.
+- **`a`** sends a file: type a path (`~` works) and `enter` to send.
+  - **`tab` completes the path** like a shell: it fills in what all matches share
+    (ignoring case, using the real spelling), then the highlighted match; matches are
+    listed below and `↑`/`↓` choose. Dotfiles appear once you type a `.`.
+  - `shift+tab` moves to the optional caption (so does `tab` once the path is complete).
   - JPEG, PNG and WebP go as photos; everything else, including video, audio and HEIC,
     goes as a document. The limit is 100 MB.
   - Your own sent files are cached, so they open without a download.

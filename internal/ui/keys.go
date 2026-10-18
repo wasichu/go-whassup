@@ -48,7 +48,9 @@ var (
 	formHelp   = []key.Binding{keys.Submit, keys.Back}
 	waitHelp   = []key.Binding{keys.Cancel}
 	attachHelp = []key.Binding{
-		key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "file/caption")),
+		key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "complete")),
+		key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "choose")),
+		key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "caption")),
 		key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "send")),
 		keys.Back,
 	}

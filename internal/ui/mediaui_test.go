@@ -124,3 +124,81 @@ func TestAttachRejectsMissingFile(t *testing.T) {
 		t.Error("sent a missing file")
 	}
 }
+
+func TestAttachCompletesPaths(t *testing.T) {
+	dir := t.TempDir()
+	for _, d := range []string{"Documents", "Downloads"} {
+		if err := os.Mkdir(filepath.Join(dir, d), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range []string{"report.pdf", ".hidden", "Documents/cv.pdf"} {
+		if err := os.WriteFile(filepath.Join(dir, f), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := newHarness(t, true)
+	h.key("a")
+	value := func() string { return h.model().attach.path.Value() }
+	typeKeys := func(s string) {
+		h.key(s)
+		h.settle() // directory listings arrive asynchronously
+	}
+	tab := func() {
+		h.send(tea.KeyPressMsg{Code: tea.KeyTab})
+		h.settle()
+	}
+
+	typeKeys(dir + "/re")
+	tab()
+	if got := value(); got != dir+"/report.pdf" {
+		t.Fatalf("unique match: %q", got)
+	}
+
+	m := h.model() // clear, then an ambiguous, wrong-case prefix
+
+	m.attach.path.SetValue("")
+	h.m = m
+	typeKeys(dir + "/do")
+	if v := ansi.Strip(h.view()); !strings.Contains(v, "Documents/") || !strings.Contains(v, "Downloads/") {
+		t.Fatalf("both matches should be listed:\n%s", v)
+	}
+	tab() // shared prefix, real spelling
+	if got := value(); got != dir+"/Do" {
+		t.Fatalf("common prefix: %q", got)
+	}
+	tab() // nothing more shared: the highlighted match
+	if got := value(); got != dir+"/Documents/" {
+		t.Fatalf("highlighted match: %q", got)
+	}
+	tab() // into the folder: its only file
+	if got := value(); got != dir+"/Documents/cv.pdf" {
+		t.Fatalf("inside folder: %q", got)
+	}
+	tab() // complete: tab moves on to the caption
+	if !h.model().attach.onCaption {
+		t.Error("tab on a complete path should move to the caption")
+	}
+
+	m = h.model()
+	m.attach.path.SetValue("")
+	h.m = m
+	h.send(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift}) // back to the path
+	typeKeys(dir + "/")
+	if v := ansi.Strip(h.view()); strings.Contains(v, ".hidden") {
+		t.Errorf("hidden file offered before typing '.':\n%s", v)
+	}
+	typeKeys(".")
+	tab()
+	if got := value(); got != dir+"/.hidden" {
+		t.Errorf("hidden after '.': %q", got)
+	}
+
+	m = h.model()
+	m.attach.path.SetValue(dir + "/Downloads")
+	h.m = m
+	h.key("enter")
+	if v := ansi.Strip(h.view()); !strings.Contains(v, "That's a folder") {
+		t.Errorf("sending a folder should be refused:\n%s", v)
+	}
+}
