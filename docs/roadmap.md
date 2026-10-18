@@ -42,16 +42,34 @@ step lands or the plan changes.
   - Changes apply through `Update()`.
   - Settings that only matter at pairing time are labelled as such.
 
-## Later
+## After step 3: features (in this order)
 
-- **Encryption at rest** for message text, via the `store.Codec` seam:
-  - an `[encryption]` config section (on/off, key source);
-  - key sources in order: OS keyring, then a pianobar-style `password_command`, then a
-    prompt;
-  - see `storage.md`.
-- Edits, deletes and reactions applied to stored messages.
-- Groups: names from group info, participants.
-- Read receipts (opt-in; never automatic, because of ban risk), media download/open,
-  desktop notifications, search.
-- Surface the "code rejected" pairing failure immediately (needs a whatsmeow
-  hook; see `pairing.md`).
+1. **Contact names** from the phone's address book (whatsmeow's contact store), so the
+   chat list shows real names.
+2. **Unread counts and new-message markers** in the chat list.
+3. **Edits, deletes and reactions** applied to stored messages.
+4. **Media:** download images and documents; open them with `open` / `xdg-open`.
+5. **Groups:** names from group info, participants, mentions.
+6. **Search.** Decide the encryption trade-off first, because SQLite FTS can't index
+   sealed rows.
+7. **Encryption at rest** via the `store.Codec` seam:
+   - an `[encryption]` config section (on/off, key source);
+   - key sources in order: OS keyring, then a pianobar-style `password_command`, then a
+     prompt;
+   - see `storage.md`.
+8. **Read receipts** (opt-in; never automatic, because of ban risk) and **desktop
+   notifications**.
+9. Surface the "code rejected" pairing failure immediately (needs a whatsmeow hook;
+   see `pairing.md`).
+
+## Last, before going public
+
+- **LICENSE: MPL-2.0**, matching whatsmeow (decided 2026-10-18).
+- **README for users:** what it is, an "unofficial; against WhatsApp's terms" warning,
+  install steps, a screenshot. AGENTS.md and `docs/` stay contributor-facing.
+- **CI:** GitHub Actions running `just check` via the mise action, so CI uses the same
+  pinned tools.
+- **Release binaries:** cgo-free cross-compiles for darwin/linux/windows ×
+  amd64/arm64, with the version stamped via `-ldflags -X`, from a `just release` recipe
+  (no GoReleaser unless needed).
+- **Dependency bumps:** Renovate/Dependabot for whatsmeow's pseudo-versions, gated by CI.
