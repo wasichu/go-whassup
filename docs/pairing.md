@@ -44,6 +44,22 @@ server's `auth/request-code` endpoint, and the WAHA *engine* does the pairing:
 - `WEBJS` really is a Chromium browser running WhatsApp Web.
 - `NOWEB` (Baileys) and `GOWS` (whatsmeow) are browserless and face the same rule we do.
 
+## Re-linking (`wa-tui login -relink`)
+
+`wa.Client.Logout` resets to a fresh, unpaired device so `Pair` can run again. Use it
+for a history backfill, a stuck session, or switching accounts.
+1. Unlink on WhatsApp's side. Connect if needed, wait up to 15 s to authenticate, then
+   whatsmeow's `Logout` sends `remove-companion-device`. This also removes the entry
+   from the phone's *Linked devices*.
+2. If that fails (offline, or the phone already unlinked us), **delete the local
+   session anyway** and report `phoneUnlinked = false`. The user then removes the stale
+   entry on the phone themselves.
+3. Rebuild the whatsmeow client on `container.NewDevice()`. After `Store.Delete`, the
+   old client's stores are no-ops and can't be reused.
+
+`messages.db` is untouched, and messages already stored dedupe against the new
+history sync. The TUI's login screen will offer the same option (see `roadmap.md`).
+
 ## Phone number format
 
 `wa.NormalizePhone` strips `+`, spaces, dashes, dots and parentheses, then requires

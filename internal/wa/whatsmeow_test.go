@@ -117,3 +117,18 @@ func TestOpenCreatesPrivateSessionDB(t *testing.T) {
 		t.Errorf("Connect on fresh store = %v, want ErrNotPaired", err)
 	}
 }
+
+func TestLogoutUnpaired(t *testing.T) {
+	w, err := Open(t.Context(), filepath.Join(t.TempDir(), "session.db"), slog.New(slog.NewTextHandler(io.Discard, nil)), Options{})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := w.Close(); err != nil {
+			t.Errorf("Close: %v", err)
+		}
+	})
+	if _, err := w.Logout(t.Context()); !errors.Is(err, ErrNotPaired) {
+		t.Errorf("Logout on fresh store = %v, want ErrNotPaired", err)
+	}
+}

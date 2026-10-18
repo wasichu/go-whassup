@@ -60,10 +60,9 @@ whatsmeow does **not** persist message content, so we do.
 - **Opening a newer schema** than the build knows is an error, not a silent downgrade.
 - **History arrives only when linking.** The phone pushes its history sync right after
   pairing, and whatsmeow doesn't replay it. To backfill an existing install:
-  1. Unlink go-whassup on the phone.
-  2. `rm ~/.local/share/go-whassup/session.db`.
-  3. Set any `[history] request_*` options.
-  4. `wa-tui login` again, and leave it running until the `history sync` lines stop.
+  1. Set any `[history] request_*` options.
+  2. Run `wa-tui login -relink`, and leave it running until the `history sync` lines
+     stop. It unlinks the old session (on the phone too, when reachable) before pairing.
 
 ### Built so encryption can be added later
 

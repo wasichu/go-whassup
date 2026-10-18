@@ -178,3 +178,57 @@ func TestSenderLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestRelink(t *testing.T) {
+	tests := []struct {
+		name       string
+		client     *watest.Client
+		wantOut    string
+		wantErr    string
+		wantPaired bool
+	}{
+		{"not paired", &watest.Client{}, "pairing fresh", "", false},
+		{"phone unlinked", &watest.Client{Paired: true, PhoneUnlinked: true}, "Removed go-whassup", "", false},
+		{"local only", &watest.Client{Paired: true}, "Remove the old go-whassup entry", "", false},
+		{"failure", &watest.Client{Paired: true, LogoutErr: errors.New("disk full")}, "", "unlinking: disk full", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var out bytes.Buffer
+			err := newConsole("", &out).Relink(t.Context(), tt.client)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("err = %v, want %q", err, tt.wantErr)
+				}
+			} else if err != nil {
+				t.Fatalf("Relink: %v", err)
+			}
+			if !strings.Contains(out.String(), tt.wantOut) {
+				t.Errorf("output = %q, want containing %q", out.String(), tt.wantOut)
+			}
+			if tt.client.IsPaired() != tt.wantPaired {
+				t.Errorf("paired after = %v, want %v", tt.client.IsPaired(), tt.wantPaired)
+			}
+		})
+	}
+}
+
+func TestRelinkThenLogin(t *testing.T) {
+	client := &watest.Client{
+		Paired:        true,
+		PhoneUnlinked: true,
+		PairCode:      "ABCD-EFGH",
+		PairEvents:    []wa.Event{wa.PairSuccess{JID: "1@s.whatsapp.net"}, wa.Connected{}},
+	}
+	var out bytes.Buffer
+	c := newConsole("", &out)
+	if err := c.Relink(t.Context(), client); err != nil {
+		t.Fatalf("Relink: %v", err)
+	}
+	if _, err := c.Login(t.Context(), client, "15551234567"); err != nil {
+		t.Fatalf("Login after relink: %v", err)
+	}
+	if !strings.Contains(out.String(), "Pairing code: ABCD-EFGH") {
+		t.Errorf("output:\n%s", out.String())
+	}
+}

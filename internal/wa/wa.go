@@ -35,6 +35,13 @@ type Client interface {
 	// (including automatic reconnects), not just the dial.
 	Connect(ctx context.Context) error
 
+	// Logout unlinks this device and resets to a fresh, unpaired one so Pair
+	// can run again. It removes the device from the phone's Linked devices
+	// when it can reach WhatsApp, and always deletes the local session;
+	// phoneUnlinked reports whether the first part succeeded. Returns
+	// ErrNotPaired if there is nothing to log out.
+	Logout(ctx context.Context) (phoneUnlinked bool, err error)
+
 	// IsPaired reports whether a session exists in the store.
 	IsPaired() bool
 

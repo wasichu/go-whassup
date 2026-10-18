@@ -8,15 +8,17 @@ import (
 
 // invocation is the parsed command line.
 type invocation struct {
-	cmd   string // "tui", "login", "listen", "db chats" or "db messages"
-	debug bool
-	limit int      // -n, for "db messages"
-	args  []string // positional arguments after the (sub)command
+	cmd    string // "tui", "login", "listen", "db chats" or "db messages"
+	debug  bool
+	relink bool     // -relink, for "login"
+	limit  int      // -n, for "db messages"
+	args   []string // positional arguments after the (sub)command
 }
 
 const usage = `Usage:
   wa-tui [-debug]                     start the TUI
-  wa-tui login [-debug] [phone]       link this device with a phone-number code
+  wa-tui login [-relink] [phone]      link this device with a phone-number code;
+                                      -relink first unlinks the current session
   wa-tui listen [-debug]              connect and print incoming messages
   wa-tui db chats                     list stored chats (reads messages.db; no network)
   wa-tui db messages [-n N] <chat>    show a stored chat's newest N messages;
@@ -46,6 +48,7 @@ func parseArgs(args []string, errOut io.Writer) (invocation, error) {
 		fs.PrintDefaults()
 	}
 	fs.BoolVar(&inv.debug, "debug", false, "log debug output (very verbose; includes message text)")
+	fs.BoolVar(&inv.relink, "relink", false, "login: unlink the current session first, then pair again (stored messages are kept)")
 	fs.IntVar(&inv.limit, "n", 20, "number of messages to show (db messages; 0 = all)")
 	if err := fs.Parse(args); err != nil {
 		return inv, err
@@ -77,6 +80,9 @@ func parseArgs(args []string, errOut io.Writer) (invocation, error) {
 	}
 	if len(inv.args) < bounds.min {
 		return inv, fmt.Errorf("%s: missing argument (see wa-tui -h)", inv.cmd)
+	}
+	if inv.relink && inv.cmd != "login" {
+		return inv, fmt.Errorf("-relink only applies to login")
 	}
 	if inv.limit < 0 {
 		return inv, fmt.Errorf("-n must be 0 or more")

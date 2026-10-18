@@ -16,6 +16,9 @@ type Client struct {
 	PairCode   string
 	PairErr    error
 	ConnectErr error
+	// Logout outcome: PhoneUnlinked is returned on success; LogoutErr fails it.
+	PhoneUnlinked bool
+	LogoutErr     error
 	// Events emitted synchronously, in order, from a successful Pair or Connect.
 	PairEvents    []wa.Event
 	ConnectEvents []wa.Event
@@ -58,6 +61,20 @@ func (c *Client) Connect(context.Context) error {
 		c.Emit(evt)
 	}
 	return nil
+}
+
+func (c *Client) Logout(context.Context) (bool, error) {
+	if !c.Paired {
+		return false, wa.ErrNotPaired
+	}
+	if c.LogoutErr != nil {
+		return false, c.LogoutErr
+	}
+	c.mu.Lock()
+	c.connected = false
+	c.mu.Unlock()
+	c.Paired = false
+	return c.PhoneUnlinked, nil
 }
 
 func (c *Client) IsPaired() bool { return c.Paired }

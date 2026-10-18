@@ -24,6 +24,8 @@ func TestParseArgs(t *testing.T) {
 		{args: []string{"-debug", "listen"}, want: invocation{cmd: "listen", debug: true}},
 		{args: []string{"frob"}, wantErr: `unknown command "frob"`},
 		{args: []string{"db", "chats"}, want: invocation{cmd: "db chats"}},
+		{args: []string{"login", "-relink", "+15551234567"}, want: invocation{cmd: "login", relink: true, args: []string{"+15551234567"}}},
+		{args: []string{"listen", "-relink"}, wantErr: "-relink only applies to login"},
 		{args: []string{"db", "messages", "-n", "5", "Ada"}, want: invocation{cmd: "db messages", limit: 5, args: []string{"Ada"}}},
 		{args: []string{"-n", "5", "db", "messages", "Book club"}, want: invocation{cmd: "db messages", limit: 5, args: []string{"Book club"}}},
 		{args: []string{"db"}, wantErr: "want a subcommand"},
@@ -48,7 +50,7 @@ func TestParseArgs(t *testing.T) {
 			if tt.want.limit == 0 {
 				tt.want.limit = 20 // default
 			}
-			if got.cmd != tt.want.cmd || got.debug != tt.want.debug || got.limit != tt.want.limit || !slices.Equal(got.args, tt.want.args) {
+			if got.cmd != tt.want.cmd || got.debug != tt.want.debug || got.limit != tt.want.limit || got.relink != tt.want.relink || !slices.Equal(got.args, tt.want.args) {
 				t.Errorf("parseArgs(%q) = %+v, want %+v", tt.args, got, tt.want)
 			}
 		})

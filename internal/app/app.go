@@ -98,6 +98,11 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 		if len(inv.args) > 0 {
 			phone = inv.args[0]
 		}
+		if inv.relink {
+			if err := console.Relink(ctx, client); err != nil {
+				return err
+			}
+		}
 		sub, err := console.Login(ctx, client, phone)
 		if errors.Is(err, wa.ErrAlreadyPaired) {
 			return nil

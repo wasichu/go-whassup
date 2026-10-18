@@ -9,12 +9,13 @@ step lands or the plan changes.
    invariants, graft + gopls MCP.
 2. **Headless pairing and listening:** phone-code pairing (`wa-tui login`),
    `wa-tui listen`. Verified live on 2026-10-18.
-3. **Storage (step 2)**, live verification pending:
+3. **Storage (step 2)**, verified live on 2026-10-18, including a fresh re-link with history backfill:
    - `messages.db` with an encryption-ready codec seam;
    - recording of live messages and history sync, with privacy-ID-stable keys;
    - retention limits;
    - typed TOML config (`[history]`);
-   - `wa-tui db chats` / `db messages`.
+   - `wa-tui db chats` / `db messages`;
+   - `wa-tui login -relink` to unlink and pair again.
 
 ## Next: step 3, minimal TUI
 
@@ -22,6 +23,9 @@ step lands or the plan changes.
 - Events arrive through `wa.Subscribe` + a `tea.Cmd`; reads come from `store`.
 - **Login screen:**
   - Phone-code pairing (the step-1 flow) by default.
+  - When already paired: a **"Re-link"** option, the same as `login -relink` via
+    `wa.Client.Logout`. Explain that it removes the device from the phone and that
+    stored messages are kept.
   - **QR pairing as a choice on the login screen.** It needs a QR encoder
     (`rsc.io/qr` or `skip2/go-qrcode`, both small with no dependencies of their own),
     compiled in. Draw it with Unicode half-blocks, forced black-on-white, and show a

@@ -193,7 +193,7 @@ func TestHistoryWithRealParser(t *testing.T) {
 			Messages: []*waHistorySync.HistorySyncMsg{webMsg("R1", "from history", false)},
 		}},
 	}
-	h, ok := historyFromProto(data, w.cli.ParseWebMessage, w.resolveKey, log)
+	h, ok := historyFromProto(data, w.client().ParseWebMessage, w.resolveKey, log)
 	if !ok || len(h.Messages) != 1 {
 		t.Fatalf("history = %+v, ok = %v", h, ok)
 	}

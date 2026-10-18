@@ -38,7 +38,7 @@ type Console struct {
 // paired it prints a note and returns wa.ErrAlreadyPaired.
 func (c Console) Login(ctx context.Context, client wa.Client, phone string) (*wa.Subscription, error) {
 	if client.IsPaired() {
-		c.printf("Already paired. Run `wa-tui listen` to connect.\n")
+		c.printf("Already paired. Run `wa-tui listen` to connect, or `wa-tui login -relink` to pair again.\n")
 		return nil, wa.ErrAlreadyPaired
 	}
 	if phone == "" {
@@ -88,6 +88,27 @@ func (c Console) Login(ctx context.Context, client wa.Client, phone string) (*wa
 			return nil, fmt.Errorf("waiting for pairing: %w", ctx.Err())
 		}
 	}
+}
+
+// Relink logs out the current session, if any, so Login can pair afresh.
+// Stored messages are kept.
+func (c Console) Relink(ctx context.Context, client wa.Client) error {
+	if !client.IsPaired() {
+		c.printf("No existing session; pairing fresh.\n")
+		return nil
+	}
+	c.printf("Unlinking the current session...\n")
+	phoneUnlinked, err := client.Logout(ctx)
+	if err != nil {
+		return fmt.Errorf("unlinking: %w", err)
+	}
+	if phoneUnlinked {
+		c.printf("Removed go-whassup from your phone's Linked devices.\n")
+	} else {
+		c.printf("Couldn't reach WhatsApp, so only the local session was deleted.\n")
+		c.printf("Remove the old go-whassup entry from your phone's Linked devices yourself.\n")
+	}
+	return nil
 }
 
 // Listen connects an already-paired client and prints events until ctx is done.
