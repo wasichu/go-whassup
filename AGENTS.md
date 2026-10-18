@@ -6,7 +6,7 @@ nothing else to install or run.
 
 ## Toolchain (pinned via mise)
 
-- `mise.toml` is the source of truth for tool versions (Go, just) and sets
+- `mise.toml` is the source of truth for tool versions (Go, just, gopls) and sets
   `GOTOOLCHAIN=local` and `CGO_ENABLED=0`. Don't change these without being asked.
 - `go.mod`'s `go` directive is the *minimum* language version (1.26, required by
   whatsmeow), not the pinned toolchain.
@@ -23,6 +23,7 @@ nothing else to install or run.
 | `just test [flags]` | `go test ./...` with extra flags, e.g. `just test -run TestX -v` |
 | `just fmt` / `just tidy` | gofmt / `go mod tidy` |
 | `just logs` | Tails the app log |
+| `just index` | Rebuilds the graft context graph |
 
 Add a recipe when a command starts getting run often. Don't leave long ad-hoc
 invocations in docs.
@@ -43,7 +44,8 @@ invocations in docs.
 - **graft** (repo-only context graph): use it to navigate *this repo*: where code
   lives, callers, and blast radius. See the graft section below.
 - **gopls** (type-aware, covers dependencies, version pinned in `mise.toml`):
-  - `go_package_api`: dependency APIs (whatsmeow, bubbletea).
+  - `go_package_api`: dependency APIs (whatsmeow, bubbletea). It only sees modules
+    already in `go.mod`, so `go get` first, then query.
   - `go_symbol_references`: run before changing a symbol's signature.
   - `go_rename_symbol`: renames.
   - `go_diagnostics`: run on edited files before `just check`.
