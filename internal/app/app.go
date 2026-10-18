@@ -7,9 +7,11 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"log/slog"
 
+	"github.com/wasichu/go-whassup/internal/config"
 	"github.com/wasichu/go-whassup/internal/headless"
 	"github.com/wasichu/go-whassup/internal/logging"
 	"github.com/wasichu/go-whassup/internal/paths"
@@ -41,13 +43,17 @@ func Run(ctx context.Context, args []string, stdio IO) (err error) {
 	if err := p.Ensure(); err != nil {
 		return err
 	}
+	cfg, err := config.Load(p.ConfigFile)
+	if err != nil {
+		return err
+	}
 	log, logCloser, err := logging.Open(p.LogFile, inv.debug)
 	if err != nil {
 		return err
 	}
 	defer closeInto(&err, logCloser)
 	slog.SetDefault(log)
-	log.Info("starting", "cmd", inv.cmd, "data_dir", p.DataDir)
+	log.Info("starting", "cmd", inv.cmd, "data_dir", p.DataDir, "config", fmt.Sprintf("%+v", cfg))
 
 	if inv.cmd == "tui" {
 		return ui.Run(ctx)

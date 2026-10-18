@@ -3,7 +3,8 @@
 ```
 cmd/wa-tui (main: signals + exit code only)
    └─► internal/app            composition root: args, paths, logging, wiring
-         ├─► internal/paths     XDG locations (data dir, session.db, log)
+         ├─► internal/paths     XDG locations (config, data dir, DBs, log)
+         ├─► internal/config    typed Config (TOML)
          ├─► internal/logging   slog → log file
          ├─► internal/ui        Bubble Tea v2 TUI          ─┐
          ├─► internal/headless  login / listen commands     ├─► wa.Client (interface)

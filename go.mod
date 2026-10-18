@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	charm.land/bubbletea/v2 v2.1.0
 	charm.land/lipgloss/v2 v2.0.6
+	github.com/pelletier/go-toml/v2 v2.4.3
 	go.mau.fi/whatsmeow v0.0.0-20261017175727-b2b1e71d45e2
 	google.golang.org/protobuf v1.36.12
 	modernc.org/sqlite v1.60.1

@@ -37,6 +37,9 @@ invocations in docs.
   and alt-screen is set on the View, not as a program option.
 - Protocol: `go.mau.fi/whatsmeow` (no tagged releases; pseudo-versions).
 - Storage: `modernc.org/sqlite` (pure Go). Never `mattn/go-sqlite3`, which needs cgo.
+- Config: a typed struct in `internal/config`, stored as TOML via `github.com/pelletier/go-toml/v2`.
+  **Not viper** (it's heavy and round-trips badly; see `docs/config.md`). New settings follow
+  the "Adding a setting" steps in `docs/config.md`.
 - **Verify APIs before using them.** These libraries change often. Check with the
   gopls MCP tool `go_package_api` (or `go doc <pkg>.<Symbol>`) rather than relying on memory.
 
@@ -73,7 +76,8 @@ invocations in docs.
 ```
 cmd/wa-tui/          main.go only: signal ctx -> app.Run -> exit code. Keep it ~20 lines.
 internal/app/        composition root: args, paths, logging, wiring. No business logic.
-internal/paths/      XDG runtime locations (DataDir, SessionDB, LogFile)
+internal/paths/      XDG locations (ConfigFile, DataDir, SessionDB, MessagesDB, LogFile)
+internal/config/     typed Config: defaults, Load (strict), Validate, Save (atomic)
 internal/logging/    slog file logger
 internal/wa/         whatsmeow adapter: Client interface, Event types, Subscribe.
                      ONLY package importing whatsmeow.

@@ -7,6 +7,7 @@ import (
 )
 
 func TestResolveUsesXDGEnv(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg-config")
 	t.Setenv("XDG_DATA_HOME", "/tmp/xdg-data")
 	t.Setenv("XDG_STATE_HOME", "/tmp/xdg-state")
 
@@ -16,6 +17,12 @@ func TestResolveUsesXDGEnv(t *testing.T) {
 	}
 	if want := "/tmp/xdg-data/go-whassup"; p.DataDir != want {
 		t.Errorf("DataDir = %q, want %q", p.DataDir, want)
+	}
+	if want := "/tmp/xdg-config/go-whassup/config.toml"; p.ConfigFile != want {
+		t.Errorf("ConfigFile = %q, want %q", p.ConfigFile, want)
+	}
+	if want := "/tmp/xdg-data/go-whassup/messages.db"; p.MessagesDB != want {
+		t.Errorf("MessagesDB = %q, want %q", p.MessagesDB, want)
 	}
 	if want := "/tmp/xdg-data/go-whassup/session.db"; p.SessionDB != want {
 		t.Errorf("SessionDB = %q, want %q", p.SessionDB, want)
@@ -30,6 +37,7 @@ func TestResolveIgnoresRelativeXDG(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", "relative/path")
 	t.Setenv("XDG_STATE_HOME", "")
+	t.Setenv("XDG_CONFIG_HOME", "")
 
 	p, err := Resolve()
 	if err != nil {
@@ -37,6 +45,9 @@ func TestResolveIgnoresRelativeXDG(t *testing.T) {
 	}
 	if want := filepath.Join(home, ".local", "share", "go-whassup"); p.DataDir != want {
 		t.Errorf("DataDir = %q, want %q", p.DataDir, want)
+	}
+	if want := filepath.Join(home, ".config", "go-whassup", "config.toml"); p.ConfigFile != want {
+		t.Errorf("ConfigFile = %q, want %q", p.ConfigFile, want)
 	}
 	if want := filepath.Join(home, ".local", "state", "go-whassup"); p.StateDir != want {
 		t.Errorf("StateDir = %q, want %q", p.StateDir, want)
