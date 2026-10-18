@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -83,15 +84,29 @@ func (l *chatList) view(width, height int, active bool, own string) string {
 	line := lipgloss.NewStyle().Width(width).MaxWidth(width)
 	for i := l.offset; i < len(l.chats) && i < l.offset+rows; i++ {
 		c := l.chats[i]
-		label := " " + chatTitle(c, own)
-		style := line
-		if i == l.selected {
-			style = line.Inherit(selectedStyle)
-			if active {
-				style = line.Inherit(activeSelStyle)
-			}
+		title := chatTitle(c, own)
+		badge := ""
+		if c.Unread > 0 {
+			badge = fmt.Sprintf(" %d ", c.Unread)
 		}
-		b.WriteString("\n" + style.Render(label))
+		// Truncate the title so an unread badge always fits on the row.
+		room := max(width-1-lipgloss.Width(badge), 1)
+		title = lipgloss.NewStyle().MaxWidth(room).Render(title)
+		label := " " + title + strings.Repeat(" ", max(room-lipgloss.Width(title), 0))
+		style := line
+		switch {
+		case i == l.selected && active:
+			style = line.Inherit(activeSelStyle)
+		case i == l.selected:
+			style = line.Inherit(selectedStyle)
+		case c.Unread > 0:
+			style = line.Bold(true)
+		}
+		row := style.Render(label)
+		if badge != "" {
+			row = lipgloss.NewStyle().Width(width-lipgloss.Width(badge)).MaxWidth(width-lipgloss.Width(badge)).Render(row) + unreadBadgeStyle.Render(badge)
+		}
+		b.WriteString("\n" + row)
 	}
 	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Render(b.String())
 }

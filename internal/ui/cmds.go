@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"log/slog"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -12,11 +13,14 @@ import (
 	"github.com/wasichu/go-whassup/internal/wa"
 )
 
-// Store is the read side of the message store the UI needs.
+// Store is what the UI needs from the message store: reads, plus the
+// user's own read state.
 type Store interface {
 	Chats(ctx context.Context) ([]store.ChatSummary, error)
 	Messages(ctx context.Context, chat string, limit int) ([]wa.Message, error)
 	Directory(ctx context.Context) ([]store.ChatSummary, error)
+	UnreadMessages(ctx context.Context, chat string) ([]wa.Message, error)
+	MarkRead(ctx context.Context, chat string, at time.Time) error
 }
 
 // Deps are the UI's collaborators, wired by internal/app.

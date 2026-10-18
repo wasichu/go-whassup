@@ -91,6 +91,12 @@ There are two kinds of consumers:
 
   Keys are mapped to phone-number form, and a LID and its phone number are merged. The
   recorder upserts them into `contacts`.
+- **Read state.** `wa.ChatRead` comes from app-state `MarkChatAsRead` and from our own
+  devices' read/read-self receipts. Outbound, `wa.Client.MarkRead(chat, msgs, mode)`:
+  `ReadLocal` sends nothing, `ReadDevices` sends `read-self` (own devices only),
+  `ReadEveryone` sends read receipts. The mode comes from `[privacy] mark_read`. The UI
+  decides *when* (after a dwell timer while the terminal is focused, via
+  `tea.FocusMsg`/`BlurMsg`), and the store records it.
 - **History sync** arrives as `wa.HistorySync{Chats, Messages, PushNames}`, parsed with
   whatsmeow's `ParseWebMessage`. Empty batches aren't emitted. App-state sync,
   receipts and presence are still only logged at debug level.

@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
@@ -14,6 +16,7 @@ import (
 // conversation is the right pane: header, message history and input.
 type conversation struct {
 	chat     store.ChatSummary
+	newFrom  time.Time // messages after this get a "new" divider (set on opening)
 	msgs     []wa.Message
 	viewport viewport.Model
 	input    textinput.Model
@@ -45,6 +48,10 @@ func (c *conversation) setChat(chat store.ChatSummary) {
 	switched := chat.JID != c.chat.JID
 	if switched {
 		c.msgs = nil
+		c.newFrom = time.Time{}
+		if chat.Unread > 0 {
+			c.newFrom = chat.LastReadAt // keep the divider while the chat stays open
+		}
 	}
 	c.chat = chat
 	c.render(switched || c.viewport.AtBottom())
@@ -53,13 +60,21 @@ func (c *conversation) setChat(chat store.ChatSummary) {
 // setMessages shows msgs. The view follows new messages only if the user
 // was already at the bottom (or the chat just opened).
 func (c *conversation) setMessages(msgs []wa.Message) {
-	follow := c.viewport.AtBottom() || len(c.msgs) == 0
+	first := len(c.msgs) == 0
+	follow := c.viewport.AtBottom() || first
 	c.msgs = msgs
 	c.render(follow)
+	// Opening a chat with unread messages: start at the "new" divider, as
+	// the phone does, unless everything new already fits on screen.
+	if first && len(msgs) > 0 && !c.newFrom.IsZero() {
+		if line := c.dividerLine(); line >= 0 && c.viewport.TotalLineCount()-line > c.viewport.Height() {
+			c.viewport.SetYOffset(max(line-1, 0))
+		}
+	}
 }
 
 func (c *conversation) render(follow bool) {
-	content := renderMessages(c.msgs, c.chat, c.width)
+	content := renderMessages(c.msgs, c.chat, c.width, c.newFrom)
 	// Like chat apps, anchor short conversations to the bottom, by the input.
 	if gap := c.viewport.Height() - lipgloss.Height(content); gap > 0 {
 		content = strings.Repeat("\n", gap) + content
@@ -68,6 +83,16 @@ func (c *conversation) render(follow bool) {
 	if follow {
 		c.viewport.GotoBottom()
 	}
+}
+
+// dividerLine is the viewport line of the "new" divider, or -1.
+func (c *conversation) dividerLine() int {
+	for i, line := range strings.Split(c.viewport.GetContent(), "\n") {
+		if strings.Contains(line, " new ──") {
+			return i
+		}
+	}
+	return -1
 }
 
 func (c *conversation) view(width, height int, own string) string {
@@ -87,8 +112,9 @@ func (c *conversation) view(width, height int, own string) string {
 	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Render(strings.Join(parts, "\n"))
 }
 
-// renderMessages formats msgs as wrapped lines with day separators.
-func renderMessages(msgs []wa.Message, chat store.ChatSummary, width int) string {
+// renderMessages formats msgs as wrapped lines with day separators, and a
+// "N new" divider before the first incoming message after newFrom (if set).
+func renderMessages(msgs []wa.Message, chat store.ChatSummary, width int, newFrom time.Time) string {
 	if width <= 0 {
 		return ""
 	}
@@ -98,7 +124,21 @@ func renderMessages(msgs []wa.Message, chat store.ChatSummary, width int) string
 	wrap := lipgloss.NewStyle().Width(width)
 	var b strings.Builder
 	var lastDay string
+	newCount, dividerAt := 0, -1
+	if !newFrom.IsZero() {
+		for i, m := range msgs {
+			if !m.FromMe && m.Timestamp.After(newFrom) {
+				if dividerAt < 0 {
+					dividerAt = i
+				}
+				newCount++
+			}
+		}
+	}
 	for i, m := range msgs {
+		if i == dividerAt {
+			b.WriteString(newDividerStyle.Width(width).Render(fmt.Sprintf("── %d new ──", newCount)) + "\n")
+		}
 		local := m.Timestamp.Local()
 		if day := local.Format("Mon, Jan 2 2006"); day != lastDay {
 			if i > 0 {

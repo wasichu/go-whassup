@@ -490,7 +490,7 @@ func TestRenderMessagesDaySeparatorsAndNames(t *testing.T) {
 		{Chat: book, Sender: ada, PushName: "Ada", IsGroup: true, Timestamp: day, Kind: wa.KindText, Text: "ch 3?"},
 		{Chat: book, Sender: bob, IsGroup: true, Timestamp: day.Add(24 * time.Hour), Kind: wa.KindImage},
 		{Chat: book, FromMe: true, IsGroup: true, Timestamp: day.Add(25 * time.Hour), Kind: wa.KindText, Text: "yes"},
-	}, chat, 80)
+	}, chat, 80, time.Time{})
 	for _, want := range []string{"Ada", "ch 3?", "15559876543", "[image]", "me", "yes"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("render missing %q:\n%s", want, out)
@@ -778,5 +778,157 @@ func TestOwnChatLabelledYou(t *testing.T) {
 	}
 	if strings.Contains(v, "@s.whatsapp.net (You)") {
 		t.Error("raw JID shown")
+	}
+}
+
+// seedUnread adds n incoming messages to chat after everything else.
+func (h *harness) seedUnread(chat string, n int) {
+	h.t.Helper()
+	var msgs []wa.Message
+	for i := range n {
+		msgs = append(msgs, wa.Message{ID: fmt.Sprintf("u%s%d", chat[:3], i), Chat: chat, Sender: chat, Timestamp: day.Add(3*time.Hour + time.Duration(i)*time.Minute), Kind: wa.KindText, Text: fmt.Sprintf("unread %d", i)})
+	}
+	if _, err := h.st.SaveMessages(h.t.Context(), msgs); err != nil {
+		h.t.Fatalf("seed: %v", err)
+	}
+	if err := h.st.MarkRead(h.t.Context(), chat, day.Add(2*time.Hour)); err != nil {
+		h.t.Fatalf("seed read: %v", err)
+	}
+}
+
+func (h *harness) unread(chat string) int {
+	h.t.Helper()
+	chats, err := h.st.Chats(h.t.Context())
+	if err != nil {
+		h.t.Fatalf("Chats: %v", err)
+	}
+	for _, c := range chats {
+		if c.JID == chat {
+			return c.Unread
+		}
+	}
+	return -1
+}
+
+func newHarnessWithUnread(t *testing.T, mode string) *harness {
+	h := newHarness(t, true)
+	h.seedUnread(bob, 2)
+	m := h.model()
+	m.deps.Config.Privacy.MarkRead = mode
+	m.termFocused = true
+	h.m = m
+	h.client.Emit(wa.HistorySync{}) // reload so the badge appears
+	h.settle()
+	h.selectChat(bob)
+	return h
+}
+
+// selectChat moves the list selection onto jid with arrow keys.
+func (h *harness) selectChat(jid string) {
+	h.t.Helper()
+	for range 10 {
+		m := h.model()
+		if m.chats.selectedJID() == jid {
+			return
+		}
+		h.key("up")
+	}
+	h.t.Fatalf("could not select %s", jid)
+}
+
+func TestUnreadBadgeAndDivider(t *testing.T) {
+	h := newHarnessWithUnread(t, "local")
+	v := h.view()
+	if !strings.Contains(v, "── 2 new ──") {
+		t.Errorf("new-messages divider missing:\n%s", v)
+	}
+	// After the dwell the chat is read: badge gone, divider stays while open.
+	h.settle()
+	if got := h.unread(bob); got != 0 {
+		t.Errorf("bob unread after dwell = %d, want 0", got)
+	}
+	if !strings.Contains(h.view(), "── 2 new ──") {
+		t.Error("divider should stay while the chat is open")
+	}
+	if calls := h.client.ReadCalls(); len(calls) != 0 {
+		t.Errorf("local mode must send nothing, sent %+v", calls)
+	}
+}
+
+func TestBadgeShowsCountForOtherChats(t *testing.T) {
+	h := newHarness(t, true)
+	h.seedUnread(ada, 3)
+	h.key("down") // move the selection to bob so ada isn't being read
+	h.client.Emit(wa.HistorySync{})
+	h.settle()
+	if !strings.Contains(h.view(), " 3 ") {
+		t.Errorf("unread badge for ada missing:\n%s", h.view())
+	}
+}
+
+func TestMarkReadModesSend(t *testing.T) {
+	for _, mode := range []wa.ReadMode{wa.ReadDevices, wa.ReadEveryone} {
+		t.Run(string(mode), func(t *testing.T) {
+			h := newHarnessWithUnread(t, string(mode))
+			h.settle()
+			calls := h.client.ReadCalls()
+			if len(calls) != 1 || calls[0].Chat != bob || calls[0].Mode != mode || len(calls[0].IDs) != 2 {
+				t.Errorf("read calls = %+v", calls)
+			}
+		})
+	}
+}
+
+func TestNoReadWhileUnfocused(t *testing.T) {
+	h := newHarness(t, true)
+	h.send(tea.BlurMsg{})
+	h.seedUnread(bob, 1)
+	h.client.Emit(wa.HistorySync{})
+	h.settle()
+	h.selectChat(bob)
+	h.settle()
+	if got := h.unread(bob); got != 1 {
+		t.Fatalf("read while the terminal was unfocused: unread = %d", got)
+	}
+	h.send(tea.FocusMsg{})
+	h.settle()
+	if got := h.unread(bob); got != 0 {
+		t.Errorf("focusing should read the open chat, unread = %d", got)
+	}
+}
+
+func TestArrowingPastChatsDoesNotReadThem(t *testing.T) {
+	h := newHarness(t, true)
+	h.seedUnread(ada, 1)
+	h.seedUnread(bob, 1)
+	h.client.Emit(wa.HistorySync{})
+	h.settle() // the first-selected chat is read after its dwell
+	m := h.model()
+	first := m.chats.selectedJID()
+	other := ada
+	if first == ada {
+		other = bob
+	}
+	// Two quick moves land back on the first chat: the other one was only
+	// passed over, never dwelled on.
+	h.m, _ = h.m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	h.m, _ = h.m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	h.settle()
+	if got := h.unread(other); got != 1 {
+		t.Errorf("chat passed over was marked read: unread = %d", got)
+	}
+}
+
+func TestOpeningLongUnreadChatStartsAtDivider(t *testing.T) {
+	h := newHarness(t, true)
+	h.send(tea.BlurMsg{}) // keep it unread while we look
+	h.send(tea.WindowSizeMsg{Width: 90, Height: 16})
+	h.seedUnread(bob, 20)
+	h.client.Emit(wa.HistorySync{})
+	h.settle()
+	h.selectChat(bob)
+	v := h.view()
+	if !strings.Contains(v, "── 20 new ──") || strings.Contains(v, "unread 19") {
+		t.Errorf("should open at the divider, not the bottom:\n%s", v)
 	}
 }

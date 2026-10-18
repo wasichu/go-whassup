@@ -34,11 +34,11 @@ Relative `XDG_*` values are ignored, as the XDG spec requires.
 
 whatsmeow does **not** persist message content, so we do.
 
-**Schema (v2; migrations in `schema.go`, tracked by `PRAGMA user_version`, append-only):**
+**Schema (v3; migrations in `schema.go`, tracked by `PRAGMA user_version`, append-only):**
 
 | Table | Columns |
 | --- | --- |
-| `chats` | `jid` PK, `name`, `is_group`, `last_message_at` (unix s) |
+| `chats` | `jid` PK, `name`, `is_group`, `last_message_at`, `last_read_at` (unix s; v3; chats existing at upgrade count as read) |
 | `messages` | PK `(chat_jid, id)`, `sender_jid`, `push_name`, `ts` (unix s), `from_me`, `kind`, `body` BLOB, `codec` |
 | `contacts` | `jid` PK, `name` (your address-book name for them), `push_name` (the name they chose), `business_name`. Filled by contact snapshots/updates, history sync and incoming messages. v2 added `name` and `business_name`. |
 
@@ -56,6 +56,11 @@ whatsmeow does **not** persist message content, so we do.
   their push name, then their business name, then the JID.
   - In groups, each message's `SenderName` resolves the same way per sender.
   - Contact updates are partial upserts: an empty field never erases a known one.
+- **Read state.** Unread = incoming messages newer than `last_read_at`.
+  - `MarkRead` only moves forward. It's used for local reads, for replies (replying
+    reads the chat), and for `ChatRead` events from other devices.
+  - History sync's per-chat unread count is applied with `SetUnreadFromPhone`, which
+    may move backwards, because the phone is authoritative at link time.
 - **Directory** (`Store.Directory`): all chats, then contacts you've never chatted with
   (by name). The TUI's finder searches this.
 - **Ordering.** By `(ts, id)`, so messages in the same second stay stable.

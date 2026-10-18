@@ -52,7 +52,8 @@ step lands or the plan changes.
 1. [x] **Contact names** from the phone's address book (whatsmeow's contact store), so
    the chat list shows real names. Also **contact search / new chat** (`/`): fuzzy-find
    any contact and message someone you haven't chatted with yet. *(Live test pending.)*
-2. **Unread counts and new-message markers** in the chat list.
+2. [x] **Unread counts and new-message markers**: badges, a "N new" divider, read after
+   dwell while focused, `[privacy] mark_read` = local/devices/everyone. *(Live test pending.)*
 3. **Edits, deletes and reactions** applied to stored messages.
 4. **Media:** download images and documents; open them with `open` / `xdg-open`; and
    **send files** (pick a path, send as a document or image).
@@ -69,8 +70,7 @@ step lands or the plan changes.
      - a missing key blocks, with a confirmed reset as the escape hatch;
      - message text is never logged while encrypted;
      - a metadata warning wherever encryption is offered.
-8. **Read receipts** (opt-in; never automatic, because of ban risk) and **desktop
-   notifications**.
+8. **Desktop notifications.** (Read receipts shipped as `mark_read = "everyone"`, opt-in.)
 9. Surface the "code rejected" pairing failure immediately (needs a whatsmeow hook;
    see `pairing.md`).
 

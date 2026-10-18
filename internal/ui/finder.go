@@ -101,7 +101,7 @@ func (m Model) openChat(c store.ChatSummary) (Model, tea.Cmd) {
 		sel, _ := m.chats.selectedChat()
 		m.conv.setChat(sel)
 		m.focus = focusInput
-		return m, tea.Batch(m.conv.input.Focus(), loadMessages(m.ctx, m.deps.Store, sel.JID))
+		return m, tea.Batch(m.conv.input.Focus(), loadMessages(m.ctx, m.deps.Store, sel.JID), m.scheduleRead())
 	}
 	m.draft = c.JID
 	m.conv.setChat(c)

@@ -69,7 +69,10 @@ type Model struct {
 	finder   finder
 	draft    string // JID of an open chat that has no messages yet
 	ownJID   string // the linked account, for labelling the chat with yourself
-	help     help.Model
+
+	termFocused bool // terminal window has focus; reads only count while it does
+	readSeq     int  // generation of the pending read timer (see scheduleRead)
+	help        help.Model
 }
 
 // New returns the root model. sub must be a subscription on deps.Client,
@@ -79,7 +82,7 @@ func New(ctx context.Context, deps Deps, sub *wa.Subscription) Model {
 	h := help.New()
 	h.Styles.ShortKey, h.Styles.FullKey = statusStyle.Bold(true), senderStyle
 	h.Styles.ShortDesc, h.Styles.ShortSeparator = statusStyle, statusStyle
-	m := Model{ctx: ctx, deps: deps, sub: sub, conv: newConversation(), login: newLogin(), conn: connConnecting, help: h, ownJID: deps.Client.OwnJID()}
+	m := Model{ctx: ctx, deps: deps, sub: sub, conv: newConversation(), login: newLogin(), conn: connConnecting, help: h, ownJID: deps.Client.OwnJID(), termFocused: true}
 	if !deps.Client.IsPaired() {
 		m.conn = connNotPaired
 		m = m.openLogin("")
@@ -102,6 +105,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.help.SetWidth(msg.Width)
 		m.layout()
 		return m, nil
+	case tea.FocusMsg:
+		m.termFocused = true
+		return m, m.scheduleRead()
+	case tea.BlurMsg:
+		m.termFocused = false
+		return m, nil
+	case readTickMsg:
+		return m.readTick(msg)
+	case readDoneMsg:
+		if msg.err != nil {
+			m.setError("marking read", msg.err)
+		}
+		return m, loadChats(m.ctx, m.deps.Store)
 	case tea.ColorProfileMsg:
 		m.trueColor = msg.Profile == colorprofile.TrueColor
 		return m, nil
@@ -130,12 +146,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.draft = ""
 			c, _ := m.chats.selectedChat()
 			m.conv.setChat(c)
-			return m, loadMessages(m.ctx, m.deps.Store, c.JID)
+			return m, tea.Batch(loadMessages(m.ctx, m.deps.Store, c.JID), m.scheduleRead())
 		}
 		if c, ok := m.chats.selectedChat(); ok {
 			m.conv.setChat(c)
 			if c.JID != before || len(m.conv.msgs) == 0 {
-				return m, loadMessages(m.ctx, m.deps.Store, c.JID)
+				return m, tea.Batch(loadMessages(m.ctx, m.deps.Store, c.JID), m.scheduleRead())
+			}
+			if c.Unread > 0 {
+				return m, m.scheduleRead() // new messages arrived in the open chat
 			}
 		}
 		return m, nil
@@ -267,7 +286,7 @@ func (m Model) selectChat(delta int) (tea.Model, tea.Cmd) {
 	}
 	c, _ := m.chats.selectedChat()
 	m.conv.setChat(c)
-	return m, loadMessages(m.ctx, m.deps.Store, c.JID)
+	return m, tea.Batch(loadMessages(m.ctx, m.deps.Store, c.JID), m.scheduleRead())
 }
 
 func (m Model) handleEvent(evt wa.Event) (tea.Model, tea.Cmd) {
@@ -326,6 +345,7 @@ func (m *Model) layout() {
 func (m Model) View() tea.View {
 	v := tea.NewView(m.render())
 	v.AltScreen = true
+	v.ReportFocus = true // reads only count while the terminal is focused
 	v.WindowTitle = "go-whassup"
 	return v
 }

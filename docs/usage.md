@@ -52,6 +52,21 @@ Shortcuts only act from the chat list. In the message box `q`, `/`, `L`, `,` and
 characters. Hints in the status line are generated from the same keymap as the
 handlers (`internal/ui/keys.go`), so they can't drift.
 
+### Unread messages
+
+- Chats with unread messages are **bold with a count badge**. Opening one shows a
+  "── N new ──" divider and starts there if the new messages don't fit on screen.
+- A chat counts as read once it has been **on screen about 1.5 s with the terminal
+  focused**. Arrowing past chats doesn't read them, and messages arriving while you're
+  in another window stay unread. Replying also marks a chat read. Reading a chat on your
+  phone clears it here too.
+- **What gets sent** is `[privacy] mark_read` (Settings `,`):
+  - `local` (default): nothing;
+  - `devices`: your phone and other devices are told, with no blue ticks;
+  - `everyone`: read receipts, like the official apps.
+- When you link, the phone's unread counts are adopted. Chats that existed before this
+  feature start out read.
+
 ### Finder (`/`)
 
 - Fuzzy-search every chat and every contact from your phone's address book by name, or
