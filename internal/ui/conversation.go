@@ -150,7 +150,6 @@ type renderOpts struct {
 // renderMessages formats msgs as wrapped lines with day separators, and a
 // "N new" divider before the first incoming message after opts.newFrom.
 func renderMessages(msgs []wa.Message, chat store.ChatSummary, width int, opts renderOpts) string {
-	newFrom, cached := opts.newFrom, opts.cached
 	if width <= 0 {
 		return ""
 	}
@@ -160,50 +159,19 @@ func renderMessages(msgs []wa.Message, chat store.ChatSummary, width int, opts r
 	wrap := lipgloss.NewStyle().Width(width)
 	var b strings.Builder
 	var lastDay string
-	newCount, dividerAt := 0, -1
-	if !newFrom.IsZero() {
-		for i, m := range msgs {
-			if !m.FromMe && m.Timestamp.After(newFrom) {
-				if dividerAt < 0 {
-					dividerAt = i
-				}
-				newCount++
-			}
-		}
-	}
+	newCount, dividerAt := newDivider(msgs, opts.newFrom)
 	for i, m := range msgs {
 		if i == dividerAt {
 			b.WriteString(newDividerStyle.Width(width).Render(fmt.Sprintf("── %d new ──", newCount)) + "\n")
 		}
-		local := m.Timestamp.Local()
-		if day := local.Format("Mon, Jan 2 2006"); day != lastDay {
+		if day := m.Timestamp.Local().Format("Mon, Jan 2 2006"); day != lastDay {
 			if i > 0 {
 				b.WriteString("\n")
 			}
 			b.WriteString(daySepStyle.Width(width).Render("── "+day+" ──") + "\n")
 			lastDay = day
 		}
-		name := senderStyle.Render(senderName(m, chat))
-		if m.FromMe {
-			name = fromMeStyle.Render("me")
-		}
-		body := renderMentions(m.Summary(), opts.mentions, opts.own)
-		switch {
-		case m.Deleted:
-			body = deletedStyle.Render("This message was deleted")
-		case m.Edited:
-			body += " " + faintStyle.Render("(edited)")
-		}
-		if m.Media != nil && !m.Deleted {
-			info := humanSize(m.Media.Size)
-			if cached[m.ID] {
-				info += " ✓"
-			}
-			if info != "" {
-				body += " " + faintStyle.Render("· "+info)
-			}
-		}
-		line := faintStyle.Render(local.Format("15:04")) + " " + name + ": " + body
+		line := messageLine(m, chat, opts)
 		if opts.lineOf != nil {
 			opts.lineOf[m.ID] = strings.Count(b.String(), "\n")
 		}
@@ -217,6 +185,50 @@ func renderMessages(msgs []wa.Message, chat store.ChatSummary, width int, opts r
 		}
 	}
 	return strings.TrimSuffix(b.String(), "\n")
+}
+
+// newDivider counts the messages from others after newFrom and returns
+// where the "N new" divider goes (-1 for none).
+func newDivider(msgs []wa.Message, newFrom time.Time) (count, at int) {
+	at = -1
+	if newFrom.IsZero() {
+		return 0, at
+	}
+	for i, m := range msgs {
+		if !m.FromMe && m.Timestamp.After(newFrom) {
+			if at < 0 {
+				at = i
+			}
+			count++
+		}
+	}
+	return count, at
+}
+
+// messageLine is one message's unwrapped line: time, sender and body
+// (with edit/delete markers and attachment info).
+func messageLine(m wa.Message, chat store.ChatSummary, opts renderOpts) string {
+	name := senderStyle.Render(senderName(m, chat))
+	if m.FromMe {
+		name = fromMeStyle.Render("me")
+	}
+	body := renderMentions(m.Summary(), opts.mentions, opts.own)
+	switch {
+	case m.Deleted:
+		return faintStyle.Render(m.Timestamp.Local().Format("15:04")) + " " + name + ": " + deletedStyle.Render("This message was deleted")
+	case m.Edited:
+		body += " " + faintStyle.Render("(edited)")
+	}
+	if m.Media != nil {
+		info := humanSize(m.Media.Size)
+		if opts.cached[m.ID] {
+			info += " ✓"
+		}
+		if info != "" {
+			body += " " + faintStyle.Render("· "+info)
+		}
+	}
+	return faintStyle.Render(m.Timestamp.Local().Format("15:04")) + " " + name + ": " + body
 }
 
 // senderName labels an incoming message: in a DM the chat's own title, in a

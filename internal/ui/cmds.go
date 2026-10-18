@@ -112,33 +112,48 @@ func loadChats(ctx context.Context, st Store) tea.Cmd {
 func loadMessages(ctx context.Context, deps Deps, chat string) tea.Cmd {
 	return func() tea.Msg {
 		msgs, err := deps.Store.Messages(ctx, chat, messagesPerChat)
-		cached := map[string]bool{}
-		if deps.Media != nil {
-			for _, m := range msgs {
-				if m.Media != nil {
-					if _, ok := deps.Media.Lookup(chat, m.ID); ok {
-						cached[m.ID] = true
-					}
-				}
-			}
+		mentions, nerr := mentionNames(ctx, deps.Store, msgs)
+		return messagesLoadedMsg{
+			chat: chat, msgs: msgs, cached: cachedFlags(deps.Media, chat, msgs), mentions: mentions,
+			err: errors.Join(err, nerr),
 		}
-		mentions := map[string]string{}
-		if digits := mentionedDigits(msgs); len(digits) > 0 {
-			jids := make([]string, len(digits))
-			for i, d := range digits {
-				jids[i] = d + "@s.whatsapp.net"
-			}
-			names, nerr := deps.Store.Names(ctx, jids)
-			if nerr != nil {
-				err = errors.Join(err, nerr)
-			}
-			for jid, name := range names {
-				user, _, _ := strings.Cut(jid, "@")
-				mentions[user] = name
-			}
-		}
-		return messagesLoadedMsg{chat: chat, msgs: msgs, cached: cached, mentions: mentions, err: err}
 	}
+}
+
+// cachedFlags marks which messages' attachments are already downloaded.
+func cachedFlags(cache MediaCache, chat string, msgs []wa.Message) map[string]bool {
+	cached := map[string]bool{}
+	if cache == nil {
+		return cached
+	}
+	for _, m := range msgs {
+		if m.Media == nil {
+			continue
+		}
+		if _, ok := cache.Lookup(chat, m.ID); ok {
+			cached[m.ID] = true
+		}
+	}
+	return cached
+}
+
+// mentionNames maps the phone digits @-mentioned in msgs to contact names.
+func mentionNames(ctx context.Context, st Store, msgs []wa.Message) (map[string]string, error) {
+	mentions := map[string]string{}
+	digits := mentionedDigits(msgs)
+	if len(digits) == 0 {
+		return mentions, nil
+	}
+	jids := make([]string, len(digits))
+	for i, d := range digits {
+		jids[i] = d + "@s.whatsapp.net"
+	}
+	names, err := st.Names(ctx, jids)
+	for jid, name := range names {
+		user, _, _ := strings.Cut(jid, "@")
+		mentions[user] = name
+	}
+	return mentions, err
 }
 
 func connect(ctx context.Context, client wa.Client) tea.Cmd {
