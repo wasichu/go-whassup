@@ -82,4 +82,11 @@ func TestSearchUnavailableShownOnOpen(t *testing.T) {
 	if v := ansi.Strip(h.view()); !strings.Contains(v, "unavailable while encryption is on") {
 		t.Fatalf("unavailable not shown before typing:\n%s", v)
 	}
+	h.key("ab") // typing, then erasing it all, must not hide it
+	h.send(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	h.send(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	h.settle()
+	if v := ansi.Strip(h.view()); !strings.Contains(v, "unavailable while encryption is on") {
+		t.Fatalf("unavailable hidden after clearing the query:\n%s", v)
+	}
 }

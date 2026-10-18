@@ -23,6 +23,7 @@ type search struct {
 	selected int
 	seq      int    // generation of the latest query; older results are dropped
 	err      string // e.g. unavailable while encrypted
+	off      bool   // the store said search is unavailable; it stays so while open
 	searched bool
 }
 
@@ -97,8 +98,8 @@ func (s *search) key(r rootAPI, msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	before := s.input.Value()
 	var cmd tea.Cmd
 	s.input, cmd = s.input.Update(msg)
-	if s.input.Value() == before {
-		return false, cmd
+	if s.input.Value() == before || s.off {
+		return false, cmd // no point searching; keep showing why
 	}
 	s.seq++
 	s.selected, s.err = 0, ""
@@ -130,7 +131,7 @@ func (s *search) results(msg searchResultsMsg) {
 	s.searched = true
 	switch {
 	case errors.Is(msg.err, store.ErrSearchUnavailable):
-		s.err, s.hits = msg.err.Error()+".", nil
+		s.err, s.hits, s.off = msg.err.Error()+".", nil, true
 	case msg.err != nil:
 		s.err, s.hits = "search failed: "+msg.err.Error(), nil
 	default:
