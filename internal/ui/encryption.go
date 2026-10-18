@@ -17,7 +17,7 @@ import (
 )
 
 // Encryption turns at-rest encryption on and off while the app runs
-// (implemented by internal/app). Re-sealing stored messages happens in the
+// (implemented by internal/encryption.Controller). Re-sealing stored messages happens in the
 // background; a done channel reports how it ended.
 type Encryption interface {
 	// Set starts turning encryption on or off. pass is a new passphrase

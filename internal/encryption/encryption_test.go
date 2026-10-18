@@ -1,4 +1,4 @@
-package app
+package encryption
 
 import (
 	"bytes"
@@ -30,8 +30,8 @@ func (f *fakeKeyring) Get(context.Context) ([]byte, error) {
 }
 func (f *fakeKeyring) Put(_ context.Context, k []byte) error { f.key = k; return nil }
 
-func fakeSources(kr *fakeKeyring, pass string) keySources {
-	return keySources{keyring: kr, passphrase: func(context.Context, string, bool) ([]byte, error) {
+func fakeSources(kr *fakeKeyring, pass string) Sources {
+	return Sources{Keyring: kr, Passphrase: func(context.Context, string, bool) ([]byte, error) {
 		return []byte(pass), nil
 	}}
 }
@@ -72,11 +72,11 @@ func cfgWith(enabled bool, source string) config.Config {
 	return c
 }
 
-// crypto returns an encryptor for st, closed when the test ends (before
+// crypto returns an Controller for st, closed when the test ends (before
 // the store: cleanups run in reverse).
-func (f *encFixture) crypto(st *store.Store, ks keySources) *encryptor {
+func (f *encFixture) crypto(st *store.Store, ks Sources) *Controller {
 	f.t.Helper()
-	c := newEncryptor(f.t.Context(), st, f.p, ks, f.log)
+	c := New(f.t.Context(), st, f.p.MediaDir, ks, f.log)
 	f.t.Cleanup(func() {
 		if err := c.Close(); err != nil {
 			f.t.Errorf("Close: %v", err)
@@ -86,7 +86,7 @@ func (f *encFixture) crypto(st *store.Store, ks keySources) *encryptor {
 }
 
 // run starts encryption as the app does and lets the re-seal finish.
-func (f *encFixture) run(st *store.Store, cfg config.Config, ks keySources, transitions bool) (encryption, error) {
+func (f *encFixture) run(st *store.Store, cfg config.Config, ks Sources, transitions bool) (State, error) {
 	f.t.Helper()
 	c := f.crypto(st, ks)
 	e, err := c.Start(f.t.Context(), cfg, transitions)
@@ -109,7 +109,7 @@ func TestEnableWithKeyringThenUnlockOnRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("enable: %v", err)
 	}
-	if !e.on || e.finish == nil || kr.key == nil {
+	if !e.On || e.finish == nil || kr.key == nil {
 		t.Fatalf("enable state = %+v, keyring set = %v", e, kr.key != nil)
 	}
 	if _, err := os.Stat(f.p.MediaDir); !os.IsNotExist(err) {
@@ -167,7 +167,7 @@ func TestDisableDecryptsBack(t *testing.T) {
 	}
 	st := f.open()
 	e, err := f.run(st, cfgWith(false, config.KeySourceKeyring), fakeSources(kr, ""), true)
-	if err != nil || e.finish == nil || !e.on {
+	if err != nil || e.finish == nil || !e.On {
 		t.Fatalf("disable = %+v, %v (on until decrypted)", e, err)
 	}
 	if k, err := st.Key(t.Context()); err != nil || k != nil {
@@ -179,7 +179,7 @@ func TestDisableDecryptsBack(t *testing.T) {
 	}
 	// Next start: nothing to do.
 	e, err = f.run(f.open(), cfgWith(false, config.KeySourceKeyring), fakeSources(kr, ""), true)
-	if err != nil || e.on || e.finish != nil {
+	if err != nil || e.On || e.finish != nil {
 		t.Errorf("after decrypting = %+v, %v", e, err)
 	}
 }
@@ -193,7 +193,7 @@ func TestDBCommandsOnlyUnlock(t *testing.T) {
 	// Config says off, but a db command must not start decrypting.
 	st := f.open()
 	e, err := f.run(st, cfgWith(false, config.KeySourceKeyring), fakeSources(kr, ""), false)
-	if err != nil || e.finish != nil || !e.on {
+	if err != nil || e.finish != nil || !e.On {
 		t.Fatalf("db command = %+v, %v", e, err)
 	}
 	if k, err := st.Key(t.Context()); err != nil || k == nil {
@@ -204,33 +204,6 @@ func TestDBCommandsOnlyUnlock(t *testing.T) {
 	e, err = g.run(g.open(), cfgWith(true, config.KeySourceKeyring), fakeSources(&fakeKeyring{}, ""), false)
 	if err != nil || e.finish != nil {
 		t.Errorf("db command enabling = %+v, %v", e, err)
-	}
-}
-
-func TestResetMessages(t *testing.T) {
-	f := newEncFixture(t)
-	if err := os.MkdirAll(f.p.MediaDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	var out bytes.Buffer
-	if err := resetMessages(f.p, strings.NewReader("no\n"), &out); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(f.path); err != nil {
-		t.Fatal("deleted without a yes")
-	}
-	out.Reset()
-	if err := resetMessages(f.p, strings.NewReader("yes\n"), &out); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(f.path); !os.IsNotExist(err) {
-		t.Error("messages.db not deleted")
-	}
-	if _, err := os.Stat(f.p.MediaDir); !os.IsNotExist(err) {
-		t.Error("media cache not deleted")
-	}
-	if !strings.Contains(out.String(), "is lost") {
-		t.Errorf("warning missing: %s", out.String())
 	}
 }
 
@@ -254,10 +227,10 @@ func TestCrashBeforeFinishIsCompletedNextStart(t *testing.T) {
 	again := f.open()
 	c := f.crypto(again, fakeSources(kr, ""))
 	e, err := c.setUp(t.Context(), cfgWith(true, config.KeySourceKeyring), true)
-	if err != nil || e.pending != 0 || e.finish == nil {
+	if err != nil || e.Pending != 0 || e.finish == nil {
 		t.Fatalf("restart after a crash before finishing = %+v, %v; want the finish step to run", e, err)
 	}
-	if err := c.reseal(t.Context(), e.finish, e.pending); err != nil {
+	if err := c.reseal(t.Context(), e.finish, e.Pending); err != nil {
 		t.Fatal(err)
 	}
 	k, err := again.Key(t.Context())

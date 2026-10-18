@@ -148,7 +148,7 @@ migration (implemented in `internal/store/codec.go`):
 - `internal/crypt`: AES-256-GCM with associated data, envelope wrapping, and Argon2id.
 - `internal/keysource`: keyring, command and prompt.
 - `internal/store/keys.go`: the keys table and the re-seal.
-- `internal/app/encryptor.go`: startup and live changes (`encryption.go`: keys and sources).
+- `internal/encryption`: the `Controller` (startup and live changes, `controller.go`) and keys and their sources (`encryption.go`).
 
 **What's encrypted.**
 - Message text, **reactions** (they're content: what people thought of a message), and
@@ -182,7 +182,7 @@ migration (implemented in `internal/store/codec.go`):
 5. `VACUUM`.
 
 It runs at startup (when the config changed while closed) or straight from Settings
-(`internal/app/encryptor.go`; both use the same steps). A change while one is running
+(`internal/encryption`; both use the same steps). A change while one is running
 stops it first; re-enabling during a decrypt reuses the unlocked key instead of creating
 another. It resumes on the next start if interrupted, including a crash after the last batch but
 before compaction: `keys.finished_at` (v11) is only set once compaction completes. A value that can't be opened stops

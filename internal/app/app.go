@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/wasichu/go-whassup/internal/config"
+	"github.com/wasichu/go-whassup/internal/encryption"
 	"github.com/wasichu/go-whassup/internal/headless"
 	"github.com/wasichu/go-whassup/internal/logging"
 	"github.com/wasichu/go-whassup/internal/media"
@@ -88,8 +89,8 @@ type env struct {
 	waLog   *slog.Logger // whatsmeow's: capped by logCap
 	logCap  *logging.Cap // info while encrypted: whatsmeow's debug output has message text
 	st      *store.Store
-	enc     encryption
-	crypto  *encryptor
+	enc     encryption.State
+	crypto  *encryption.Controller
 	cache   *media.Switchable
 	console headless.Console
 }
@@ -118,15 +119,15 @@ func openEnv(ctx context.Context, inv invocation, p paths.Paths, stdio IO, clean
 
 	// Re-sealing runs while the app does; on exit it's stopped (and
 	// resumes next start) before the store closes.
-	e.crypto = newEncryptor(ctx, e.st, p, realKeySources(e.cfg, p, stdio), log)
+	e.crypto = encryption.New(ctx, e.st, p.MediaDir, realKeySources(e.cfg, p, stdio), log)
 	cleanup.add(e.crypto.Close)
 	transitions := !strings.HasPrefix(inv.cmd, "db ")
 	if e.enc, err = e.crypto.Start(ctx, e.cfg, transitions); err != nil {
 		return e, err
 	}
-	e.cache, e.logCap = e.crypto.cache, e.crypto.logCap
+	e.cache, e.logCap = e.crypto.Cache(), e.crypto.LogCap()
 	e.waLog = logging.Capped(log, e.logCap)
-	e.console = headless.Console{In: stdio.In, Out: stdio.Out, Log: log, NoText: e.enc.on}
+	e.console = headless.Console{In: stdio.In, Out: stdio.Out, Log: log, NoText: e.enc.On}
 	return e, nil
 }
 
@@ -192,17 +193,17 @@ func runLogin(ctx context.Context, e env, client *wa.WhatsApp) error {
 }
 
 // encryptionNotice tells the user a background re-seal is running.
-func encryptionNotice(e encryption) string {
-	if e.finish == nil {
+func encryptionNotice(e encryption.State) string {
+	if !e.Resealing() {
 		return ""
 	}
-	return fmt.Sprintf("Updating encryption of %d stored messages in the background…", e.pending)
+	return fmt.Sprintf("Updating encryption of %d stored messages in the background…", e.Pending)
 }
 
 // tuiDeps wires the TUI's collaborators. It's a separate function so a test
 // can check every field is set: the UI's own tests inject their own deps and
 // would not notice a field the app forgot.
-func tuiDeps(cfg config.Config, p paths.Paths, client *wa.WhatsApp, st *store.Store, rec *store.Recorder, crypto *encryptor, log *slog.Logger) ui.Deps {
+func tuiDeps(cfg config.Config, p paths.Paths, client *wa.WhatsApp, st *store.Store, rec *store.Recorder, crypto *encryption.Controller, log *slog.Logger) ui.Deps {
 	return ui.Deps{
 		Client:     client,
 		Store:      st,
@@ -218,7 +219,7 @@ func tuiDeps(cfg config.Config, p paths.Paths, client *wa.WhatsApp, st *store.St
 		Graphics:   termcaps.DetectGraphics(os.Getenv, termcaps.Tmux),
 		FocusHint:  termcaps.FocusHint(os.Getenv, termcaps.Tmux),
 		Notify:     termcaps.DetectNotify(os.Getenv, termcaps.Tmux),
-		Media:      crypto.cache,
+		Media:      crypto.Cache(),
 		Encryption: crypto,
 		OpenFile:   media.Open,
 	}

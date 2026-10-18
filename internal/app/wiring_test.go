@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/wasichu/go-whassup/internal/config"
+	"github.com/wasichu/go-whassup/internal/encryption"
 	"github.com/wasichu/go-whassup/internal/paths"
 	"github.com/wasichu/go-whassup/internal/store"
 	"github.com/wasichu/go-whassup/internal/wa"
@@ -31,7 +32,7 @@ func TestTUIDepsFullyWired(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = client.Close() }) //nolint:errcheck // test cleanup
 	deps := tuiDeps(config.Default(), paths.Paths{ConfigFile: filepath.Join(dir, "c.toml")}, client, st,
-		&store.Recorder{Store: st, Log: log}, newEncryptor(t.Context(), st, paths.Paths{MediaDir: dir}, keySources{}, log), log)
+		&store.Recorder{Store: st, Log: log}, encryption.New(t.Context(), st, dir, encryption.Sources{}, log), log)
 
 	// Every field must be listed: a new ui.Deps field forces a decision
 	// here instead of silently being left unset.

@@ -78,7 +78,7 @@ cmd/go-whassup/          main.go only: signal ctx -> app.Run -> exit code. Keep 
 internal/app/        composition root: args, paths, logging, wiring. No business logic.
 internal/paths/      XDG locations (ConfigFile, DataDir, SessionDB, MessagesDB, LogFile)
 internal/config/     typed Config: defaults, Load (strict), Validate, Save (atomic), Fields (generic editing)
-internal/logging/    slog file logger
+internal/logging/    slog file logger; Cap (a minimum level settable while running)
 internal/wa/         whatsmeow adapter: Client interface, Event types, Subscribe.
                      ONLY package importing whatsmeow.
 internal/wa/watest/  fake wa.Client shared by all tests
@@ -87,8 +87,10 @@ internal/termcaps/   terminal capability detection (Kitty graphics, notification
 internal/sqlite/     the only place that opens SQLite (driver, DSN, 0600)
 internal/store/      OUR messages.db + Recorder. whatsmeow does NOT persist messages.
                      Message text and media keys go through Codec only (seal/open).
-internal/media/      attachment cache (hashed names, 0600) + system opener
+internal/media/      attachment cache (hashed names, 0600; Switchable dir), system opener, saving copies
 internal/crypt/      AES-256-GCM (with associated data), key wrapping, Argon2id
+internal/encryption/ at-rest encryption while running: key sources, unlock/create, the
+                     Controller (re-seal at startup or live from Settings)
 internal/keysource/  keyring (security/secret-tool via stdin), password_command, prompt
 internal/ui/         Bubble Tea models + Run. Root Model routes; screens other than main/login
                      implement `page` (page.go). Imports internal/wa, never whatsmeow.

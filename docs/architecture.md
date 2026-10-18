@@ -9,6 +9,9 @@ cmd/go-whassup (main: signals + exit code only)
          ├─► internal/logging   slog → log file
          ├─► internal/ui        Bubble Tea v2 TUI          ─┐
          ├─► internal/headless  login / listen commands     ├─► wa.Client (interface)
+         ├─► internal/encryption  at-rest encryption: keys, live re-seal (Controller)
+         │      └─► internal/crypt, internal/keysource
+         ├─► internal/media     attachment cache, opener, saving copies
          ├─► internal/store     messages.db + Recorder      │
          └─► internal/wa        whatsmeow adapter         ◄─┘     └─► session.db
                 internal/wa/watest   fake wa.Client for tests
