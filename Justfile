@@ -1,5 +1,7 @@
 # Run everything through mise so the pinned toolchain and env (GOTOOLCHAIN, CGO_ENABLED)
 # apply even when mise isn't activated in the calling shell.
+set positional-arguments
+
 go := "mise exec -- go"
 bin := "bin/wa-tui"
 
@@ -13,7 +15,7 @@ build:
 
 # Build and run the TUI
 run *args: build
-    ./{{bin}} {{args}}
+    ./{{bin}} "$@"
 
 # Run tests (pass extra flags, e.g. `just test -run TestFoo -v`)
 test *args:
