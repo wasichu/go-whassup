@@ -1,8 +1,15 @@
 # Homebrew (plan)
 
-Goal: `brew install wasichu/tap/go-whassup` for macOS (and Linux) users, from our own
-tap. Decided 2026-10-18: **our tap only**; homebrew-core is not planned (see below). Not
-started; it needs the repo to be public and a tagged release first.
+`brew install wasichu/tap/go-whassup` for macOS (and Linux) users, from our own tap
+([wasichu/homebrew-tap](https://github.com/wasichu/homebrew-tap)). Decided 2026-10-18:
+**our tap only**; homebrew-core is not planned (see below).
+
+**Done for v0.1.0 (2026-10-19):** the tap was scaffolded with `brew tap-new` and the
+formula below added. `brew audit --strict --online --new` and `brew test` pass, and a fresh
+`brew install wasichu/tap/go-whassup` from GitHub was verified. It builds from source:
+Homebrew installs Go as a build dependency, and the build itself takes seconds. Bottles
+come from the tap's own Actions when a formula change arrives as a pull request (see
+"Keep it current").
 
 Checked against Homebrew's docs on 2026-10-18:
 [Acceptable Formulae](https://docs.brew.sh/Acceptable-Formulae) and
@@ -21,14 +28,14 @@ Checked against Homebrew's docs on 2026-10-18:
   `brew install --build-from-source wasichu/tap/go-whassup`, then `brew test` and
   `brew audit --strict`.
 
-Draft formula (`Formula/go-whassup.rb`; untested until a tarball exists):
+The formula (`Formula/go-whassup.rb` in the tap):
 
 ```ruby
 class GoWhassup < Formula
   desc "WhatsApp client for the terminal"
   homepage "https://github.com/wasichu/go-whassup"
   url "https://github.com/wasichu/go-whassup/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "<sha256 of that tarball>"
+  sha256 "28cca3618560ef8bb9e11b2d707ccd4e72a1eb629286664dbde812eb9cdd3dd8"
   license "MPL-2.0"
   head "https://github.com/wasichu/go-whassup.git", branch: "main"
 
@@ -36,7 +43,7 @@ class GoWhassup < Formula
 
   def install
     ENV["CGO_ENABLED"] = "0" # as everywhere else: pure-Go SQLite, static binary
-    ldflags = "-s -w -X github.com/wasichu/go-whassup/internal/app.Version=v#{version}"
+    ldflags = "-X github.com/wasichu/go-whassup/internal/app.Version=v#{version}" # std_go_args adds -s -w
     system "go", "build", *std_go_args(ldflags:), "./cmd/go-whassup"
   end
 

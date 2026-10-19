@@ -69,14 +69,12 @@ All from `go-whassup demo`: fictional people, made-up chats.
 ## Installation
 
 <table>
-    <!-- Once the tap exists (docs/homebrew.md):
     <tr>
         <td>Homebrew (macOS or Linux)</td>
         <td>
             <code>brew install wasichu/tap/go-whassup</code>
         </td>
     </tr>
-    -->
     <tr>
         <td>Go 1.26 or newer</td>
         <td>
