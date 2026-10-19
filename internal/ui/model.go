@@ -35,6 +35,7 @@ const (
 	screenSearch
 	screenBrowse
 	screenEmoji
+	screenSender
 )
 
 type focus int
@@ -79,10 +80,11 @@ type Model struct {
 	info      info
 	search    search
 	browser   browser
-	emojiPick emojiPage // the "+" reaction search (emojipage.go)
-	browseDir string    // last folder a file was picked from (browser)
-	draft     string    // JID of an open chat that has no messages yet
-	ownJID    string    // the linked account, for labelling the chat with yourself
+	emojiPick emojiPage  // the "+" reaction search (emojipage.go)
+	sender    senderCard // "i" while picking a message (sender.go)
+	browseDir string     // last folder a file was picked from (browser)
+	draft     string     // JID of an open chat that has no messages yet
+	ownJID    string     // the linked account, for labelling the chat with yourself
 
 	downloading map[string]bool // attachment downloads in flight, by message ID
 

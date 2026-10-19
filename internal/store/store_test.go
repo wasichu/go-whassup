@@ -123,7 +123,7 @@ func TestChatsOrderNamesAndCounts(t *testing.T) {
 		titles = append(titles, c.Title())
 	}
 	// bob (no name: his number), Book club, Ada (push name fallback)
-	if want := []string{"+15559876543", "Book club", "Ada"}; !slices.Equal(titles, want) {
+	if want := []string{"+15559876543", "Book club", "~Ada"}; !slices.Equal(titles, want) {
 		t.Errorf("titles = %v, want %v", titles, want)
 	}
 	if !chats[1].IsGroup || chats[1].Messages != 1 {
@@ -309,7 +309,7 @@ func TestRecorder(t *testing.T) {
 	for _, c := range chats {
 		titles[c.JID] = c.Title()
 	}
-	if titles[ada] != "Ada" || titles[bob] != "Bob" || titles[group] != "Book club" {
+	if titles[ada] != "~Ada" || titles[bob] != "~Bob" || titles[group] != "Book club" {
 		t.Errorf("titles = %v", titles)
 	}
 	if b, err := st.Messages(ctx, bob, 0); err != nil || len(b) != 1 {
@@ -397,7 +397,7 @@ func TestContactNamesTitlesAndSenders(t *testing.T) {
 	if err != nil || len(msgs) != 1 {
 		t.Fatalf("Messages: %v, %v", msgs, err)
 	}
-	if msgs[0].SenderName != "bobby" {
+	if msgs[0].SenderName != "~bobby" {
 		t.Errorf("sender name from message push name = %q", msgs[0].SenderName)
 	}
 	if err := st.SaveContacts(ctx, []wa.Contact{{JID: bob, Name: "Bob Builder"}}); err != nil {
@@ -429,7 +429,7 @@ func TestDirectory(t *testing.T) {
 		titles = append(titles, c.Title())
 	}
 	// Chats first, then contacts without a chat, alphabetically.
-	if want := []string{"Ada", "Carol", "zed"}; !slices.Equal(titles, want) {
+	if want := []string{"Ada", "Carol", "~zed"}; !slices.Equal(titles, want) {
 		t.Errorf("directory = %v, want %v", titles, want)
 	}
 	if dir[1].Messages != 0 || dir[1].JID != "15550000002@s.whatsapp.net" {
@@ -897,7 +897,7 @@ func TestGroupsDetailsAndNames(t *testing.T) {
 		names = append(names, fmt.Sprintf("%s/%v", m.Name, m.Admin))
 	}
 	// Admins first, then named members alphabetically, unnamed last.
-	if want := []string{"Ada/true", "bobby/false", "/false"}; !slices.Equal(names, want) {
+	if want := []string{"Ada/true", "~bobby/false", "/false"}; !slices.Equal(names, want) {
 		t.Errorf("members = %v, want %v", names, want)
 	}
 
@@ -1178,5 +1178,18 @@ func TestCommunityChatTitles(t *testing.T) {
 	}
 	if c, err := st.FindChat(ctx, "general"); err != nil || c.JID != general {
 		t.Errorf("FindChat(general) = %+v, %v", c, err)
+	}
+}
+
+func TestPerson(t *testing.T) {
+	st := openStore(t, "", nil)
+	if err := st.SaveContacts(t.Context(), []wa.Contact{{JID: ada, Name: "Ada Lovelace", PushName: "Ada"}}); err != nil {
+		t.Fatal(err)
+	}
+	if p, err := st.Person(t.Context(), ada); err != nil || p.Name != "Ada Lovelace" || p.PushName != "Ada" {
+		t.Errorf("Person(ada) = %+v, %v", p, err)
+	}
+	if p, err := st.Person(t.Context(), bob); err != nil || p != (Person{JID: bob}) {
+		t.Errorf("a stranger should come back with only the JID: %+v, %v", p, err)
 	}
 }

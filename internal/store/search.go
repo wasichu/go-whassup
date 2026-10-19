@@ -98,7 +98,7 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchHi
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT m.chat_jid, m.id, m.sender_jid, m.ts, m.from_me, m.kind,
 		       snippet(messages_fts, 0, ?, ?, '…', 12),
-		       COALESCE(NULLIF(ct.name, ''), NULLIF(ct.push_name, ''), NULLIF(m.push_name, ''), ct.business_name, '')
+		       `+personName("ct", "m.push_name")+`
 		FROM messages_fts f
 		JOIN messages m ON m.rowid = f.rowid
 		LEFT JOIN contacts ct ON ct.jid = m.sender_jid

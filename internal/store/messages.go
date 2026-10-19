@@ -132,7 +132,7 @@ func (s *Store) messagesWhere(ctx context.Context, chat, where string, args ...a
 		SELECT id, sender_jid, push_name, ts, from_me, kind, body, codec, is_group, sender_name, edited_at, deleted, media, media_codec,
 		       reply_id, reply_sender FROM (
 			SELECT m.*, c.is_group,
-			       COALESCE(NULLIF(ct.name, ''), NULLIF(ct.push_name, ''), NULLIF(m.push_name, ''), ct.business_name, '') AS sender_name
+			       `+personName("ct", "m.push_name")+` AS sender_name
 			FROM messages m
 			JOIN chats c ON c.jid = m.chat_jid
 			LEFT JOIN contacts ct ON ct.jid = m.sender_jid

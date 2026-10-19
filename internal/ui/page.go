@@ -43,6 +43,8 @@ func (m *Model) page() page {
 		return &m.browser
 	case screenEmoji:
 		return &m.emojiPick
+	case screenSender:
+		return &m.sender
 	}
 	return nil
 }

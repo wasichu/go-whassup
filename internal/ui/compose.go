@@ -135,7 +135,8 @@ func isPlus(msg tea.KeyPressMsg) bool {
 }
 
 // pickKey handles keys while picking a message: ↑/↓ move, r replies, e
-// reacts, + searches every emoji to react with, esc goes back to typing.
+// reacts, + searches every emoji to react with, i shows who sent it, esc
+// goes back to typing.
 // Other keys do nothing (nothing types).
 func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	c := &m.conv
@@ -158,6 +159,10 @@ func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case isPlus(msg):
 		c.choice = moreReactions
 		return m.chooseReaction()
+	case msg.String() == "i":
+		if target, ok := c.pickedMessage(); ok {
+			return m.openSender(target)
+		}
 	}
 	return m, nil
 }

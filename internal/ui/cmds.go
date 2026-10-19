@@ -27,6 +27,7 @@ type Store interface {
 	UnreadMessages(ctx context.Context, chat string) ([]wa.Message, error)
 	Details(ctx context.Context, chat string) (store.ChatDetails, error)
 	Names(ctx context.Context, jids []string) (map[string]string, error)
+	Person(ctx context.Context, jid string) (store.Person, error)
 	Quotes(ctx context.Context, chat string, ids []string) (map[string]wa.Message, error)
 	Search(ctx context.Context, query string, limit int) ([]store.SearchHit, error)
 	MarkRead(ctx context.Context, chat string, at time.Time) error

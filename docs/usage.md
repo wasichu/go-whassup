@@ -109,7 +109,14 @@ names stay readable on disk.**
 - **`i`** shows a group's topic and members (admins first), or a person's number and
   the name they chose for themselves.
 - **Mentions** like `@15551234567` show as **@Ada** when the number is a known contact,
-  and as a highlighted **@you** when it's you.
+  and as a highlighted **@you** when it's you. Unknown numbers are dimmed.
+- **Names.** People in your address book appear by your name for them. Others appear
+  by the name they chose for themselves, marked with `~` as WhatsApp does (`~Bobby`),
+  and failing that by their number, dimmed so names stand out. WhatsApp sends that
+  chosen name along with messages, so a member who has never posted may only have a
+  number. Some groups identify members by a **privacy ID** instead of their number;
+  such a member with no name shows as *unknown member*, not as the ID (which isn't a
+  phone number).
 - **Communities** appear in the chat list as a heading (not selectable) with their
   groups indented beneath it, placed by the community's most recent message; `↑`/`↓`
   step over the heading. The announcement group is listed as **Announcements**
@@ -165,6 +172,9 @@ names stay readable on disk.**
   (`↪ Replying to Ada: Tea on Saturday?`); type and press `enter` to send it as a proper
   WhatsApp reply, quoted on everyone's phone. `esc` cancels the reply first, a second
   `esc` leaves the box.
+- **`i` shows who sent it**: your contact name for them, the name they chose, and
+  their number (`c` copies it, in terminals that allow clipboard access; tmux needs
+  `set-clipboard on`). `esc` goes back to picking.
 - **`e` reacts.** A strip of WhatsApp's quick reactions replaces the box:
   `👍 ❤️ 😂 😮 😢 🙏 +`. Press `1`–`6`, or `←`/`→` and `enter`. The strip starts on
   your current reaction, and choosing the reaction you already have removes it, as on the

@@ -67,11 +67,10 @@ func (in *info) view(r rootAPI, width, height int) string {
 		return lipgloss.NewStyle().Width(width).Height(height).Padding(0, 1).Render("Loading…")
 	}
 	d := in.details
-	user, _, _ := strings.Cut(d.JID, "@")
 	lines := []string{paneTitleStyle.Render(chatTitle(d.ChatSummary, r.own())), ""}
 	if !d.IsGroup {
-		lines = append(lines, "Number:  +"+user)
-		if d.PushName != "" && d.PushName != d.Name {
+		lines = append(lines, "Number:  "+numberOf(d.JID))
+		if d.PushName != "" && "~"+d.PushName != d.Name && d.PushName != d.Name {
 			lines = append(lines, "Calls themselves: "+d.PushName)
 		}
 		return pageStyle(width, height).Render(strings.Join(lines, "\n"))
@@ -90,19 +89,20 @@ func (in *info) view(r rootAPI, width, height int) string {
 	return pageStyle(width, height).Render(strings.Join(lines, "\n"))
 }
 
-// memberLine is one group member: name (or number), number, admin.
+// memberLine is one group member: name (or number, dimmed), number, admin.
+// A privacy ID has no number to show.
 func memberLine(mem store.Member, own string) string {
-	user, _, _ := strings.Cut(mem.JID, "@")
+	number := numberOf(mem.JID)
 	name := mem.Name
 	if name == "" {
-		name = "+" + user
+		name = number
 	}
 	if mem.JID == own {
-		name += " (You)"
+		name = strings.TrimPrefix(name, "~") + " (You)"
 	}
-	line := "  " + name
-	if mem.Name != "" {
-		line += "  " + faintStyle.Render("+"+user)
+	line := "  " + nameStyle(name, lipgloss.NewStyle()).Render(name)
+	if mem.Name != "" && !store.IsPrivacyID(mem.JID) {
+		line += "  " + faintStyle.Render(number)
 	}
 	if mem.Admin {
 		line += "  " + onlineStyle.Render("admin")

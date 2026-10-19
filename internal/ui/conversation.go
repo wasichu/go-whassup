@@ -229,7 +229,8 @@ func newDivider(msgs []wa.Message, newFrom time.Time) (count, at int) {
 // messageLine is one message's unwrapped line: time, sender and body
 // (with edit/delete markers and attachment info).
 func messageLine(m wa.Message, chat store.ChatSummary, opts renderOpts) string {
-	name := senderStyle.Render(senderName(m, chat))
+	who := senderName(m, chat)
+	name := nameStyle(who, senderStyle).Render(who)
 	if m.FromMe {
 		name = fromMeStyle.Render("me")
 	}
@@ -253,8 +254,9 @@ func messageLine(m wa.Message, chat store.ChatSummary, opts renderOpts) string {
 }
 
 // senderName labels an incoming message: in a DM the chat's own title, in a
-// group the sender's best known name (address book, push name), falling
-// back to their number.
+// group the sender's best known name (address book, else "~" and the name
+// they chose), falling back to their number, or "unknown member" for a
+// privacy ID.
 func senderName(m wa.Message, chat store.ChatSummary) string {
 	if !m.IsGroup && chat.Name != "" {
 		return chat.Name
@@ -263,10 +265,28 @@ func senderName(m wa.Message, chat store.ChatSummary) string {
 		return m.SenderName
 	}
 	if m.PushName != "" {
-		return m.PushName
+		return "~" + m.PushName
 	}
-	user, _, _ := strings.Cut(m.Sender, "@")
-	return user
+	return numberOf(m.Sender)
+}
+
+// numberOf is how a person without a name is shown: "+15551234567", or
+// "unknown member" for a privacy ID (which isn't their number).
+func numberOf(jid string) string {
+	if store.IsPrivacyID(jid) || jid == "" {
+		return store.UnknownPerson
+	}
+	user, _, _ := strings.Cut(jid, "@")
+	return "+" + user
+}
+
+// nameStyle dims a name that's only a number or "unknown member", so real
+// names stand out.
+func nameStyle(name string, named lipgloss.Style) lipgloss.Style {
+	if strings.HasPrefix(name, "+") || name == store.UnknownPerson {
+		return faintStyle
+	}
+	return named
 }
 
 // renderReactions summarises reactions as "👍 2  ❤️", marking the user's own.
@@ -316,7 +336,7 @@ func renderMentions(text string, names map[string]string, own string) string {
 		if name, ok := names[digits]; ok {
 			return mentionStyle.Render("@" + name)
 		}
-		return tok
+		return faintStyle.Render(tok) // a number: dimmed, so names stand out
 	})
 }
 

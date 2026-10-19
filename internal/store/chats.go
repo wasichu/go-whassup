@@ -70,6 +70,13 @@ type ChatSummary struct {
 	InCommunity  string
 }
 
+// UnknownPerson names someone WhatsApp identifies only by a privacy ID
+// ("…@lid": a code, not their number) who hasn't told us a name.
+const UnknownPerson = "unknown member"
+
+// IsPrivacyID reports whether jid is a privacy ID rather than a number.
+func IsPrivacyID(jid string) bool { return strings.HasSuffix(jid, "@lid") }
+
 // Muted reports whether the chat is muted at now.
 func (c ChatSummary) Muted(now time.Time) bool { return c.MutedUntil.After(now) }
 
@@ -82,17 +89,21 @@ func (c ChatSummary) Title() string {
 	if user, ok := strings.CutSuffix(c.JID, "@s.whatsapp.net"); ok {
 		return "+" + user
 	}
+	if IsPrivacyID(c.JID) {
+		return UnknownPerson // a privacy ID isn't a number worth showing
+	}
 	return c.JID
 }
 
 // titleSQL picks a chat's display name, like WhatsApp does: for a group its
 // subject; for a person the user's address-book name, then the name history
-// sync gave the chat, then their own push name, then their business name.
+// sync gave the chat, then their own push name (marked "~", see personName),
+// then their business name.
 // A group in a community is "Community › Group", and the community's
 // announcement group (which WhatsApp names after the community) is
 // "Community › Announcements", so the community's chats can be told apart.
 const titleSQL = `CASE WHEN c.is_group THEN ` + groupTitleSQL + ` ELSE COALESCE(
-	NULLIF(ct.name, ''), NULLIF(c.name, ''), NULLIF(ct.push_name, ''), NULLIF(ct.business_name, ''), '') END`
+	NULLIF(ct.name, ''), NULLIF(c.name, ''), '~' || NULLIF(ct.push_name, ''), NULLIF(ct.business_name, ''), '') END`
 
 const groupTitleSQL = `COALESCE(
 	NULLIF((SELECT p.name FROM chats p WHERE p.jid = c.community_jid), '') || ' › ' ||
@@ -175,6 +186,38 @@ func (s *Store) SaveGroups(ctx context.Context, groups []wa.Group) error {
 	})
 }
 
+// personName is SQL naming a person from their contacts row (alias ct):
+// your address book's name, else the name they chose for themselves (their
+// push name, or extraPush, a column such as the message's own push name)
+// marked "~" as WhatsApp marks it, else their business name, else "".
+// SQLite's '~' || NULL is NULL, so a missing push name falls through.
+func personName(ct, extraPush string) string {
+	push := "'~' || NULLIF(" + ct + ".push_name, '')"
+	if extraPush != "" {
+		push += ", '~' || NULLIF(" + extraPush + ", '')"
+	}
+	return "COALESCE(NULLIF(" + ct + ".name, ''), " + push + ", NULLIF(" + ct + ".business_name, ''), '')"
+}
+
+// Person is what's known about someone, for the sender card.
+type Person struct {
+	JID          string
+	Name         string // your address book
+	PushName     string // the name they chose
+	BusinessName string
+}
+
+// Person looks up jid's names; a stranger comes back with only the JID.
+func (s *Store) Person(ctx context.Context, jid string) (Person, error) {
+	p := Person{JID: jid}
+	err := s.db.QueryRowContext(ctx, `SELECT name, push_name, business_name FROM contacts WHERE jid = ?`, jid).
+		Scan(&p.Name, &p.PushName, &p.BusinessName)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return p, fmt.Errorf("looking up %s: %w", jid, err)
+	}
+	return p, nil
+}
+
 // Member is a group participant with a display name.
 type Member struct {
 	JID   string
@@ -205,7 +248,7 @@ func (s *Store) Details(ctx context.Context, chat string) (ChatDetails, error) {
 	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT gp.user_jid, gp.is_admin,
-		       COALESCE(NULLIF(ct.name, ''), NULLIF(ct.push_name, ''), ct.business_name, '') AS display
+		       `+personName("ct", "")+` AS display
 		FROM group_participants gp LEFT JOIN contacts ct ON ct.jid = gp.user_jid
 		WHERE gp.group_jid = ?
 		ORDER BY gp.is_admin DESC, display = '', lower(display), gp.user_jid`, chat)
@@ -268,7 +311,7 @@ func (s *Store) Directory(ctx context.Context) ([]ChatSummary, error) {
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT ct.jid, COALESCE(NULLIF(ct.name, ''), NULLIF(ct.push_name, ''), ct.business_name) AS title
+		SELECT ct.jid, `+personName("ct", "")+` AS title
 		FROM contacts ct
 		WHERE NOT EXISTS (SELECT 1 FROM chats c WHERE c.jid = ct.jid)
 		  AND (ct.name != '' OR ct.push_name != '' OR ct.business_name != '')

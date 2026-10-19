@@ -209,7 +209,7 @@ func chatRow(c store.ChatSummary, st rowState, width int, own string) string {
 // title, marked "(You)" for the chat with yourself, as WhatsApp Web does.
 func chatTitle(c store.ChatSummary, own string) string {
 	if own != "" && c.JID == own {
-		return c.Title() + " (You)"
+		return strings.TrimPrefix(c.Title(), "~") + " (You)" // your own name, no "~"
 	}
 	return c.Title()
 }

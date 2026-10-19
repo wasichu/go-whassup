@@ -37,7 +37,7 @@ func testSeedAt(t *testing.T, now time.Time) {
 	}
 	for title, unread := range map[string]int{
 		"Ada Lovelace": 0, "Grace Hopper": 2, "Book club": 1, "Alan Turing": 0,
-		"Hiking crew": 3, "Katherine J.": 0,
+		"Hiking crew": 3, "~Katherine J.": 0,
 	} {
 		c, ok := got[title]
 		if !ok {
