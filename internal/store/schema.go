@@ -144,6 +144,14 @@ ALTER TABLE chats ADD COLUMN muted_until INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE messages ADD COLUMN reply_id TEXT NOT NULL DEFAULT '';
 ALTER TABLE messages ADD COLUMN reply_sender TEXT NOT NULL DEFAULT '';
 `,
+	// 14: communities. A community is a parent group linking its groups;
+	// its Announcements group carries the community's own name, so titles
+	// need the link to tell the chats apart.
+	`
+ALTER TABLE chats ADD COLUMN community_jid TEXT NOT NULL DEFAULT '';
+ALTER TABLE chats ADD COLUMN is_community INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE chats ADD COLUMN is_announcements INTEGER NOT NULL DEFAULT 0;
+`,
 }
 
 // migrate brings the schema up to date inside one transaction.

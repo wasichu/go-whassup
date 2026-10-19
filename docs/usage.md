@@ -110,6 +110,10 @@ names stay readable on disk.**
   the name they chose for themselves.
 - **Mentions** like `@15551234567` show as **@Ada** when the number is a known contact,
   and as a highlighted **@you** when it's you.
+- **Communities** list each of their groups as `Community › Group`, and the
+  announcement group as `Community › Announcements` (WhatsApp names it after the
+  community, so it would otherwise look like a duplicate). The community itself has no
+  chat and isn't listed. The names fill in the first time you connect after upgrading.
 
 ### Attachments
 
@@ -162,8 +166,11 @@ names stay readable on disk.**
   `👍 ❤️ 😂 😮 😢 🙏 +`. Press `1`–`6`, or `←`/`→` and `enter`. The strip starts on
   your current reaction, and choosing the reaction you already have removes it, as on the
   phone. **`+`** searches every emoji by name or keyword (`laugh` finds 😂, `party` 🎉);
-  `↑`/`↓` and `enter` react, `esc` backs out. The emoji list is Unicode's, with CLDR's
-  English keywords, built into the binary (`internal/emoji`).
+  `↑`/`↓` and `enter` react, `esc` backs out. `+` works while picking a message too, so
+  `ctrl+r` `+` goes straight to search. The emoji list is Unicode's, with CLDR's English
+  keywords, built into the binary (`internal/emoji`). It stops at Emoji 16.0: Unicode
+  publishes new emoji well before phones and fonts can draw them, and a reaction nobody
+  can see shows as a blank box.
 
 Replies and reactions name the original author by phone number. In groups where
 WhatsApp addresses members by privacy ID (LID) this hasn't been confirmed against a

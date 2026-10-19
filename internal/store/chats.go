@@ -82,8 +82,17 @@ func (c ChatSummary) Title() string {
 // titleSQL picks a chat's display name, like WhatsApp does: for a group its
 // subject; for a person the user's address-book name, then the name history
 // sync gave the chat, then their own push name, then their business name.
-const titleSQL = `CASE WHEN c.is_group THEN c.name ELSE COALESCE(
+// A group in a community is "Community › Group", and the community's
+// announcement group (which WhatsApp names after the community) is
+// "Community › Announcements", so the community's chats can be told apart.
+const titleSQL = `CASE WHEN c.is_group THEN ` + groupTitleSQL + ` ELSE COALESCE(
 	NULLIF(ct.name, ''), NULLIF(c.name, ''), NULLIF(ct.push_name, ''), NULLIF(ct.business_name, ''), '') END`
+
+const groupTitleSQL = `COALESCE(
+	NULLIF((SELECT p.name FROM chats p WHERE p.jid = c.community_jid), '') || ' › ' ||
+		CASE WHEN c.is_announcements THEN 'Announcements' ELSE c.name END,
+	CASE WHEN c.is_announcements AND c.name != '' THEN c.name || ' › Announcements' END,
+	c.name)`
 
 const chatSummaryQuery = `
 	SELECT c.jid, ` + titleSQL + `, c.is_group, c.last_message_at, c.last_read_at,
@@ -93,9 +102,12 @@ const chatSummaryQuery = `
 	       c.muted_until
 	FROM chats c LEFT JOIN contacts ct ON ct.jid = c.jid`
 
-// Chats lists chats, most recently active first.
+// Chats lists chats, most recently active first. A community itself isn't
+// a chat (its groups are), so it's listed only if it somehow has messages.
 func (s *Store) Chats(ctx context.Context) ([]ChatSummary, error) {
-	rows, err := s.db.QueryContext(ctx, chatSummaryQuery+` ORDER BY c.last_message_at DESC, c.jid`)
+	rows, err := s.db.QueryContext(ctx, chatSummaryQuery+`
+		WHERE NOT c.is_community OR EXISTS (SELECT 1 FROM messages m WHERE m.chat_jid = c.jid)
+		ORDER BY c.last_message_at DESC, c.jid`)
 	if err != nil {
 		return nil, fmt.Errorf("listing chats: %w", err)
 	}
@@ -125,11 +137,13 @@ func (s *Store) SaveGroups(ctx context.Context, groups []wa.Group) error {
 	return s.inTx(ctx, "saving groups", func(tx *sql.Tx) error {
 		for _, g := range groups {
 			if _, err := tx.ExecContext(ctx, `
-				INSERT INTO chats (jid, name, is_group, topic) VALUES (?, ?, 1, ?)
+				INSERT INTO chats (jid, name, is_group, topic, community_jid, is_community, is_announcements)
+				VALUES (?, ?, 1, ?, ?, ?, ?)
 				ON CONFLICT (jid) DO UPDATE SET
 					name = CASE WHEN excluded.name != '' THEN excluded.name ELSE name END,
-					topic = excluded.topic, is_group = 1`,
-				g.JID, g.Name, g.Topic); err != nil {
+					topic = excluded.topic, is_group = 1, community_jid = excluded.community_jid,
+					is_community = excluded.is_community, is_announcements = excluded.is_announcements`,
+				g.JID, g.Name, g.Topic, g.Community, g.IsCommunity, g.Announcements); err != nil {
 				return fmt.Errorf("group %s: %w", g.JID, err)
 			}
 			if g.Participants == nil {

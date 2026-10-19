@@ -420,3 +420,20 @@ func TestReplyPointer(t *testing.T) {
 		})
 	}
 }
+
+func TestGroupFromInfoCommunity(t *testing.T) {
+	parent := types.NewJID("120363000000000001", types.GroupServer)
+	info := &types.GroupInfo{
+		JID:               group,
+		GroupName:         types.GroupName{Name: "Class of 2035"},
+		GroupLinkedParent: types.GroupLinkedParent{LinkedParentJID: parent},
+		GroupIsDefaultSub: types.GroupIsDefaultSub{IsDefaultSubGroup: true},
+	}
+	if g := groupFromInfo(info, stubResolver); g.Community != parent.String() || !g.Announcements || g.IsCommunity {
+		t.Errorf("announcement group = %+v", g)
+	}
+	info = &types.GroupInfo{JID: parent, GroupParent: types.GroupParent{IsParent: true}}
+	if g := groupFromInfo(info, stubResolver); !g.IsCommunity || g.Community != "" {
+		t.Errorf("community = %+v", g)
+	}
+}

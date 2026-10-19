@@ -115,7 +115,7 @@ func (c *conversation) reactionStrip(mine string) string {
 		}
 		b.WriteString(label)
 	}
-	return b.String() + faintStyle.Render("  1-6 or ←/→, enter")
+	return b.String() + faintStyle.Render("  1-6, + any emoji, or ←/→ and enter")
 }
 
 // myReaction is the emoji you've reacted to m with, if any.
@@ -128,8 +128,15 @@ func myReaction(m wa.Message) string {
 	return ""
 }
 
+// isPlus reports a "+" however the terminal sends it: as typed text, or
+// (with the kitty keyboard protocol) as shift+= with "+" as the shifted key.
+func isPlus(msg tea.KeyPressMsg) bool {
+	return msg.Text == "+" || msg.Code == '+' || msg.ShiftedCode == '+'
+}
+
 // pickKey handles keys while picking a message: ↑/↓ move, r replies, e
-// reacts, esc goes back to typing. Other keys do nothing (nothing types).
+// reacts, + searches every emoji to react with, esc goes back to typing.
+// Other keys do nothing (nothing types).
 func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	c := &m.conv
 	switch {
@@ -148,6 +155,9 @@ func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		if target, ok := c.pickedMessage(); ok {
 			c.reacting, c.choice = true, max(slices.Index(quickReactions[:], myReaction(target)), 0)
 		}
+	case isPlus(msg):
+		c.choice = moreReactions
+		return m.chooseReaction()
 	}
 	return m, nil
 }
@@ -165,7 +175,7 @@ func (m Model) reactKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case len(k) == 1 && k >= "1" && k <= "6":
 		c.choice = int(k[0] - '1')
 		return m.chooseReaction()
-	case k == "+":
+	case isPlus(msg):
 		c.choice = moreReactions
 		return m.chooseReaction()
 	case k == "enter":

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -1134,5 +1135,44 @@ func TestOwnReactionStoredAndRemoved(t *testing.T) {
 	}
 	if rs := mine(); len(rs) != 0 {
 		t.Errorf("an empty reaction should remove yours: %+v", rs)
+	}
+}
+
+func TestCommunityChatTitles(t *testing.T) {
+	st := openStore(t, "", nil)
+	ctx := t.Context()
+	const (
+		community = "120363000000000001@g.us"
+		announce  = "120363000000000002@g.us"
+		general   = "120363000000000003@g.us"
+		orphan    = "120363000000000004@g.us" // announcements of a community we haven't heard of
+	)
+	if err := st.SaveGroups(ctx, []wa.Group{
+		{JID: community, Name: "Class of 2035", IsCommunity: true},
+		{JID: announce, Name: "Class of 2035", Community: community, Announcements: true},
+		{JID: general, Name: "General", Community: community},
+		{JID: orphan, Name: "Choir", Community: "120363000000000009@g.us", Announcements: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	mustSave(t, st, msg(announce, "1", t0, "a"), msg(general, "2", t0, "b"), msg(orphan, "3", t0, "c"))
+	chats, err := st.Chats(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, c := range chats {
+		got[c.JID] = c.Title()
+	}
+	want := map[string]string{
+		announce: "Class of 2035 › Announcements",
+		general:  "Class of 2035 › General",
+		orphan:   "Choir › Announcements",
+	}
+	if !maps.Equal(got, want) {
+		t.Errorf("titles = %v\nwant     %v (and no chat for the community itself)", got, want)
+	}
+	if c, err := st.FindChat(ctx, "general"); err != nil || c.JID != general {
+		t.Errorf("FindChat(general) = %+v, %v", c, err)
 	}
 }

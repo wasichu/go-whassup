@@ -41,3 +41,14 @@ func imageMessage(caption string) *waE2E.Message {
 		DirectPath: proto.String("/v/x"), MediaKey: []byte("k"),
 	}}
 }
+
+func TestAlbumPhotosAreImages(t *testing.T) {
+	evt := &events.Message{
+		Info:    types.MessageInfo{MessageSource: types.MessageSource{Chat: pnAda, Sender: pnAda}, ID: "A1"},
+		Message: &waE2E.Message{AssociatedChildMessage: &waE2E.FutureProofMessage{Message: imageMessage("beach")}},
+	}
+	m, ok := messageFromEvent(evt, stubResolver)
+	if !ok || m.Kind != KindImage || m.Text != "beach" || m.Media == nil {
+		t.Errorf("album photo = kind %q text %q media %v", m.Kind, m.Text, m.Media != nil)
+	}
+}

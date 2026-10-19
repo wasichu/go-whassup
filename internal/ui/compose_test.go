@@ -181,3 +181,20 @@ func TestNarrowStatusDropsWholeHints(t *testing.T) {
 		t.Errorf("hints should end with a whole one, then …: %q", status)
 	}
 }
+
+func TestPlusOpensEmojiSearch(t *testing.T) {
+	// The kitty keyboard protocol reports "+" as shift+= with "+" shifted.
+	kittyPlus := tea.KeyPressMsg{Code: '=', ShiftedCode: '+', Mod: tea.ModShift}
+	for name, keys := range map[string][]string{"from the strip": {"ctrl+r", "e"}, "while picking": {"ctrl+r"}} {
+		t.Run(name, func(t *testing.T) {
+			h := openAda(t)
+			for _, k := range keys {
+				h.key(k)
+			}
+			h.send(kittyPlus)
+			if h.model().screen != screenEmoji || h.model().emojiPick.target.ID != "a1" {
+				t.Errorf("+ should open emoji search for a1:\n%s", ansi.Strip(h.view()))
+			}
+		})
+	}
+}

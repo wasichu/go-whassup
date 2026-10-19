@@ -28,14 +28,25 @@ func messageFromEvent(evt *events.Message, resolve keyResolver) (Message, bool) 
 	if evt.Info.Chat == types.StatusBroadcastJID {
 		return Message{}, false
 	}
-	kind, text, ok := messageContent(evt.Message)
+	msg := unwrapAlbumChild(evt.Message)
+	kind, text, ok := messageContent(msg)
 	if !ok || kind == KindReaction {
 		return Message{}, false // reactions are Reaction events, not messages
 	}
 	m, _ := messageFromEventBase(evt, resolve)
-	m.Kind, m.Text, m.Media = kind, normalizeMentions(text, evt.Message, resolve), mediaOf(evt.Message)
-	m.ReplyTo = replyOf(evt.Message, resolve)
+	m.Kind, m.Text, m.Media = kind, normalizeMentions(text, msg, resolve), mediaOf(msg)
+	m.ReplyTo = replyOf(msg, resolve)
 	return m, true
+}
+
+// unwrapAlbumChild returns the photo or video inside an album entry. Each
+// item of an album arrives wrapped in AssociatedChildMessage, which
+// whatsmeow doesn't unwrap (unlike ephemeral or view-once wrappers).
+func unwrapAlbumChild(msg *waE2E.Message) *waE2E.Message {
+	if child := msg.GetAssociatedChildMessage().GetMessage(); child != nil {
+		return child
+	}
+	return msg
 }
 
 // replyOf is the message msg answers, from its quote (ContextInfo), if any.
@@ -294,10 +305,15 @@ func firstNonEmpty(a, b string) string {
 // phone number where known.
 func groupFromInfo(info *types.GroupInfo, resolve keyResolver) Group {
 	g := Group{
-		JID:          info.JID.ToNonAD().String(),
-		Name:         info.Name,
-		Topic:        info.Topic,
-		Participants: make([]Participant, 0, len(info.Participants)),
+		JID:           info.JID.ToNonAD().String(),
+		Name:          info.Name,
+		Topic:         info.Topic,
+		Participants:  make([]Participant, 0, len(info.Participants)),
+		IsCommunity:   info.IsParent,
+		Announcements: info.IsDefaultSubGroup,
+	}
+	if !info.LinkedParentJID.IsEmpty() {
+		g.Community = info.LinkedParentJID.ToNonAD().String()
 	}
 	for _, p := range info.Participants {
 		g.Participants = append(g.Participants, Participant{

@@ -14,6 +14,7 @@ const emojiTestFixture = `# emoji-test.txt
 263A FE0F                                              ; fully-qualified     # ☺️ E0.6 smiling face
 263A                                                   ; unqualified         # ☺ E0.6 smiling face
 2764 FE0F                                              ; fully-qualified     # ❤️ E0.6 red heart
+1FAEB                                                  ; fully-qualified     # 🫫 E18.0 cracking face
 
 # group: People & Body
 1F44D                                                  ; fully-qualified     # 👍 E0.6 thumbs up
@@ -38,7 +39,7 @@ func TestGenerate(t *testing.T) {
 		names = append(names, e.name)
 	}
 	if got := strings.Join(names, ","); got != "face with tears of joy,smiling face,red heart,thumbs up" {
-		t.Errorf("entries = %s (want fully-qualified only, no skin tones or components)", got)
+		t.Errorf("entries = %s (want fully-qualified only, no skin tones, components or too-new emoji)", got)
 	}
 	kws, err := parseAnnotations([]byte(annotationsFixture))
 	if err != nil {

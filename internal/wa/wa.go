@@ -212,10 +212,17 @@ type ReactionCount struct {
 
 // Group is a group chat's metadata.
 type Group struct {
-	JID          string
-	Name         string
-	Topic        string
-	Participants []Participant // nil means unknown (keep what's stored)
+	JID   string
+	Name  string
+	Topic string
+	// Communities: Community is the parent's JID for a group inside one;
+	// IsCommunity marks the parent itself (it has no chat of its own), and
+	// Announcements the community's announcement group, which WhatsApp
+	// names after the community.
+	Community     string
+	IsCommunity   bool
+	Announcements bool
+	Participants  []Participant // nil means unknown (keep what's stored)
 }
 
 // Participant is a group member.
