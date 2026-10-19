@@ -16,6 +16,8 @@ cmd/go-whassup (main: signals + exit code only)
          └─► internal/wa        whatsmeow adapter         ◄─┘     └─► session.db
                 internal/wa/watest   fake wa.Client for tests and the demo
                 internal/demo        `go-whassup demo`: TUI on fictional, temporary data
+                internal/emoji       searchable emoji, embedded (Unicode data; `just emoji`)
+                internal/fuzzy       fuzzy matching shared by the finder and emoji search
                 internal/sqlite      shared SQLite open (driver, DSN, 0600) for both DBs
 ```
 

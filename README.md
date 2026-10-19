@@ -145,4 +145,5 @@ Bug reports and ideas are welcome in
 
 ## License
 
-[MPL-2.0](LICENSE), like whatsmeow.
+[MPL-2.0](LICENSE), like whatsmeow. The embedded emoji data is Unicode's, under the
+[Unicode License V3](internal/emoji/UNICODE-LICENSE).

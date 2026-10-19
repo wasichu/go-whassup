@@ -25,6 +25,7 @@ nothing else to install or run.
 | `just fmt` / `just tidy` | gofmt / `go mod tidy` |
 | `just logs` | Tails the app log |
 | `just index` | Rebuilds the graft context graph |
+| `just emoji` | Regenerates `internal/emoji/emoji.tsv` from Unicode's emoji list and CLDR keywords |
 | `just gif` | Records the README's `demo.gif` and `screenshot-*.png` from `go-whassup demo` (fictional data) with vhs |
 | `just release vX.Y.Z` | Cross-compiles cgo-free binaries for darwin/linux × amd64/arm64 into `dist/` (version stamped; `go-whassup -version`), plus `SHA256SUMS` |
 
@@ -94,6 +95,8 @@ internal/crypt/      AES-256-GCM (with associated data), key wrapping, Argon2id
 internal/encryption/ at-rest encryption while running: key sources, unlock/create, the
                      Controller (re-seal at startup or live from Settings)
 internal/keysource/  keyring (security/secret-tool via stdin), password_command, prompt
+internal/fuzzy/      fuzzy name matching (chat finder, emoji search)
+internal/emoji/      embedded, searchable emoji (Unicode names + CLDR keywords); regenerate with `just emoji`
 internal/demo/       `go-whassup demo`: the real TUI on seeded, fictional chats via watest (temp dir)
 internal/ui/         Bubble Tea models + Run. Root Model routes; screens other than main/login
                      implement `page` (page.go). Imports internal/wa, never whatsmeow.

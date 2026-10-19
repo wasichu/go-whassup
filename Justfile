@@ -75,3 +75,7 @@ release version:
 # Record the README's demo.gif and screenshots from `go-whassup demo` (needs vhs)
 gif: build
     PATH="$PWD/bin:$PATH" vhs docs/assets/demo.tape
+
+# Regenerate internal/emoji/emoji.tsv from Unicode's latest emoji data
+emoji:
+    {{go}} run ./internal/emoji/gen internal/emoji/emoji.tsv
