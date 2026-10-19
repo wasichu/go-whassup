@@ -107,9 +107,11 @@ step lands or the plan changes.
   `banner.png` at 2× with headless Chromium so its fonts look the same everywhere.
 - [x] **CI:** GitHub Actions running `just check` via the mise action, so CI uses the same
   pinned tools (`.github/workflows/check.yml`; Linux and macOS).
-- [x] **Release binaries:** cgo-free cross-compiles for darwin/linux/windows ×
-  amd64/arm64, with the version stamped via `-ldflags -X`, from a `just release` recipe
-  (no GoReleaser unless needed). Windows builds but is untested (and has no keyring).
+- [x] **Release binaries:** cgo-free cross-compiles for darwin/linux × amd64/arm64, with
+  the version stamped via `-ldflags -X`, from a `just release` recipe (no GoReleaser
+  unless needed). No native Windows builds (decided 2026-10-19): Windows users run the
+  Linux build in WSL, which CI covers. v0.1.0 shipped untested Windows binaries; later
+  releases don't.
 - [x] **Homebrew:** our own tap (`brew install wasichu/tap/go-whassup`, built from source
   with bottles), auto-bumped on release. homebrew-core isn't planned. Plan and draft
   formula: `homebrew.md`.

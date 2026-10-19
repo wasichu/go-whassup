@@ -84,14 +84,18 @@ All from `go-whassup demo`: fictional people, made-up chats.
     <tr>
         <td>Pre-built binaries</td>
         <td>
-            macOS, Linux and Windows (amd64, arm64) on the
+            macOS and Linux (amd64, arm64) on the
             <a href="https://github.com/wasichu/go-whassup/releases">releases page</a>,
             with <code>SHA256SUMS</code>
         </td>
     </tr>
 </table>
 
-Windows builds are untested, and the keychain key source isn't available there.
+**On Windows,** use [WSL](https://learn.microsoft.com/windows/wsl/) and install the Linux
+build inside it, with any of the methods above. That's untested so far; things that might
+need attention there: the keychain key source needs a Secret Service, which WSL usually
+lacks (use `password-command` or `prompt` instead), and opening attachments goes through
+`xdg-open`, which may need something like `wslu` to reach Windows apps.
 
 ## Usage
 

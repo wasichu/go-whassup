@@ -26,7 +26,7 @@ nothing else to install or run.
 | `just logs` | Tails the app log |
 | `just index` | Rebuilds the graft context graph |
 | `just gif` | Records the README's `demo.gif` and `screenshot-*.png` from `go-whassup demo` (fictional data) with vhs |
-| `just release vX.Y.Z` | Cross-compiles cgo-free binaries for darwin/linux/windows × amd64/arm64 into `dist/` (version stamped; `go-whassup -version`), plus `SHA256SUMS` |
+| `just release vX.Y.Z` | Cross-compiles cgo-free binaries for darwin/linux × amd64/arm64 into `dist/` (version stamped; `go-whassup -version`), plus `SHA256SUMS` |
 
 Add a recipe when a command starts getting run often. Don't leave long ad-hoc
 invocations in docs.
