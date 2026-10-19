@@ -234,7 +234,7 @@ func messageLine(m wa.Message, chat store.ChatSummary, opts renderOpts) string {
 	if m.FromMe {
 		name = fromMeStyle.Render("me")
 	}
-	body := renderMentions(m.Summary(), opts.mentions, opts.own)
+	body := renderLinks(renderMentions(m.Summary(), opts.mentions, opts.own))
 	switch {
 	case m.Deleted:
 		return faintStyle.Render(m.Timestamp.Local().Format("15:04")) + " " + name + ": " + deletedStyle.Render("This message was deleted")

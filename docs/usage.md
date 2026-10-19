@@ -191,6 +191,15 @@ confirmed on a live account, including in a community's announcement group; repl
 groups haven't been yet. If a reply or reaction doesn't show up on phones, please
 [report it](https://github.com/wasichu/go-whassup/issues).
 
+### Links
+
+Web links (`http://`, `https://`) in messages are underlined and clickable: your
+terminal opens them, usually with cmd-click (macOS) or ctrl-click. go-whassup
+marks them with OSC 8 hyperlinks and opens nothing itself; the text shown is always the
+whole address, so a link can't hide where it goes. Ghostty, kitty, iTerm2 and WezTerm
+support this; tmux 3.4+ passes links through with
+`set -as terminal-features ',*:hyperlinks'`.
+
 ### Edits, deletes and reactions
 
 - Edited messages show their latest text with a faint **(edited)**.
