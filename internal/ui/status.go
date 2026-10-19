@@ -64,7 +64,11 @@ func (m Model) statusLine() string {
 		}
 		parts = append(parts, style.Render(m.notice))
 	}
-	parts = append(parts, m.help.ShortHelpView(m.contextHelp()))
+	// Hints fill what's left, dropping whole ones ("…") rather than
+	// cutting one mid-word.
+	h := m.help
+	h.SetWidth(max(m.width-lipgloss.Width(strings.Join(parts, "  "))-2, 1))
+	parts = append(parts, h.ShortHelpView(m.contextHelp()))
 	return lipgloss.NewStyle().MaxWidth(m.width).Render(strings.Join(parts, "  "))
 }
 

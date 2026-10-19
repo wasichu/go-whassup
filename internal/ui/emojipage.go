@@ -16,6 +16,12 @@ import (
 // emojiResults caps the list; refine the query to find others.
 const emojiResults = 200
 
+var emojiHelp = []key.Binding{
+	key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "choose")),
+	key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "react")),
+	keys.Back,
+}
+
 // emojiPage is "+" on the reaction strip: search every emoji by name or
 // keyword ("laugh" finds 😂) and react with it.
 type emojiPage struct {
@@ -71,7 +77,7 @@ func (p *emojiPage) update(r rootAPI, msg tea.Msg) (bool, tea.Cmd) {
 	return false, cmd
 }
 
-func (*emojiPage) help() []key.Binding { return finderHelp }
+func (*emojiPage) help() []key.Binding { return emojiHelp }
 
 func (p *emojiPage) view(r rootAPI, width, height int) string {
 	who := senderName(p.target, r.chat())
@@ -94,5 +100,5 @@ func (p *emojiPage) view(r rootAPI, width, height int) string {
 			lines = append(lines, "  "+label)
 		}
 	}
-	return pageStyle(width, height).Render(strings.Join(lines, "\n") + "\n\n" + keyLine(finderHelp))
+	return pageStyle(width, height).Render(strings.Join(lines, "\n") + "\n\n" + keyLine(emojiHelp))
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/wasichu/go-whassup/internal/wa"
@@ -116,7 +117,10 @@ func TestReactWithAnyEmoji(t *testing.T) {
 	if v := ansi.Strip(h.view()); !strings.Contains(v, "😂") || !strings.Contains(v, "React to Ada") {
 		t.Fatalf("search results missing:\n%s", v)
 	}
-	for h.model().emojiPick.results[h.model().emojiPick.selected].Glyph != "😂" {
+	for i := 0; h.model().emojiPick.results[h.model().emojiPick.selected].Glyph != "😂"; i++ {
+		if i == 3 {
+			t.Fatal("😂 should be among the first results for laugh")
+		}
 		h.key("down")
 	}
 	h.key("enter")
@@ -165,5 +169,15 @@ func TestQuotesNameMentions(t *testing.T) {
 	h.key("r")
 	if v := ansi.Strip(h.view()); !strings.Contains(v, "Replying to Ada: ask @Ada") {
 		t.Errorf("the banner should name the mention:\n%s", v)
+	}
+}
+
+func TestNarrowStatusDropsWholeHints(t *testing.T) {
+	h := openAda(t)
+	h.send(tea.WindowSizeMsg{Width: 70, Height: 20})
+	lines := strings.Split(ansi.Strip(h.view()), "\n")
+	status := strings.TrimRight(lines[len(lines)-1], " ")
+	if !strings.HasSuffix(status, "…") || strings.Contains(status, "reply/r…") {
+		t.Errorf("hints should end with a whole one, then …: %q", status)
 	}
 }
