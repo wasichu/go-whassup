@@ -34,6 +34,8 @@ type Client struct {
 	// SendErr fails SendText; otherwise sent messages are emitted and recorded.
 	SendErr error
 	Sent    []wa.Message
+	// Reactions sent with SendReaction (replies land in Sent, with ReplyTo).
+	ReactionsSent []wa.Reaction
 	// Files sent with SendFile; DownloadData is what Download writes (or
 	// DownloadErr fails it).
 	Files        []SentFile
@@ -330,4 +332,51 @@ func (c *Client) stamp(fixed time.Time) time.Time {
 		return c.Now()
 	}
 	return fixed
+}
+
+// SendReply sends like SendText, as a reply to to.
+func (c *Client) SendReply(_ context.Context, chat, text string, to wa.Message) error {
+	if !c.Paired {
+		return wa.ErrNotPaired
+	}
+	if c.SendErr != nil {
+		return c.SendErr
+	}
+	c.mu.Lock()
+	m := wa.Message{
+		ID: fmt.Sprintf("SENT%d", len(c.Sent)+1), Chat: chat, Sender: "me@s.whatsapp.net",
+		Timestamp: c.stamp(time.Date(2026, 1, 1, 0, 0, len(c.Sent), 0, time.UTC)),
+		FromMe:    true, Kind: wa.KindText, Text: text,
+		ReplyTo: &wa.Reply{ID: to.ID, Sender: to.Sender},
+	}
+	c.Sent = append(c.Sent, m)
+	c.mu.Unlock()
+	c.Emit(m)
+	return nil
+}
+
+// SendReaction records the reaction and emits it, as the real client does.
+func (c *Client) SendReaction(_ context.Context, chat string, to wa.Message, emoji string) error {
+	if !c.Paired {
+		return wa.ErrNotPaired
+	}
+	if c.SendErr != nil {
+		return c.SendErr
+	}
+	r := wa.Reaction{
+		Chat: chat, MessageID: to.ID, Sender: "me@s.whatsapp.net", FromMe: true, Emoji: emoji,
+		At: c.stamp(time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)),
+	}
+	c.mu.Lock()
+	c.ReactionsSent = append(c.ReactionsSent, r)
+	c.mu.Unlock()
+	c.Emit(r)
+	return nil
+}
+
+// SentReactions returns the reactions sent so far.
+func (c *Client) SentReactions() []wa.Reaction {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.ReactionsSent)
 }

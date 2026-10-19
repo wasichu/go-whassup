@@ -177,6 +177,11 @@ func (w *WhatsApp) Connect(ctx context.Context) error {
 }
 
 func (w *WhatsApp) SendText(ctx context.Context, chat, text string) error {
+	return w.sendText(ctx, chat, &waE2E.Message{Conversation: proto.String(text)}, text, nil)
+}
+
+// sendText sends msg (text, or text replying to reply) and emits it.
+func (w *WhatsApp) sendText(ctx context.Context, chat string, msg *waE2E.Message, text string, reply *Reply) error {
 	cli := w.client()
 	if cli.Store.ID == nil {
 		return ErrNotPaired
@@ -185,7 +190,7 @@ func (w *WhatsApp) SendText(ctx context.Context, chat, text string) error {
 	if err != nil {
 		return fmt.Errorf("bad chat %q: %w", chat, err)
 	}
-	resp, err := cli.SendMessage(ctx, to, &waE2E.Message{Conversation: proto.String(text)})
+	resp, err := cli.SendMessage(ctx, to, msg)
 	if err != nil {
 		return fmt.Errorf("sending message: %w", err)
 	}
@@ -201,6 +206,7 @@ func (w *WhatsApp) SendText(ctx context.Context, chat, text string) error {
 		IsGroup:   to.Server == types.GroupServer,
 		Kind:      KindText,
 		Text:      text,
+		ReplyTo:   reply,
 	})
 	return nil
 }

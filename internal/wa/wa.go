@@ -60,6 +60,14 @@ type Client interface {
 	// ErrNotPaired before pairing, and an error while disconnected.
 	SendText(ctx context.Context, chat, text string) error
 
+	// SendReply sends text as a reply to message to, quoting it; it comes
+	// back as a Message event (with ReplyTo) like SendText's.
+	SendReply(ctx context.Context, chat, text string, to Message) error
+
+	// SendReaction reacts to message to with emoji; "" removes your
+	// reaction. It comes back as a Reaction event once sent.
+	SendReaction(ctx context.Context, chat string, to Message, emoji string) error
+
 	// MarkRead reports msgs (incoming messages in chat) as read according
 	// to mode. ReadLocal sends nothing and returns nil.
 	MarkRead(ctx context.Context, chat string, msgs []Message, mode ReadMode) error

@@ -1108,3 +1108,31 @@ func TestReplyPointerAndQuotes(t *testing.T) {
 		t.Errorf("quotes = %v, want q1 and q2 only", quotes)
 	}
 }
+
+func TestOwnReactionStoredAndRemoved(t *testing.T) {
+	st := openStore(t, "", nil)
+	client := &watest.Client{Paired: true}
+	(&Recorder{Store: st, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}).Attach(client)
+	m := msg(ada, "m1", t0, "lunch?")
+	client.Emit(m)
+	mine := func() []wa.ReactionCount {
+		t.Helper()
+		msgs, err := st.Messages(t.Context(), ada, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return msgs[0].Reactions
+	}
+	if err := client.SendReaction(t.Context(), ada, m, "👍"); err != nil {
+		t.Fatal(err)
+	}
+	if rs := mine(); len(rs) != 1 || rs[0].Emoji != "👍" || !rs[0].Mine {
+		t.Fatalf("after reacting: %+v", rs)
+	}
+	if err := client.SendReaction(t.Context(), ada, m, ""); err != nil {
+		t.Fatal(err)
+	}
+	if rs := mine(); len(rs) != 0 {
+		t.Errorf("an empty reaction should remove yours: %+v", rs)
+	}
+}
