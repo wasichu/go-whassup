@@ -55,7 +55,8 @@ step lands or the plan changes.
 2. [x] **Unread counts and new-message markers**: badges, a "N new" divider, read after
    dwell while focused, `[privacy] mark_read` = local-only/read-receipts-off/read-receipts-on. *(Live test pending.)*
 3. [x] **Edits, deletes and reactions** applied to stored messages and shown in the
-   TUI. *(Live test pending.)* Follow-up: sending reactions/edits/deletes from the TUI.
+   TUI. *(Live test pending.)* Sending replies and reactions shipped in v0.2.0
+   (`ctrl+r`; reactions confirmed live in a group). Follow-up: sending edits/deletes.
 4. [x] **Media:**
    - download and open attachments (`o`), with an extension allowlist;
    - send files (`a`): photos for JPEG/PNG/WebP, documents otherwise;
@@ -69,7 +70,9 @@ step lands or the plan changes.
    - inline image previews via Kitty graphics.
 5. [x] **Groups:** names and topics from group info, participants with admins (`i`),
    member counts, `@mentions` shown as names (and `@you`). *(Live test pending.)*
-   Follow-up: typing mentions when sending (autocomplete).
+   v0.2.0: communities listed as a heading over their groups; self-chosen names
+   marked `~`; privacy-ID members shown as "unknown member"; a sender card (`i` while
+   picking a message). Follow-up: typing mentions when sending (autocomplete).
 6. [x] **Message search** (`s`, `go-whassup db search`): local SQLite FTS5, accent-insensitive,
    prefix on the last word, jump-to-message. Unavailable while encryption is on (the
    index is plaintext). *(Live test pending.)*
@@ -113,7 +116,8 @@ step lands or the plan changes.
   Linux build in WSL, which CI covers. v0.1.0 shipped untested Windows binaries; later
   releases don't.
 - [x] **Homebrew:** our own tap (`brew install wasichu/tap/go-whassup`, built from source
-  with bottles), auto-bumped on release. homebrew-core isn't planned. Plan and draft
+  with bottles). The bump is manual per release for now (`brew bump-formula-pr`);
+  automating it from a release workflow is planned. homebrew-core isn't planned. Plan and draft
   formula: `homebrew.md`.
 - [x] **Dependency bumps:** Renovate (`renovate.json`), gated by CI. Not Dependabot: it
   can't update pseudo-versions, and whatsmeow has no tags. Renovate also covers
