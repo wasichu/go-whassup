@@ -9,8 +9,10 @@
 *.db-shm
 *.log
 
-# local tooling state
+# local tooling state (machine-specific: graft bakes absolute paths into its hooks)
 /.claude/settings.local.json
+/.claude/settings.json
+/.claude/helpers/
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
