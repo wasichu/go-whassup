@@ -29,7 +29,7 @@ var keys = struct {
 	Search:    key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "search messages")),
 	Media:     key.NewBinding(key.WithKeys("ctrl+o"), key.WithHelp("ctrl+o", "view attachments")),
 	Attach:    key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "attach file")),
-	Pick:      key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "pick a message: reply, react, who sent it")),
+	Pick:      key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "select a message: reply, react, who sent it")),
 	Info:      key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "chat info")),
 	Login:     key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "link or re-link")),
 	Settings:  key.NewBinding(key.WithKeys(","), key.WithHelp(",", "settings")),
@@ -55,7 +55,7 @@ var (
 		hint(keys.Open, "write"), hint(keys.Find, "find"), hint(keys.Search, "search"), keys.Help, keys.Quit,
 	}
 	inputHelp = []key.Binding{
-		keys.Send, hint(keys.Blur, "chats"), hint(keys.Pick, "reply/react"), hint(keys.Media, "attachments"),
+		keys.Send, hint(keys.Blur, "chats"), hint(keys.Pick, "select message"), hint(keys.Media, "attachments"),
 		hint(keys.Attach, "attach file"),
 	}
 	pickHelp = []key.Binding{

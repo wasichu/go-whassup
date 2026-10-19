@@ -103,7 +103,7 @@ func (m Model) contextHelp() []key.Binding {
 }
 
 // mainHelp is the main screen's hints, without the chat shortcuts that
-// can't do anything right now: attachments, info and reply/react need a
+// can't do anything right now: attachments, info and selecting a message need a
 // selected chat, and a draft has no messages yet (but can be sent a file).
 func (m Model) mainHelp(bindings []key.Binding) []key.Binding {
 	var hide []key.Binding
