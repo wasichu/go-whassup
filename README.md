@@ -1,9 +1,5 @@
 <p align="center">
-    <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo_white.svg">
-        <source media="(prefers-color-scheme: light)" srcset="docs/assets/logo.svg">
-        <img alt="go-whassup: a chat bubble holding a terminal prompt, with the text WhatsApp in your terminal" width="560" src="docs/assets/logo.svg">
-    </picture>
+    <img alt="Two chat bubbles on retro phones, tongues out, yelling WHASSUUUP! Below: go-whassup, WhatsApp in your terminal" width="720" src="docs/assets/banner.png">
 </p>
 
 [![Latest Release](https://img.shields.io/github/release/wasichu/go-whassup.svg)](https://github.com/wasichu/go-whassup/releases)
@@ -23,9 +19,9 @@ $ go-whassup               # link your phone (code or QR), then chat
 $ go-whassup db search lunch plans
 ```
 
-<!-- A recording of `go-whassup demo` (fictional data only): run `just gif`, then uncomment.
-<p align="center"><img alt="go-whassup demo" src="docs/assets/demo.gif" width="800"></p>
--->
+<p align="center">
+    <img alt="A recording of go-whassup demo: browsing chats, sending a message, finding a contact and searching messages (all fictional)" width="800" src="docs/assets/demo.gif">
+</p>
 
 > [!WARNING]
 > **Unofficial.** go-whassup isn't made or endorsed by WhatsApp or Meta, and using
@@ -54,6 +50,21 @@ for screenshots without anyone's data.
 
 🧱 Built on [whatsmeow](https://github.com/tulir/whatsmeow) and Charm's
 [Bubble Tea](https://github.com/charmbracelet/bubbletea), with pure-Go SQLite.
+
+## Screenshots
+
+All from `go-whassup demo`: fictional people, made-up chats.
+
+<table>
+    <tr>
+        <td><img alt="A conversation with a photo, a reaction and an edited message" src="docs/assets/screenshot-conversation.png"></td>
+        <td><img alt="A group chat with a mention, reactions and a deleted message" src="docs/assets/screenshot-chats.png"></td>
+    </tr>
+    <tr>
+        <td><img alt="Searching stored messages" src="docs/assets/screenshot-search.png"></td>
+        <td><img alt="Every key, by section" src="docs/assets/screenshot-help.png"></td>
+    </tr>
+</table>
 
 ## Installation
 

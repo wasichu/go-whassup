@@ -72,6 +72,6 @@ release version:
     cd dist && if command -v sha256sum >/dev/null; then sha256sum go-whassup-* > SHA256SUMS; else shasum -a 256 go-whassup-* > SHA256SUMS; fi
     ls -l
 
-# Record docs/assets/demo.gif from `go-whassup demo` (fictional data; needs vhs)
+# Record the README's demo.gif and screenshots from `go-whassup demo` (needs vhs)
 gif: build
     PATH="$PWD/bin:$PATH" vhs docs/assets/demo.tape
