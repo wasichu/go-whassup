@@ -110,10 +110,13 @@ names stay readable on disk.**
   the name they chose for themselves.
 - **Mentions** like `@15551234567` show as **@Ada** when the number is a known contact,
   and as a highlighted **@you** when it's you.
-- **Communities** list each of their groups as `Community › Group`, and the
-  announcement group as `Community › Announcements` (WhatsApp names it after the
-  community, so it would otherwise look like a duplicate). The community itself has no
-  chat and isn't listed. The names fill in the first time you connect after upgrading.
+- **Communities** appear in the chat list as a heading (not selectable) with their
+  groups indented beneath it, placed by the community's most recent message; `↑`/`↓`
+  step over the heading. The announcement group is listed as **Announcements**
+  (WhatsApp names it after the community, so it would otherwise look like a duplicate).
+  Elsewhere, such as the conversation header, search and notifications, a group is
+  named in full: `Community › Announcements`. The community itself has no chat. All of
+  this fills in the first time you connect after upgrading.
 
 ### Attachments
 

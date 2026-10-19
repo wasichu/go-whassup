@@ -2,6 +2,7 @@ package demo
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/wasichu/go-whassup/internal/store"
@@ -19,6 +20,10 @@ const (
 	hedy      = "12025550105@s.whatsapp.net"
 	bookClub  = "120363000000000001@g.us"
 	hiking    = "120363000000000002@g.us"
+	// A community: the parent (no chat of its own) and two of its groups.
+	school       = "120363000000000003@g.us"
+	schoolNews   = "120363000000000004@g.us"
+	schoolGlobal = "120363000000000005@g.us"
 )
 
 // seed fills st with the demo's chats, as if synced from a phone. Times are
@@ -39,7 +44,7 @@ func seed(ctx context.Context, st *store.Store, now time.Time) error {
 		return err
 	}
 	var msgs []wa.Message
-	for _, chat := range [][]wa.Message{adaChat(at), graceChat(at), bookClubChat(at), alanChat(at), hikingChat(at), katherineChat(at), notesToSelf(at)} {
+	for _, chat := range [][]wa.Message{adaChat(at), graceChat(at), bookClubChat(at), alanChat(at), hikingChat(at), katherineChat(at), notesToSelf(at), schoolChats(at)} {
 		msgs = append(msgs, chat...)
 	}
 	if _, err := st.SaveMessages(ctx, msgs); err != nil {
@@ -61,13 +66,18 @@ func seedPeople(ctx context.Context, st *store.Store) error {
 			Participants: []wa.Participant{{JID: ada, Admin: true}, {JID: grace}, {JID: alan}, {JID: me}}},
 		{JID: hiking, Name: "Hiking crew", Topic: "Weekend trails",
 			Participants: []wa.Participant{{JID: hedy, Admin: true}, {JID: katherine}, {JID: me}}},
+		{JID: school, Name: "Maple Street School", IsCommunity: true},
+		{JID: schoolNews, Name: "Maple Street School", Community: school, Announcements: true,
+			Participants: []wa.Participant{{JID: grace, Admin: true}, {JID: ada}, {JID: me}}},
+		{JID: schoolGlobal, Name: "Parents", Community: school,
+			Participants: []wa.Participant{{JID: grace}, {JID: ada}, {JID: alan}, {JID: me}}},
 	})
 }
 
 type clock func(daysAgo int, hm string) time.Time
 
 func text(id, chat, sender string, t time.Time, body string) wa.Message {
-	return wa.Message{ID: id, Chat: chat, Sender: sender, FromMe: sender == me, IsGroup: chat == bookClub || chat == hiking,
+	return wa.Message{ID: id, Chat: chat, Sender: sender, FromMe: sender == me, IsGroup: strings.HasSuffix(chat, "@g.us"),
 		Timestamp: t, Kind: wa.KindText, Text: body}
 }
 
@@ -118,6 +128,15 @@ func hikingChat(at clock) []wa.Message {
 		text("h1", hiking, hedy, at(0, "07:05"), "Trail conditions look great this weekend"),
 		text("h2", hiking, katherine, at(0, "07:12"), "Calculated: 11.4 km, 620 m of climbing"),
 		text("h3", hiking, hedy, at(0, "07:13"), "Of course you did 😄"),
+	}
+}
+
+// schoolChats are a community's announcements and its parents' group.
+func schoolChats(at clock) []wa.Message {
+	return []wa.Message{
+		text("s1", schoolNews, grace, at(3, "08:00"), "Reminder: field trip forms are due Friday"),
+		text("s2", schoolGlobal, ada, at(3, "08:30"), "Anyone have a spare permission slip?"),
+		text("s3", schoolGlobal, alan, at(3, "08:41"), "The office has extras"),
 	}
 }
 

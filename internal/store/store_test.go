@@ -1163,6 +1163,10 @@ func TestCommunityChatTitles(t *testing.T) {
 	got := map[string]string{}
 	for _, c := range chats {
 		got[c.JID] = c.Title()
+		want := map[string][2]string{announce: {community, "Announcements"}, general: {community, "General"}}[c.JID]
+		if c.CommunityJID != want[0] || c.InCommunity != want[1] || (want[0] != "" && c.Community != "Class of 2035") {
+			t.Errorf("%s: community %q %q, name in it %q; want %v", c.JID, c.CommunityJID, c.Community, c.InCommunity, want)
+		}
 	}
 	want := map[string]string{
 		announce: "Class of 2035 › Announcements",

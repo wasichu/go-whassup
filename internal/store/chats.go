@@ -62,6 +62,12 @@ type ChatSummary struct {
 	Unread        int       // incoming messages newer than LastReadAt
 	MemberCount   int       // group participants, if known
 	MutedUntil    time.Time // zero = not muted; see wa.MutedForever
+	// A group in a community (whose name is known): the community's JID
+	// and name, and the group's own name within it ("Announcements" for
+	// the announcement group). Name stays the full "Community › Group".
+	CommunityJID string
+	Community    string
+	InCommunity  string
 }
 
 // Muted reports whether the chat is muted at now.
@@ -99,8 +105,11 @@ const chatSummaryQuery = `
 	       (SELECT count(*) FROM messages m WHERE m.chat_jid = c.jid),
 	       (SELECT count(*) FROM messages m WHERE m.chat_jid = c.jid AND m.from_me = 0 AND m.deleted = 0 AND m.ts > c.last_read_at),
 	       (SELECT count(*) FROM group_participants gp WHERE gp.group_jid = c.jid),
-	       c.muted_until
-	FROM chats c LEFT JOIN contacts ct ON ct.jid = c.jid`
+	       c.muted_until,
+	       CASE WHEN COALESCE(p.name, '') != '' THEN p.jid ELSE '' END, COALESCE(p.name, ''),
+	       CASE WHEN COALESCE(p.name, '') = '' THEN '' WHEN c.is_announcements THEN 'Announcements' ELSE c.name END
+	FROM chats c LEFT JOIN contacts ct ON ct.jid = c.jid
+	LEFT JOIN chats p ON c.community_jid != '' AND p.jid = c.community_jid`
 
 // Chats lists chats, most recently active first. A community itself isn't
 // a chat (its groups are), so it's listed only if it somehow has messages.
@@ -116,7 +125,8 @@ func (s *Store) Chats(ctx context.Context) ([]ChatSummary, error) {
 	for rows.Next() {
 		var c ChatSummary
 		var last, read, muted int64
-		if err := rows.Scan(&c.JID, &c.Name, &c.IsGroup, &last, &read, &c.Messages, &c.Unread, &c.MemberCount, &muted); err != nil {
+		if err := rows.Scan(&c.JID, &c.Name, &c.IsGroup, &last, &read, &c.Messages, &c.Unread, &c.MemberCount, &muted,
+			&c.CommunityJID, &c.Community, &c.InCommunity); err != nil {
 			return nil, fmt.Errorf("listing chats: %w", err)
 		}
 		c.LastMessageAt, c.LastReadAt = time.Unix(last, 0), time.Unix(read, 0)

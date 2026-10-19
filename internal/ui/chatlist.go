@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -23,14 +24,36 @@ type chatList struct {
 // setChats replaces the list, keeping the selection on the same chat.
 func (l *chatList) setChats(chats []store.ChatSummary) {
 	current := l.selectedJID()
-	l.chats = chats
+	l.chats = groupCommunities(chats)
 	l.selected = 0
-	for i, c := range chats {
+	for i, c := range l.chats {
 		if c.JID == current {
 			l.selected = i
 			break
 		}
 	}
+}
+
+// groupCommunities keeps each community's groups together, where its most
+// recently active group would be (chats arrive newest first), so they can
+// be listed under one heading.
+func groupCommunities(chats []store.ChatSummary) []store.ChatSummary {
+	out := make([]store.ChatSummary, 0, len(chats))
+	placed := map[string]bool{}
+	for _, c := range chats {
+		switch {
+		case c.CommunityJID == "":
+			out = append(out, c)
+		case !placed[c.CommunityJID]:
+			placed[c.CommunityJID] = true
+			for _, sib := range chats {
+				if sib.CommunityJID == c.CommunityJID {
+					out = append(out, sib)
+				}
+			}
+		}
+	}
+	return out
 }
 
 func (l *chatList) selectedChat() (store.ChatSummary, bool) {
@@ -76,22 +99,48 @@ func (l *chatList) move(delta int) bool {
 	return true
 }
 
+// listRow is a line of the list: a chat (an index into the items) or a
+// community's heading, which can't be selected.
+type listRow struct {
+	item    int // -1 for a heading
+	heading string
+}
+
+// rowsOf lays out items, with a heading above each community's groups.
+func rowsOf(items []store.ChatSummary) []listRow {
+	rows := make([]listRow, 0, len(items))
+	for i, c := range items {
+		if c.CommunityJID != "" && (i == 0 || items[i-1].CommunityJID != c.CommunityJID) {
+			rows = append(rows, listRow{item: -1, heading: c.Community})
+		}
+		rows = append(rows, listRow{item: i})
+	}
+	return rows
+}
+
 // view renders the list into width x height, scrolling to keep the
-// selection visible. active marks the pane as focused.
+// selection (and its community's heading) visible. active marks the pane
+// as focused.
 func (l *chatList) view(width, height int, active bool, own string) string {
-	rows := height - 1 // title line
-	if rows < 1 {
+	visible := height - 1 // title line
+	if visible < 1 {
 		return ""
 	}
 	items, sel := l.chats, l.selected
 	if l.draft != nil {
 		items, sel = append([]store.ChatSummary{*l.draft}, l.chats...), 0
 	}
-	if sel < l.offset {
-		l.offset = sel
+	rows := rowsOf(items)
+	selRow := slices.IndexFunc(rows, func(r listRow) bool { return r.item == sel })
+	top := selRow
+	if selRow > 0 && rows[selRow-1].item < 0 {
+		top-- // the heading too
 	}
-	if sel >= l.offset+rows {
-		l.offset = sel - rows + 1
+	if top >= 0 && top < l.offset {
+		l.offset = top
+	}
+	if selRow >= l.offset+visible {
+		l.offset = selRow - visible + 1
 	}
 
 	var b strings.Builder
@@ -99,42 +148,61 @@ func (l *chatList) view(width, height int, active bool, own string) string {
 	if len(items) == 0 {
 		b.WriteString("\n" + faintStyle.Render("No chats yet"))
 	}
-	line := lipgloss.NewStyle().Width(width).MaxWidth(width)
-	for i := l.offset; i < len(items) && i < l.offset+rows; i++ {
-		c := items[i]
-		isDraft := l.draft != nil && i == 0
-		title := chatTitle(c, own)
-		badge := ""
-		switch {
-		case isDraft:
-			badge = " new "
-		case c.Unread > 0:
-			badge = fmt.Sprintf(" %d ", c.Unread)
+	for _, r := range rows[min(l.offset, len(rows)):min(l.offset+visible, len(rows))] {
+		if r.item < 0 {
+			b.WriteString("\n" + communityStyle.Width(width).MaxWidth(width).Render(" "+r.heading))
+			continue
 		}
-		// Truncate the title so an unread badge always fits on the row.
-		room := max(width-1-lipgloss.Width(badge), 1)
-		title = lipgloss.NewStyle().MaxWidth(room).Render(title)
-		label := " " + title + strings.Repeat(" ", max(room-lipgloss.Width(title), 0))
-		style := line
-		switch {
-		case i == sel && active:
-			style = line.Inherit(activeSelStyle)
-		case i == sel:
-			style = line.Inherit(selectedStyle)
-		case c.Unread > 0:
-			style = line.Bold(true)
-		}
-		row := style.Render(label)
-		if badge != "" {
-			bs := unreadBadgeStyle
-			if isDraft || c.Muted(time.Now()) {
-				bs = mutedBadgeStyle // grey, like the phone
-			}
-			row = lipgloss.NewStyle().Width(width-lipgloss.Width(badge)).MaxWidth(width-lipgloss.Width(badge)).Render(row) + bs.Render(badge)
-		}
-		b.WriteString("\n" + row)
+		state := rowState{selected: r.item == sel, active: active, draft: l.draft != nil && r.item == 0}
+		b.WriteString("\n" + chatRow(items[r.item], state, width, own))
 	}
 	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Render(b.String())
+}
+
+// communityStyle is a community's heading in the chat list.
+var communityStyle = faintStyle.Bold(true)
+
+type rowState struct{ selected, active, draft bool }
+
+// chatRow is one chat's line: its title (a community's group by its name
+// within the community, indented under the heading) and an unread badge.
+func chatRow(c store.ChatSummary, st rowState, width int, own string) string {
+	title := chatTitle(c, own)
+	indent := " "
+	if c.CommunityJID != "" {
+		title, indent = c.InCommunity, "   "
+	}
+	badge := ""
+	switch {
+	case st.draft:
+		badge = " new "
+	case c.Unread > 0:
+		badge = fmt.Sprintf(" %d ", c.Unread)
+	}
+	// Truncate the title so an unread badge always fits on the row.
+	room := max(width-lipgloss.Width(indent)-lipgloss.Width(badge), 1)
+	title = lipgloss.NewStyle().MaxWidth(room).Render(title)
+	label := indent + title + strings.Repeat(" ", max(room-lipgloss.Width(title), 0))
+	line := lipgloss.NewStyle().Width(width).MaxWidth(width)
+	style := line
+	switch {
+	case st.selected && st.active:
+		style = line.Inherit(activeSelStyle)
+	case st.selected:
+		style = line.Inherit(selectedStyle)
+	case c.Unread > 0:
+		style = line.Bold(true)
+	}
+	row := style.Render(label)
+	if badge == "" {
+		return row
+	}
+	bs := unreadBadgeStyle
+	if st.draft || c.Muted(time.Now()) {
+		bs = mutedBadgeStyle // grey, like the phone
+	}
+	rest := width - lipgloss.Width(badge)
+	return lipgloss.NewStyle().Width(rest).MaxWidth(rest).Render(row) + bs.Render(badge)
 }
 
 // chatTitle is how a chat is labelled everywhere in the UI: the store's
