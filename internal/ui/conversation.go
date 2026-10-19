@@ -9,6 +9,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/wasichu/go-whassup/internal/store"
 	"github.com/wasichu/go-whassup/internal/wa"
@@ -17,12 +18,13 @@ import (
 // conversation is the right pane: header, message history and input.
 type conversation struct {
 	chat      store.ChatSummary
-	cached    map[string]bool   // attachments already on disk, by message ID
-	mentions  map[string]string // phone digits -> display name, for @mentions
-	own       string            // the user's own JID, to highlight mentions of them
-	highlight string            // message to highlight and show (a search hit)
-	lineOf    map[string]int    // each rendered message's first line in the viewport
-	newFrom   time.Time         // messages after this get a "new" divider (set on opening)
+	cached    map[string]bool       // attachments already on disk, by message ID
+	mentions  map[string]string     // phone digits -> display name, for @mentions
+	quotes    map[string]wa.Message // what replies answer, by message ID
+	own       string                // the user's own JID, to highlight mentions of them
+	highlight string                // message to highlight and show (a search hit)
+	lineOf    map[string]int        // each rendered message's first line in the viewport
+	newFrom   time.Time             // messages after this get a "new" divider (set on opening)
 	msgs      []wa.Message
 	viewport  viewport.Model
 	input     textinput.Model
@@ -87,7 +89,7 @@ func (c *conversation) setMessages(msgs []wa.Message) {
 func (c *conversation) render(follow bool) {
 	c.lineOf = map[string]int{}
 	content := renderMessages(c.msgs, c.chat, c.width, renderOpts{
-		newFrom: c.newFrom, cached: c.cached, mentions: c.mentions, own: c.own,
+		newFrom: c.newFrom, cached: c.cached, mentions: c.mentions, quotes: c.quotes, own: c.own,
 		highlight: c.highlight, lineOf: c.lineOf,
 	})
 	// Like chat apps, anchor short conversations to the bottom, by the input.
@@ -139,12 +141,13 @@ func (c *conversation) view(width, height int, own string) string {
 
 // renderOpts carries what renderMessages needs besides the messages.
 type renderOpts struct {
-	newFrom   time.Time         // "N new" divider before the first incoming message after this
-	cached    map[string]bool   // message IDs whose attachment is on disk
-	mentions  map[string]string // phone digits -> display name
-	own       string            // user's JID: mentions of them are highlighted
-	highlight string            // message ID to highlight (a search hit)
-	lineOf    map[string]int    // if set, filled with each message's first line
+	newFrom   time.Time             // "N new" divider before the first incoming message after this
+	cached    map[string]bool       // message IDs whose attachment is on disk
+	mentions  map[string]string     // phone digits -> display name
+	quotes    map[string]wa.Message // what replies answer, by message ID
+	own       string                // user's JID: mentions of them are highlighted
+	highlight string                // message ID to highlight (a search hit)
+	lineOf    map[string]int        // if set, filled with each message's first line
 }
 
 // renderMessages formats msgs as wrapped lines with day separators, and a
@@ -174,6 +177,9 @@ func renderMessages(msgs []wa.Message, chat store.ChatSummary, width int, opts r
 		line := messageLine(m, chat, opts)
 		if opts.lineOf != nil {
 			opts.lineOf[m.ID] = strings.Count(b.String(), "\n")
+		}
+		if q := quoteLine(m, chat, opts); q != "" {
+			b.WriteString(ansi.Truncate(q, width, "…") + "\n") // one line, cut to fit
 		}
 		if m.ID == opts.highlight {
 			b.WriteString(highlightStyle.Width(width).Render(line) + "\n")
@@ -322,4 +328,25 @@ func (c *conversation) showMessage(id string) bool {
 		c.viewport.SetYOffset(max(line-2, 0))
 	}
 	return ok
+}
+
+// quoteLine is the dim "↪ Ada: Tea on Saturday?" line above a reply, or
+// "" for messages that aren't replies.
+func quoteLine(m wa.Message, chat store.ChatSummary, opts renderOpts) string {
+	if m.ReplyTo == nil {
+		return ""
+	}
+	q, ok := opts.quotes[m.ReplyTo.ID]
+	if !ok {
+		return faintStyle.Render("      ↪ an earlier message")
+	}
+	who := senderName(q, chat)
+	if q.FromMe {
+		who = "me"
+	}
+	text := deletedStyle.Render("This message was deleted")
+	if !q.Deleted {
+		text = faintStyle.Render(strings.Join(strings.Fields(q.Summary()), " ")) // on one line
+	}
+	return faintStyle.Render("      ↪ "+who+": ") + text
 }

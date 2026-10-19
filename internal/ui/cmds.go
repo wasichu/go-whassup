@@ -25,6 +25,7 @@ type Store interface {
 	UnreadMessages(ctx context.Context, chat string) ([]wa.Message, error)
 	Details(ctx context.Context, chat string) (store.ChatDetails, error)
 	Names(ctx context.Context, jids []string) (map[string]string, error)
+	Quotes(ctx context.Context, chat string, ids []string) (map[string]wa.Message, error)
 	Search(ctx context.Context, query string, limit int) ([]store.SearchHit, error)
 	MarkRead(ctx context.Context, chat string, at time.Time) error
 }
@@ -85,8 +86,9 @@ type (
 	messagesLoadedMsg struct {
 		chat     string
 		msgs     []wa.Message
-		cached   map[string]bool   // message IDs whose attachment is on disk
-		mentions map[string]string // phone digits -> name, for @mentions
+		cached   map[string]bool       // message IDs whose attachment is on disk
+		mentions map[string]string     // phone digits -> name, for @mentions
+		quotes   map[string]wa.Message // what replies answer, by message ID
 		err      error
 	}
 	connectResultMsg struct{ err error }
@@ -119,9 +121,10 @@ func loadMessages(ctx context.Context, deps Deps, chat string) tea.Cmd {
 	return func() tea.Msg {
 		msgs, err := deps.Store.Messages(ctx, chat, messagesPerChat)
 		mentions, nerr := mentionNames(ctx, deps.Store, msgs)
+		quotes, qerr := quotedMessages(ctx, deps.Store, chat, msgs)
 		return messagesLoadedMsg{
 			chat: chat, msgs: msgs, cached: cachedFlags(deps.Media, chat, msgs), mentions: mentions,
-			err: errors.Join(err, nerr),
+			quotes: quotes, err: errors.Join(err, nerr, qerr),
 		}
 	}
 }
@@ -172,4 +175,33 @@ func send(ctx context.Context, client wa.Client, chat, text string) tea.Cmd {
 	return func() tea.Msg {
 		return sendResultMsg{err: client.SendText(ctx, chat, text)}
 	}
+}
+
+// quotedMessages finds what msgs' replies answer: among msgs themselves,
+// else (older than the loaded window) in the store, in one lookup.
+func quotedMessages(ctx context.Context, st Store, chat string, msgs []wa.Message) (map[string]wa.Message, error) {
+	quotes := map[string]wa.Message{}
+	loaded := make(map[string]wa.Message, len(msgs))
+	for _, m := range msgs {
+		loaded[m.ID] = m
+	}
+	var missing []string
+	for _, m := range msgs {
+		if m.ReplyTo == nil {
+			continue
+		}
+		if q, ok := loaded[m.ReplyTo.ID]; ok {
+			quotes[q.ID] = q
+		} else {
+			missing = append(missing, m.ReplyTo.ID)
+		}
+	}
+	if len(missing) == 0 {
+		return quotes, nil
+	}
+	older, err := st.Quotes(ctx, chat, missing)
+	for id, q := range older {
+		quotes[id] = q
+	}
+	return quotes, err
 }

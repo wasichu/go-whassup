@@ -274,7 +274,7 @@ func (m Model) messagesLoaded(msg messagesLoadedMsg) Model {
 	if msg.chat != m.conv.chat.JID {
 		return m
 	}
-	m.conv.cached, m.conv.mentions, m.conv.own = msg.cached, msg.mentions, m.ownJID
+	m.conv.cached, m.conv.mentions, m.conv.quotes, m.conv.own = msg.cached, msg.mentions, msg.quotes, m.ownJID
 	m.conv.setMessages(msg.msgs)
 	if h := m.conv.highlight; h != "" {
 		if _, ok := m.conv.lineOf[h]; !ok {

@@ -302,3 +302,46 @@ func TestAttachmentKeysLiveInTheMessageBox(t *testing.T) {
 		t.Errorf("no chat: hints %q should offer neither", got)
 	}
 }
+
+func TestRepliesShowWhatTheyAnswer(t *testing.T) {
+	h := newHarness(t, true)
+	at := day.Add(2 * time.Hour)
+	msgs := []wa.Message{
+		{ID: "o1", Chat: ada, Sender: ada, Timestamp: at, Kind: wa.KindText, Text: "Tea on Saturday? It has to be a long message to check that the quote gets shortened nicely"},
+		{ID: "r1", Chat: ada, Sender: "15550000000@s.whatsapp.net", FromMe: true, Timestamp: at.Add(time.Minute), Kind: wa.KindText, Text: "Yes please",
+			ReplyTo: &wa.Reply{ID: "o1", Sender: ada}},
+		{ID: "o2", Chat: ada, Sender: ada, Timestamp: at.Add(2 * time.Minute), Kind: wa.KindText, Text: "never mind"},
+		{ID: "r2", Chat: ada, Sender: ada, Timestamp: at.Add(3 * time.Minute), Kind: wa.KindText, Text: "ignore that",
+			ReplyTo: &wa.Reply{ID: "o2", Sender: ada}},
+		{ID: "r3", Chat: ada, Sender: ada, Timestamp: at.Add(4 * time.Minute), Kind: wa.KindText, Text: "as I said",
+			ReplyTo: &wa.Reply{ID: "long-gone", Sender: ada}},
+	}
+	if _, err := h.st.SaveMessages(t.Context(), msgs); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.st.DeleteMessage(t.Context(), wa.MessageDeleted{Chat: ada, ID: "o2", At: at.Add(5 * time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	h.client.Emit(wa.HistorySync{})
+	h.settle()
+	v := ansi.Strip(h.view())
+	for _, line := range strings.Split(v, "\n") {
+		if strings.Contains(line, "Tea on Saturday?") && strings.Contains(line, "↪") {
+			if pane := strings.TrimRight(line[strings.Index(line, "│")+len("│"):], " "); !strings.HasSuffix(pane, "…") {
+				t.Errorf("a long quote should be cut to one line with …: %q", pane)
+			}
+		}
+	}
+	for _, want := range []string{
+		"↪ Ada: Tea on Saturday? It has to be",
+		"↪ Ada: This message was deleted",
+		"↪ an earlier message",
+	} {
+		if !strings.Contains(v, want) {
+			t.Errorf("missing %q:\n%s", want, v)
+		}
+	}
+	if strings.Count(v, "↪") != 3 {
+		t.Errorf("only replies get a quote line:\n%s", v)
+	}
+}

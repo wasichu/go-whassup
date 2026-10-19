@@ -133,6 +133,7 @@ type Message struct {
 	Kind      string // "text", "image", "reaction", ... see messageKind
 	Text      string // body or caption; may be empty for media
 	Media     *Media // attachment, if any
+	ReplyTo   *Reply // the message this one answers, if it's a reply
 
 	// Filled in by the store when reading; empty on the wire.
 	SenderName string          // best display name for Sender (address book, then push name)
@@ -150,6 +151,13 @@ func (m Message) Summary() string {
 		return "[" + m.Kind + "]"
 	}
 	return "[" + m.Kind + "] " + m.Text
+}
+
+// Reply identifies the message a reply answers. Only the pointer travels
+// with a reply here: the quoted text is looked up in the store when shown.
+type Reply struct {
+	ID     string
+	Sender string // chat key of the quoted message's author; "" if unknown
 }
 
 // Chat describes a conversation, as delivered by history sync.

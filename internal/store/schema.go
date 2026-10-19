@@ -137,6 +137,13 @@ ALTER TABLE keys ADD COLUMN finished_at INTEGER NOT NULL DEFAULT 0;
 	`
 ALTER TABLE chats ADD COLUMN muted_until INTEGER NOT NULL DEFAULT 0;
 `,
+	// 13: what a reply answers: the quoted message's ID and author. Only the
+	// pointer: the quote is looked up when shown, so these are identifiers
+	// (like reactions.message_id), not content, and aren't sealed.
+	`
+ALTER TABLE messages ADD COLUMN reply_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE messages ADD COLUMN reply_sender TEXT NOT NULL DEFAULT '';
+`,
 }
 
 // migrate brings the schema up to date inside one transaction.

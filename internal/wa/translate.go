@@ -34,7 +34,24 @@ func messageFromEvent(evt *events.Message, resolve keyResolver) (Message, bool) 
 	}
 	m, _ := messageFromEventBase(evt, resolve)
 	m.Kind, m.Text, m.Media = kind, normalizeMentions(text, evt.Message, resolve), mediaOf(evt.Message)
+	m.ReplyTo = replyOf(evt.Message, resolve)
 	return m, true
+}
+
+// replyOf is the message msg answers, from its quote (ContextInfo), if any.
+// The quoted author is resolved to a phone-number key like every sender;
+// when WhatsApp doesn't say who it was, Sender stays empty rather than
+// guessing.
+func replyOf(msg *waE2E.Message, resolve keyResolver) *Reply {
+	ci := contextInfo(msg)
+	if ci.GetStanzaID() == "" {
+		return nil
+	}
+	r := &Reply{ID: ci.GetStanzaID()}
+	if p, err := types.ParseJID(ci.GetParticipant()); err == nil && !p.IsEmpty() {
+		r.Sender = resolve(p, types.EmptyJID)
+	}
+	return r
 }
 
 // secretDecrypter decrypts a SecretEncryptedMessage; it is

@@ -1071,3 +1071,40 @@ func TestRecorderTracksMutes(t *testing.T) {
 		}
 	}
 }
+
+func TestReplyPointerAndQuotes(t *testing.T) {
+	st := openStore(t, "", nil)
+	orig := msg(ada, "q1", t0, "lunch?")
+	gone := msg(ada, "q2", t0.Add(time.Minute), "oops")
+	reply := msg(ada, "r1", t0.Add(2*time.Minute), "yes!")
+	reply.ReplyTo = &wa.Reply{ID: "q1", Sender: ada}
+	if _, err := st.SaveMessages(t.Context(), []wa.Message{orig, gone, reply}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.DeleteMessage(t.Context(), wa.MessageDeleted{Chat: ada, ID: "q2", At: t0.Add(3 * time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	msgs, err := st.Messages(t.Context(), ada, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := msgs[2].ReplyTo; r == nil || *r != (wa.Reply{ID: "q1", Sender: ada}) {
+		t.Errorf("reply pointer = %+v", r)
+	}
+	if msgs[0].ReplyTo != nil {
+		t.Errorf("a plain message has ReplyTo %+v", msgs[0].ReplyTo)
+	}
+	quotes, err := st.Quotes(t.Context(), ada, []string{"q1", "q2", "unknown"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q := quotes["q1"]; q.Text != "lunch?" {
+		t.Errorf("quote q1 = %+v", q)
+	}
+	if q := quotes["q2"]; !q.Deleted {
+		t.Errorf("a deleted original should come back marked deleted: %+v", q)
+	}
+	if _, ok := quotes["unknown"]; ok || len(quotes) != 2 {
+		t.Errorf("quotes = %v, want q1 and q2 only", quotes)
+	}
+}

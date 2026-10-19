@@ -156,6 +156,9 @@ names stay readable on disk.**
   disappear.
 - Reactions appear under the message as `🎉 2  ❤️`, with your own highlighted.
 - Sending reactions, edits and deletes from go-whassup isn't supported yet.
+- **Replies** show what they answer on a dim line above them: `↪ Ada: Tea on Saturday?`,
+  cut to fit. A reply to a deleted message says so; one to a message older than your
+  stored history shows `↪ an earlier message`.
 
 ### Unread messages
 

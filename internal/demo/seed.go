@@ -92,10 +92,12 @@ func graceChat(at clock) []wa.Message {
 }
 
 func bookClubChat(at clock) []wa.Message {
+	reply := text("b3", bookClub, me, at(1, "20:15"), "Almost! No spoilers please")
+	reply.ReplyTo = &wa.Reply{ID: "b2", Sender: grace}
 	return []wa.Message{
 		text("b1", bookClub, alan, at(1, "20:10"), "Chapter 3 is wild"),
 		text("b2", bookClub, grace, at(1, "20:12"), "@"+user(me)+" are you caught up?"),
-		text("b3", bookClub, me, at(1, "20:15"), "Almost! No spoilers please"),
+		reply,
 		text("b4", bookClub, alan, at(1, "20:16"), "(spoiler, deleted)"),
 		text("b5", bookClub, ada, at(0, "08:45"), "Meeting Thursday at 7? I'll bring the tea."),
 	}

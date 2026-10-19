@@ -386,3 +386,37 @@ func TestNormalizeMentions(t *testing.T) {
 		t.Errorf("text = %q", got.Text)
 	}
 }
+
+func TestReplyPointer(t *testing.T) {
+	reply := func(stanza, participant string) *events.Message {
+		evt := textEvent(types.MessageSource{Chat: group, Sender: pnAda, IsGroup: true}, "")
+		evt.Message = &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{
+			Text: proto.String("agreed"),
+			ContextInfo: &waE2E.ContextInfo{
+				StanzaID: proto.String(stanza), Participant: proto.String(participant),
+				QuotedMessage: &waE2E.Message{Conversation: proto.String("lunch?")},
+			},
+		}}
+		return evt
+	}
+	for _, tt := range []struct {
+		name string
+		evt  *events.Message
+		want *Reply
+	}{
+		{"by phone number", reply("Q1", pnAda.String()), &Reply{ID: "Q1", Sender: pnAda.String()}},
+		{"by LID: resolved to the phone-number key", reply("Q2", lidAda.String()), &Reply{ID: "Q2", Sender: pnAda.String()}},
+		{"author unknown: not guessed", reply("Q3", ""), &Reply{ID: "Q3"}},
+		{"not a reply", textEvent(types.MessageSource{Chat: pnAda, Sender: pnAda}, "hi"), nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			m, ok := messageFromEvent(tt.evt, stubResolver)
+			if !ok {
+				t.Fatal("message dropped")
+			}
+			if (m.ReplyTo == nil) != (tt.want == nil) || (m.ReplyTo != nil && *m.ReplyTo != *tt.want) {
+				t.Errorf("ReplyTo = %+v, want %+v", m.ReplyTo, tt.want)
+			}
+		})
+	}
+}

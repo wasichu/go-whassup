@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/wasichu/go-whassup/internal/wa"
@@ -54,11 +55,16 @@ func (s *Store) insertMessage(ctx context.Context, tx *sql.Tx, m wa.Message) (bo
 			return false, err
 		}
 	}
+	var replyID, replySender string
+	if m.ReplyTo != nil {
+		replyID, replySender = m.ReplyTo.ID, m.ReplyTo.Sender
+	}
 	var rowid int64
 	err = tx.QueryRowContext(ctx, `
-		INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, push_name, ts, from_me, kind, body, codec, media, media_codec)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING rowid`,
-		m.Chat, m.ID, m.Sender, m.PushName, m.Timestamp.Unix(), m.FromMe, m.Kind, body, codecID, media, mediaCodec).Scan(&rowid)
+		INSERT OR IGNORE INTO messages (chat_jid, id, sender_jid, push_name, ts, from_me, kind, body, codec, media, media_codec, reply_id, reply_sender)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING rowid`,
+		m.Chat, m.ID, m.Sender, m.PushName, m.Timestamp.Unix(), m.FromMe, m.Kind, body, codecID, media, mediaCodec,
+		replyID, replySender).Scan(&rowid)
 	switch {
 	case errors.Is(err, sql.ErrNoRows): // already stored
 		return false, nil
@@ -87,23 +93,9 @@ func (s *Store) Messages(ctx context.Context, chat string, limit int) ([]wa.Mess
 	if limit <= 0 {
 		limit = -1 // SQLite: no limit
 	}
-	rows, err := queryAll(ctx, s.db, `
-		SELECT id, sender_jid, push_name, ts, from_me, kind, body, codec, is_group, sender_name, edited_at, deleted, media, media_codec FROM (
-			SELECT m.*, c.is_group,
-			       COALESCE(NULLIF(ct.name, ''), NULLIF(ct.push_name, ''), NULLIF(m.push_name, ''), ct.business_name, '') AS sender_name
-			FROM messages m
-			JOIN chats c ON c.jid = m.chat_jid
-			LEFT JOIN contacts ct ON ct.jid = m.sender_jid
-			WHERE m.chat_jid = ? ORDER BY m.ts DESC, m.id DESC LIMIT ?
-		) ORDER BY ts, id`, []any{chat, limit}, scanMessage)
+	msgs, err := s.messagesWhere(ctx, chat, `m.chat_jid = ? ORDER BY m.ts DESC, m.id DESC LIMIT ?`, chat, limit)
 	if err != nil {
 		return nil, fmt.Errorf("loading messages: %w", err)
-	}
-	msgs := make([]wa.Message, len(rows))
-	for i, r := range rows {
-		if msgs[i], err = s.decodeMessage(chat, r); err != nil {
-			return nil, err
-		}
 	}
 	if err := s.attachReactions(ctx, chat, msgs); err != nil {
 		return nil, err
@@ -111,18 +103,66 @@ func (s *Store) Messages(ctx context.Context, chat string, limit int) ([]wa.Mess
 	return msgs, nil
 }
 
+// Quotes returns the messages with ids in chat (the originals replies
+// quote), keyed by ID. IDs not stored (older than our history) are absent.
+func (s *Store) Quotes(ctx context.Context, chat string, ids []string) (map[string]wa.Message, error) {
+	out := map[string]wa.Message{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	args := []any{chat}
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	where := `m.chat_jid = ? AND m.id IN (?` + strings.Repeat(`, ?`, len(ids)-1) + `)`
+	msgs, err := s.messagesWhere(ctx, chat, where, args...)
+	if err != nil {
+		return nil, fmt.Errorf("loading quoted messages: %w", err)
+	}
+	for _, m := range msgs {
+		out[m.ID] = m
+	}
+	return out, nil
+}
+
+// messagesWhere reads and decodes chat's messages matching where (over
+// messages m), oldest first.
+func (s *Store) messagesWhere(ctx context.Context, chat, where string, args ...any) ([]wa.Message, error) {
+	rows, err := queryAll(ctx, s.db, `
+		SELECT id, sender_jid, push_name, ts, from_me, kind, body, codec, is_group, sender_name, edited_at, deleted, media, media_codec,
+		       reply_id, reply_sender FROM (
+			SELECT m.*, c.is_group,
+			       COALESCE(NULLIF(ct.name, ''), NULLIF(ct.push_name, ''), NULLIF(m.push_name, ''), ct.business_name, '') AS sender_name
+			FROM messages m
+			JOIN chats c ON c.jid = m.chat_jid
+			LEFT JOIN contacts ct ON ct.jid = m.sender_jid
+			WHERE `+where+`
+		) ORDER BY ts, id`, args, scanMessage)
+	if err != nil {
+		return nil, err
+	}
+	msgs := make([]wa.Message, len(rows))
+	for i, r := range rows {
+		if msgs[i], err = s.decodeMessage(chat, r); err != nil {
+			return nil, err
+		}
+	}
+	return msgs, nil
+}
+
 // storedMessage is a messages row as read, values still sealed.
 type storedMessage struct {
-	m                 wa.Message
-	ts, editedAt      int64
-	body, media       []byte
-	codec, mediaCodec int
+	m                    wa.Message
+	ts, editedAt         int64
+	body, media          []byte
+	codec, mediaCodec    int
+	replyID, replySender string
 }
 
 func scanMessage(rows *sql.Rows) (storedMessage, error) {
 	var r storedMessage
 	err := rows.Scan(&r.m.ID, &r.m.Sender, &r.m.PushName, &r.ts, &r.m.FromMe, &r.m.Kind, &r.body, &r.codec,
-		&r.m.IsGroup, &r.m.SenderName, &r.editedAt, &r.m.Deleted, &r.media, &r.mediaCodec)
+		&r.m.IsGroup, &r.m.SenderName, &r.editedAt, &r.m.Deleted, &r.media, &r.mediaCodec, &r.replyID, &r.replySender)
 	return r, err
 }
 
@@ -130,6 +170,9 @@ func scanMessage(rows *sql.Rows) (storedMessage, error) {
 func (s *Store) decodeMessage(chat string, r storedMessage) (wa.Message, error) {
 	m := r.m
 	m.Chat, m.Timestamp, m.Edited = chat, time.Unix(r.ts, 0), r.editedAt > 0
+	if r.replyID != "" {
+		m.ReplyTo = &wa.Reply{ID: r.replyID, Sender: r.replySender}
+	}
 	if m.Deleted {
 		return m, nil // text and media were wiped
 	}
