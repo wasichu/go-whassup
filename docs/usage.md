@@ -172,10 +172,10 @@ names stay readable on disk.**
   publishes new emoji well before phones and fonts can draw them, and a reaction nobody
   can see shows as a blank box.
 
-Replies and reactions name the original author by phone number. In groups where
-WhatsApp addresses members by privacy ID (LID) this hasn't been confirmed against a
-live account yet; if a reply or reaction in such a group doesn't show up on phones,
-please [report it](https://github.com/wasichu/go-whassup/issues).
+Replies and reactions name the original author by phone number. Reactions have been
+confirmed on a live account, including in a community's announcement group; replies in
+groups haven't been yet. If a reply or reaction doesn't show up on phones, please
+[report it](https://github.com/wasichu/go-whassup/issues).
 
 ### Edits, deletes and reactions
 
