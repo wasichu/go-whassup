@@ -9,13 +9,21 @@ import (
 	"github.com/wasichu/go-whassup/internal/store"
 )
 
+// The demo must look the same whatever the time of day: CI caught it
+// collapsing just after midnight, when "today's" messages lay in the future.
 func TestSeed(t *testing.T) {
+	day := time.Date(2026, 10, 19, 0, 0, 0, 0, time.Local)
+	for _, now := range []time.Time{day.Add(40 * time.Minute), day.Add(10*time.Hour + 35*time.Minute), day.Add(11 * time.Hour), day.Add(23*time.Hour + 59*time.Minute)} {
+		t.Run(now.Format("15:04"), func(t *testing.T) { testSeedAt(t, now) })
+	}
+}
+
+func testSeedAt(t *testing.T, now time.Time) {
 	st, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "messages.db"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() }) //nolint:errcheck // test cleanup
-	now := time.Now()
 	if err := seed(t.Context(), st, now); err != nil {
 		t.Fatal(err)
 	}

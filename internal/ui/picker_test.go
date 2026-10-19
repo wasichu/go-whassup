@@ -140,7 +140,7 @@ func TestSaveAttachmentCopy(t *testing.T) {
 	h.key("enter") // into the message box
 	h.key("ctrl+o")
 	h.key("d")
-	h.settle()
+	h.waitFor("the saved copy", func() bool { return strings.HasPrefix(h.model().notice, "Saved to ") })
 	data, err := os.ReadFile(filepath.Join(save, "report.pdf"))
 	if err != nil || string(data) != "%PDF-1.7" {
 		t.Fatalf("saved copy = %q, %v", data, err)
@@ -152,7 +152,7 @@ func TestSaveAttachmentCopy(t *testing.T) {
 		t.Errorf("the attachments view should show its keys, esc included:\n%s", v)
 	}
 	h.key("d") // again: a second copy, not an overwrite
-	h.settle()
+	h.waitFor("the second copy", func() bool { return strings.HasSuffix(h.model().notice, "report (1).pdf") })
 	if _, err := os.Stat(filepath.Join(save, "report (1).pdf")); err != nil {
 		t.Errorf("second save: %v", err)
 	}

@@ -76,6 +76,8 @@ func TestEncryptionTurnsOnLive(t *testing.T) {
 	enc := &fakeEncryption{}
 	h.withEncryption(enc, config.KeySourceKeyring)
 	h.toggleEncryption("y")
+	h.waitSaves(1)
+	h.waitFor("the finish notice", func() bool { return strings.Contains(h.model().notice, "Encryption is on") })
 	if got := enc.got(); len(got) != 1 || !got[0].on || got[0].source != config.KeySourceKeyring {
 		t.Fatalf("Set calls = %+v", got)
 	}
@@ -88,7 +90,8 @@ func TestEncryptionTurnsOnLive(t *testing.T) {
 
 	h.key("enter") // and off again: no passphrase, decrypts
 	h.key("y")
-	h.settle()
+	h.waitSaves(2)
+	h.waitFor("the decrypt notice", func() bool { return strings.Contains(h.model().notice, "search is back") })
 	if got := enc.got(); len(got) != 2 || got[1].on {
 		t.Fatalf("Set calls = %+v", got)
 	}
@@ -123,7 +126,7 @@ func TestEncryptionAsksForPassphrase(t *testing.T) {
 	h.key("enter")
 	h.key("secret")
 	h.key("enter")
-	h.settle()
+	h.waitSaves(1)
 	if got := enc.got(); len(got) != 1 || got[0].pass != "secret" || !got[0].on {
 		t.Fatalf("Set calls = %+v", got)
 	}
@@ -152,6 +155,7 @@ func TestEncryptionFailureLeavesConfig(t *testing.T) {
 	enc := &fakeEncryption{err: errors.New("keychain access denied")}
 	h.withEncryption(enc, config.KeySourceKeyring)
 	h.toggleEncryption("y")
+	h.waitSaves(1) // the failure arrives as a save that didn't happen
 	v := ansi.Strip(h.view())
 	if !strings.Contains(v, "turning encryption on: keychain access denied") {
 		t.Errorf("error not shown:\n%s", v)

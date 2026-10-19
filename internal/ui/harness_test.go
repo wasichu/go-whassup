@@ -41,6 +41,7 @@ type harness struct {
 	cache   media.Cache
 	opened  []string // files passed to OpenFile
 	openErr error
+	saves   int // configSavedMsg delivered (see waitSaves)
 }
 
 // withGraphics simulates a true-color terminal with Kitty graphics support.
@@ -168,8 +169,34 @@ func (h *harness) deliver(msg tea.Msg) {
 			h.run(c)
 		}
 	default:
+		if _, ok := msg.(configSavedMsg); ok {
+			h.saves++
+		}
 		h.send(msg)
 	}
+}
+
+// waitFor settles until cond holds: background work (a config save, a
+// download, a decode) can take longer than settle's short wait on a slow
+// machine such as CI. It fails the test after 5 seconds.
+func (h *harness) waitFor(what string, cond func() bool) {
+	h.t.Helper()
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+		h.settle()
+		if cond() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	h.t.Fatalf("timed out waiting for %s:\n%s", what, h.view())
+}
+
+// waitSaves waits until n config saves (configSavedMsg) have been
+// delivered. h.applied is safe to read afterwards: ApplyConfig ran before
+// each save's message was sent.
+func (h *harness) waitSaves(n int) {
+	h.t.Helper()
+	h.waitFor(fmt.Sprintf("%d config saves", n), func() bool { return h.saves >= n })
 }
 
 func (h *harness) key(k string) {

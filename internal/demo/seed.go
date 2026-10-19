@@ -24,14 +24,16 @@ const (
 // seed fills st with the demo's chats, as if synced from a phone. Times are
 // relative to now, so day separators and "new" dividers look natural.
 func seed(ctx context.Context, st *store.Store, now time.Time) error {
+	// "Today" is the latest day whose story (up to 10:31) is all in the
+	// past: before 11:00 the demo's day is yesterday. Clamping times to now
+	// instead would bunch messages up and undo the unread state.
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	if now.Before(today.Add(11 * time.Hour)) {
+		today = today.AddDate(0, 0, -1)
+	}
 	at := func(daysAgo int, hm string) time.Time {
 		t, _ := time.Parse("15:04", hm) //nolint:errcheck // fixed literals
-		ts := today.AddDate(0, 0, -daysAgo).Add(time.Duration(t.Hour())*time.Hour + time.Duration(t.Minute())*time.Minute)
-		if latest := now.Add(-time.Minute); ts.After(latest) {
-			return latest // nothing from the future (early in the day)
-		}
-		return ts
+		return today.AddDate(0, 0, -daysAgo).Add(time.Duration(t.Hour())*time.Hour + time.Duration(t.Minute())*time.Minute)
 	}
 	if err := seedPeople(ctx, st); err != nil {
 		return err

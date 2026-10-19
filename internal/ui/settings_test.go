@@ -34,6 +34,7 @@ func TestSettingsToggleEditValidateSave(t *testing.T) {
 	// Toggle request_full_sync with space: saved and applied.
 	h.key("up")
 	h.send(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
+	h.waitSaves(1)
 	if len(h.applied) != 1 || !h.applied[0].History.RequestFullSync {
 		t.Fatalf("toggle not applied: %+v\n%s", h.applied, h.view())
 	}
@@ -101,7 +102,7 @@ func TestSettingsConfirmsEncryptionToggle(t *testing.T) {
 	}
 	h.key("enter")
 	h.key("y")
-	h.settle()
+	h.waitSaves(1)
 	if len(h.applied) != 1 || !h.applied[0].Encryption.Enabled {
 		t.Fatalf("y should apply: %+v", h.applied)
 	}
@@ -120,7 +121,7 @@ func TestSettingsConfirmsEncryptionToggle(t *testing.T) {
 	}
 	h.key("enter")
 	h.key("y")
-	h.settle()
+	h.waitSaves(2)
 	if len(h.applied) != 2 || h.applied[1].Encryption.Enabled || h.model().settings.cfg.Encryption.Enabled {
 		t.Errorf("y should turn it off: %+v", h.applied)
 	}
@@ -154,7 +155,7 @@ func TestSettingsKeySourceAsksForPasswordCommand(t *testing.T) {
 	h.key("enter")
 	h.key("pass show wa")
 	h.key("enter")
-	h.settle()
+	h.waitSaves(1)
 	if n := len(h.applied); n != 1 || h.applied[0].Encryption.KeySource != "password-command" || h.applied[0].Encryption.PasswordCommand != "pass show wa" {
 		t.Fatalf("applied = %+v", h.applied)
 	}
@@ -164,13 +165,13 @@ func TestSettingsKeySourceAsksForPasswordCommand(t *testing.T) {
 
 	h.key("up") // password_command -> key_source
 	h.key("right")
-	h.settle()
+	h.waitSaves(2)
 	if got := h.applied[len(h.applied)-1].Encryption.KeySource; got != "prompt" || h.model().settings.editing {
 		t.Errorf("right: key_source = %q, editing = %v; want prompt with no question", got, h.model().settings.editing)
 	}
 	h.key("left") // back to password-command: its command is already set
 	h.key("left") // and on to keyring
-	h.settle()
+	h.waitSaves(4)
 	if got := h.applied[len(h.applied)-1].Encryption.KeySource; got != "keyring" {
 		t.Errorf("left twice: key_source = %q, want keyring", got)
 	}
