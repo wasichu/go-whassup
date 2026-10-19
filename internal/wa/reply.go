@@ -10,8 +10,8 @@ import (
 )
 
 // Replies and reactions point at an earlier message. They use the author's
-// chat key as stored (a phone-number JID); see docs/usage.md for groups
-// whose members are addressed by privacy ID (LID).
+// chat key as stored (a phone-number JID); docs/usage.md ("Replies and
+// reactions") notes that groups addressed by privacy ID (LID) are untested.
 
 // SendReply sends text as a reply to message to (in chat): WhatsApp shows a
 // quote of to above it. Like SendText, the sent message comes back as a

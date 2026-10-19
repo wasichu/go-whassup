@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -120,8 +122,8 @@ func loadChats(ctx context.Context, st Store) tea.Cmd {
 func loadMessages(ctx context.Context, deps Deps, chat string) tea.Cmd {
 	return func() tea.Msg {
 		msgs, err := deps.Store.Messages(ctx, chat, messagesPerChat)
-		mentions, nerr := mentionNames(ctx, deps.Store, msgs)
 		quotes, qerr := quotedMessages(ctx, deps.Store, chat, msgs)
+		mentions, nerr := mentionNames(ctx, deps.Store, append(slices.Collect(maps.Values(quotes)), msgs...))
 		return messagesLoadedMsg{
 			chat: chat, msgs: msgs, cached: cachedFlags(deps.Media, chat, msgs), mentions: mentions,
 			quotes: quotes, err: errors.Join(err, nerr, qerr),

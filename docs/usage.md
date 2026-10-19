@@ -47,6 +47,7 @@ the status line. If the device isn't linked, it opens the **login screen** inste
 | `pgup`/`pgdn` | scroll messages | scroll messages |
 | `/` | find a chat or contact (new chats too) | (typed) |
 | `s` | search message text | (typed) |
+| `ctrl+r` | | reply or react: pick a message (see below) |
 | `ctrl+o` | | view attachments: open (downloads if needed), save a copy |
 | `ctrl+t` | | attach file: send one to this chat |
 | `i` | chat info: number, or a group's topic and members | (typed) |
@@ -148,6 +149,27 @@ names stay readable on disk.**
   - Your own sent files are cached, so they open without a download.
 - Downloaded files are **not encrypted on disk** (see `storage.md`).
 
+### Replies and reactions
+
+`ctrl+r` in the message box highlights the newest message; `↑`/`↓` pick another
+(deleted messages are skipped), and `esc` goes back to typing.
+
+- **`r` replies.** A banner above the box shows what you're answering
+  (`↪ Replying to Ada: Tea on Saturday?`); type and press `enter` to send it as a proper
+  WhatsApp reply, quoted on everyone's phone. `esc` cancels the reply first, a second
+  `esc` leaves the box.
+- **`e` reacts.** A strip of WhatsApp's quick reactions replaces the box:
+  `👍 ❤️ 😂 😮 😢 🙏 +`. Press `1`–`6`, or `←`/`→` and `enter`. The strip starts on
+  your current reaction, and choosing the reaction you already have removes it, as on the
+  phone. **`+`** searches every emoji by name or keyword (`laugh` finds 😂, `party` 🎉);
+  `↑`/`↓` and `enter` react, `esc` backs out. The emoji list is Unicode's, with CLDR's
+  English keywords, built into the binary (`internal/emoji`).
+
+Replies and reactions name the original author by phone number. In groups where
+WhatsApp addresses members by privacy ID (LID) this hasn't been confirmed against a
+live account yet; if a reply or reaction in such a group doesn't show up on phones,
+please [report it](https://github.com/wasichu/go-whassup/issues).
+
 ### Edits, deletes and reactions
 
 - Edited messages show their latest text with a faint **(edited)**.
@@ -155,7 +177,7 @@ names stay readable on disk.**
   from `messages.db`, not just hidden. Messages you delete "for me" on your phone
   disappear.
 - Reactions appear under the message as `🎉 2  ❤️`, with your own highlighted.
-- Sending reactions, edits and deletes from go-whassup isn't supported yet.
+- Reactions can be sent (see above); sending edits and deletes isn't supported yet.
 - **Replies** show what they answer on a dim line above them: `↪ Ada: Tea on Saturday?`,
   cut to fit. A reply to a deleted message says so; one to a message older than your
   stored history shows `↪ an earlier message`.

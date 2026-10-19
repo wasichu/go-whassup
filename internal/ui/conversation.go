@@ -29,6 +29,8 @@ type conversation struct {
 	viewport  viewport.Model
 	input     textinput.Model
 	width     int
+	height    int
+	compose   // replying and reacting (compose.go)
 }
 
 func newConversation() conversation {
@@ -42,9 +44,13 @@ func newConversation() conversation {
 
 // resize lays out the pane in width x height (header + history + input).
 func (c *conversation) resize(width, height int) {
-	c.width = width
+	c.width, c.height = width, height
 	c.viewport.SetWidth(width)
-	c.viewport.SetHeight(max(height-3, 1)) // header, separator, input
+	chrome := 3 // header, separator, input
+	if c.replyTo != nil {
+		chrome++ // the reply banner
+	}
+	c.viewport.SetHeight(max(height-chrome, 1))
 	c.input.SetWidth(max(width-lipgloss.Width(c.input.Prompt)-1, 1))
 	c.render(true)
 }
@@ -58,6 +64,8 @@ func (c *conversation) setChat(chat store.ChatSummary) {
 		c.msgs = nil
 		c.newFrom = time.Time{}
 		c.highlight = ""
+		c.compose = compose{} // a reply or pick belongs to the chat it started in
+		defer c.resize(c.width, c.height)
 		if chat.Unread > 0 {
 			c.newFrom = chat.LastReadAt // keep the divider while the chat stays open
 		}
@@ -134,7 +142,14 @@ func (c *conversation) view(width, height int, own string) string {
 		lipgloss.NewStyle().MaxWidth(width).Render(header),
 		c.viewport.View(),
 		separatorStyle.Render(strings.Repeat("─", width)),
-		c.input.View(),
+	}
+	if c.replyTo != nil {
+		parts = append(parts, c.replyBanner(width))
+	}
+	if picked, ok := c.pickedMessage(); c.reacting && ok {
+		parts = append(parts, c.reactionStrip(myReaction(picked))) // in place of the input
+	} else {
+		parts = append(parts, c.input.View())
 	}
 	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Render(strings.Join(parts, "\n"))
 }
@@ -305,6 +320,17 @@ func renderMentions(text string, names map[string]string, own string) string {
 	})
 }
 
+// plainMentions is renderMentions without styling, for text shown in one
+// style (quotes, the reply banner): "@Ada", "@you".
+func plainMentions(text string, names map[string]string, own string) string {
+	return ansi.Strip(renderMentions(text, names, own))
+}
+
+// oneLine is a message's summary on one line, mentions named.
+func (c *conversation) oneLine(m wa.Message) string {
+	return strings.Join(strings.Fields(plainMentions(m.Summary(), c.mentions, c.own)), " ")
+}
+
 // mentionedDigits lists the phone numbers mentioned in msgs.
 func mentionedDigits(msgs []wa.Message) []string {
 	seen := map[string]bool{}
@@ -346,7 +372,7 @@ func quoteLine(m wa.Message, chat store.ChatSummary, opts renderOpts) string {
 	}
 	text := deletedStyle.Render("This message was deleted")
 	if !q.Deleted {
-		text = faintStyle.Render(strings.Join(strings.Fields(q.Summary()), " ")) // on one line
+		text = faintStyle.Render(strings.Join(strings.Fields(plainMentions(q.Summary(), opts.mentions, opts.own)), " ")) // on one line
 	}
 	return faintStyle.Render("      ↪ "+who+": ") + text
 }

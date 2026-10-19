@@ -34,6 +34,7 @@ const (
 	screenInfo
 	screenSearch
 	screenBrowse
+	screenEmoji
 )
 
 type focus int
@@ -78,9 +79,10 @@ type Model struct {
 	info      info
 	search    search
 	browser   browser
-	browseDir string // last folder a file was picked from (browser)
-	draft     string // JID of an open chat that has no messages yet
-	ownJID    string // the linked account, for labelling the chat with yourself
+	emojiPick emojiPage // the "+" reaction search (emojipage.go)
+	browseDir string    // last folder a file was picked from (browser)
+	draft     string    // JID of an open chat that has no messages yet
+	ownJID    string    // the linked account, for labelling the chat with yourself
 
 	downloading map[string]bool // attachment downloads in flight, by message ID
 
@@ -323,6 +325,12 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.focus == focusInput {
+		switch {
+		case m.conv.reacting:
+			return m.reactKey(msg)
+		case m.conv.picking:
+			return m.pickKey(msg)
+		}
 		return m.inputKey(msg)
 	}
 	return m.listKey(msg)
@@ -336,22 +344,39 @@ func (m Model) inputKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m.openPicker()
 	case key.Matches(msg, keys.Attach):
 		return m.openAttach()
+	case key.Matches(msg, keys.Pick):
+		if m.draft == "" {
+			m.conv.startPicking()
+		}
+		return m, nil
+	case key.Matches(msg, keys.Blur) && m.conv.replyTo != nil:
+		m.conv.setReply(nil) // esc cancels the reply before leaving the box
+		return m, nil
 	case key.Matches(msg, keys.Blur):
 		m.focus = focusList
 		m.conv.input.Blur()
 		return m, nil
 	case key.Matches(msg, keys.Send):
-		text := strings.TrimSpace(m.conv.input.Value())
-		if text == "" || m.conv.chat.JID == "" {
-			return m, nil
-		}
-		m.conv.input.Reset()
-		m.notice = ""
-		return m, send(m.ctx, m.deps.Client, m.conv.chat.JID, text)
+		return m.sendInput()
 	}
 	var cmd tea.Cmd
 	m.conv.input, cmd = m.conv.input.Update(msg)
 	return m, cmd
+}
+
+// sendInput sends what's typed: as a reply when one is being written.
+func (m Model) sendInput() (Model, tea.Cmd) {
+	text := strings.TrimSpace(m.conv.input.Value())
+	if text == "" || m.conv.chat.JID == "" {
+		return m, nil
+	}
+	m.conv.input.Reset()
+	m.notice = ""
+	if to := m.conv.replyTo; to != nil {
+		m.conv.setReply(nil)
+		return m, sendReply(m.ctx, m.deps.Client, m.conv.chat.JID, text, *to)
+	}
+	return m, send(m.ctx, m.deps.Client, m.conv.chat.JID, text)
 }
 
 // listKey handles keys while the chat list has focus: navigation and the

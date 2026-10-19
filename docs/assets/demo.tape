@@ -30,11 +30,27 @@ Down
 Sleep 1.5s
 Screenshot docs/assets/screenshot-chats.png
 
-# Write in it.
+# React to Ada's message with a quick reaction, then reply to Grace.
 Enter
 Sleep 500ms
-Type "Almost done with chapter 4, no spoilers!"
-Sleep 400ms
+Ctrl+R
+Sleep 800ms
+Type "e"
+Sleep 1.2s
+Screenshot docs/assets/screenshot-react.png
+Type "1"
+Sleep 1.5s
+Ctrl+R
+Sleep 500ms
+Up
+Sleep 500ms
+Up
+Sleep 500ms
+Type "r"
+Sleep 600ms
+Type "Chapter 4 now, no spoilers!"
+Sleep 800ms
+Screenshot docs/assets/screenshot-reply.png
 Enter
 Sleep 1.5s
 Escape

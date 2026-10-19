@@ -87,6 +87,10 @@ func (m Model) contextHelp() []key.Binding {
 		return menuHelp
 	case m.page() != nil:
 		return m.page().help()
+	case m.focus == focusInput && m.conv.reacting:
+		return reactHelp
+	case m.focus == focusInput && m.conv.picking:
+		return pickHelp
 	case m.focus == focusInput:
 		return m.mainHelp(inputHelp)
 	default:
@@ -95,15 +99,15 @@ func (m Model) contextHelp() []key.Binding {
 }
 
 // mainHelp is the main screen's hints, without the chat shortcuts that
-// can't do anything right now: attachments and info need a selected chat,
-// and a draft has no attachments or info yet (but can be sent a file).
+// can't do anything right now: attachments, info and reply/react need a
+// selected chat, and a draft has no messages yet (but can be sent a file).
 func (m Model) mainHelp(bindings []key.Binding) []key.Binding {
 	var hide []key.Binding
 	switch {
 	case m.conv.chat.JID == "":
-		hide = []key.Binding{keys.Media, keys.Attach, keys.Info}
+		hide = []key.Binding{keys.Media, keys.Attach, keys.Info, keys.Pick}
 	case m.draft != "":
-		hide = []key.Binding{keys.Media, keys.Info}
+		hide = []key.Binding{keys.Media, keys.Info, keys.Pick} // nothing to reply or react to yet
 	}
 	return slices.DeleteFunc(slices.Clone(bindings), func(b key.Binding) bool {
 		return slices.ContainsFunc(hide, func(h key.Binding) bool { return h.Help().Key == b.Help().Key })

@@ -41,6 +41,8 @@ func (m *Model) page() page {
 		return &m.search
 	case screenBrowse:
 		return &m.browser
+	case screenEmoji:
+		return &m.emojiPick
 	}
 	return nil
 }

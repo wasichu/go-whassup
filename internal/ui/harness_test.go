@@ -214,7 +214,7 @@ func (h *harness) key(k string) {
 		h.send(tea.KeyPressMsg{Code: tea.KeyLeft})
 	case "right":
 		h.send(tea.KeyPressMsg{Code: tea.KeyRight})
-	case "ctrl+c", "ctrl+o", "ctrl+t":
+	case "ctrl+c", "ctrl+o", "ctrl+t", "ctrl+r":
 		h.send(tea.KeyPressMsg{Code: rune(k[len(k)-1]), Mod: tea.ModCtrl})
 	default:
 		for _, r := range k {

@@ -20,7 +20,7 @@ $ go-whassup db search lunch plans
 ```
 
 <p align="center">
-    <img alt="A recording of go-whassup demo: browsing chats, sending a message, finding a contact and searching messages (all fictional)" width="800" src="docs/assets/demo.gif">
+    <img alt="A recording of go-whassup demo: browsing chats, reacting, replying, finding a contact and searching messages (all fictional)" width="800" src="docs/assets/demo.gif">
 </p>
 
 > [!WARNING]
@@ -30,9 +30,10 @@ $ go-whassup db search lunch plans
 > no presence spam), but use it at your own risk, and not with an account you can't
 > afford to lose.
 
-💬 Chats and groups, unread counts, edits, deletes, reactions and @-mentions (shown;
-sending reactions isn't supported yet). History is synced from your phone and searchable
-offline.
+💬 Chats and groups, unread counts, edits, deletes, reactions and @-mentions. History
+is synced from your phone and searchable offline.
+
+↪️ Reply to a message, or react with a quick 👍 ❤️ 😂 or any emoji, searched by name.
 
 📎 Attachments: open, preview, or save a copy. Send files from a browser with image
 previews, or type a path with tab completion.
@@ -59,6 +60,10 @@ All from `go-whassup demo`: fictional people, made-up chats.
     <tr>
         <td><img alt="A conversation with a photo, a reaction and an edited message" src="docs/assets/screenshot-conversation.png"></td>
         <td><img alt="A group chat with a mention, reactions and a deleted message" src="docs/assets/screenshot-chats.png"></td>
+    </tr>
+    <tr>
+        <td><img alt="Picking a reaction for a message" src="docs/assets/screenshot-react.png"></td>
+        <td><img alt="Replying to a message in a group" src="docs/assets/screenshot-reply.png"></td>
     </tr>
     <tr>
         <td><img alt="Searching stored messages" src="docs/assets/screenshot-search.png"></td>
@@ -119,7 +124,8 @@ scanning a QR code. History arrives over the next few minutes as the phone sends
 
 In the app, `?` lists every key. The essentials: `↑`/`↓` choose a chat, `enter` to
 write, `esc` back to the list, `/` find a chat or contact, `s` search, `,` settings,
-and `q` quit. While writing, `ctrl+o` views attachments and `ctrl+t` attaches a file.
+and `q` quit. While writing, `ctrl+r` replies or reacts, `ctrl+o` views attachments and `ctrl+t`
+attaches a file.
 
 | What | Where |
 | --- | --- |
