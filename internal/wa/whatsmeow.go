@@ -166,6 +166,26 @@ func (w *WhatsApp) OwnJID() string {
 
 func (w *WhatsApp) IsPaired() bool { return w.client().Store.ID != nil }
 
+// PhoneNumbers looks lids up in whatsmeow's LID map, which fills in as
+// WhatsApp reveals who a privacy ID is (often after their messages arrived).
+func (w *WhatsApp) PhoneNumbers(ctx context.Context, lids []string) (map[string]string, error) {
+	out := map[string]string{}
+	for _, l := range lids {
+		lid, err := types.ParseJID(l)
+		if err != nil || lid.Server != types.HiddenUserServer {
+			continue // not a privacy ID: nothing to look up
+		}
+		pn, err := w.client().Store.LIDs.GetPNForLID(ctx, lid)
+		if err != nil {
+			return out, fmt.Errorf("looking up %s: %w", l, err)
+		}
+		if !pn.IsEmpty() {
+			out[l] = pn.ToNonAD().String()
+		}
+	}
+	return out, nil
+}
+
 func (w *WhatsApp) Connect(ctx context.Context) error {
 	if !w.IsPaired() {
 		return ErrNotPaired

@@ -96,12 +96,13 @@ func (s *Store) Search(ctx context.Context, query string, limit int) ([]SearchHi
 		return nil, nil
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT m.chat_jid, m.id, m.sender_jid, m.ts, m.from_me, m.kind,
+		SELECT m.chat_jid, m.id, COALESCE(lm.pn, m.sender_jid), m.ts, m.from_me, m.kind,
 		       snippet(messages_fts, 0, ?, ?, '…', 12),
 		       `+personName("ct", "m.push_name")+`
 		FROM messages_fts f
 		JOIN messages m ON m.rowid = f.rowid
-		LEFT JOIN contacts ct ON ct.jid = m.sender_jid
+		LEFT JOIN lid_map lm ON lm.lid = m.sender_jid
+		LEFT JOIN contacts ct ON ct.jid = COALESCE(lm.pn, m.sender_jid)
 		WHERE messages_fts MATCH ?
 		ORDER BY m.ts DESC, m.id DESC LIMIT ?`, MatchStart, MatchEnd, q, limit)
 	if err != nil {

@@ -34,7 +34,7 @@ type emojiPage struct {
 }
 
 func (m Model) openEmoji(target wa.Message) (Model, tea.Cmd) {
-	in := textinput.New()
+	in := newInput()
 	in.Prompt = "Search: "
 	in.Placeholder = "laugh, heart, party, pizza…"
 	in.SetVirtualCursor(true)

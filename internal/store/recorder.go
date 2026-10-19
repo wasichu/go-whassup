@@ -21,7 +21,8 @@ type Recorder struct {
 	Media MediaCache
 	Now   func() time.Time // for tests; nil means time.Now
 
-	mu sync.Mutex // guards Retention after Attach
+	mu     sync.Mutex // guards Retention after Attach
+	client wa.Client  // set by Attach: looks up privacy IDs
 }
 
 // MediaCache is the part of the media cache the recorder needs.
@@ -39,6 +40,7 @@ func (r *Recorder) SetRetention(ret Retention) {
 // Attach registers the recorder on client and returns a function that
 // detaches it.
 func (r *Recorder) Attach(client wa.Client) (remove func()) {
+	r.client = client
 	return client.AddEventHandler(r.Handle)
 }
 
@@ -61,12 +63,34 @@ func (r *Recorder) Handle(evt wa.Event) {
 		r.logIf(r.Store.SaveReactions(ctx, []wa.Reaction{v}), "recording reaction", "id", v.MessageID)
 	case wa.Groups:
 		r.logIf(r.Store.SaveGroups(ctx, v.List), "recording groups", "count", len(v.List))
+		r.resolvePrivacyIDs(ctx)
 	case wa.Contacts:
 		r.logIf(r.Store.SaveContacts(ctx, v.List), "recording contacts", "count", len(v.List))
+		r.resolvePrivacyIDs(ctx)
 	case wa.ChatMuted:
 		r.logIf(r.Store.SetMuted(ctx, v.Chat, v.Until), "recording mute", "chat", v.Chat)
 	case wa.HistorySync:
 		r.onHistory(ctx, v)
+		r.resolvePrivacyIDs(ctx)
+	}
+}
+
+// resolvePrivacyIDs records the numbers of stored privacy IDs that WhatsApp
+// has revealed since, so their names show. It runs on the events that
+// bring names (contacts, groups, history), before the UI reloads for them.
+func (r *Recorder) resolvePrivacyIDs(ctx context.Context) {
+	if r.client == nil {
+		return
+	}
+	lids, err := r.Store.UnresolvedPrivacyIDs(ctx)
+	if err != nil || len(lids) == 0 {
+		r.logIf(err, "listing privacy IDs")
+		return
+	}
+	found, err := r.client.PhoneNumbers(ctx, lids)
+	r.logIf(err, "looking up privacy IDs", "count", len(lids))
+	if len(found) > 0 {
+		r.logIf(r.Store.SaveLIDMap(ctx, found), "saving privacy IDs", "count", len(found))
 	}
 }
 

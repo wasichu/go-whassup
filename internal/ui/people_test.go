@@ -101,3 +101,13 @@ func TestMemberLines(t *testing.T) {
 		}
 	}
 }
+
+func TestInputCursorDoesNotBlink(t *testing.T) {
+	h := newHarness(t, true)
+	if h.model().conv.input.Styles().Cursor.Blink {
+		t.Error("the message box cursor should be solid")
+	}
+	if newInput().Styles().Cursor.Blink {
+		t.Error("inputs should have a solid cursor")
+	}
+}

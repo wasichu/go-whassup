@@ -34,7 +34,7 @@ type conversation struct {
 }
 
 func newConversation() conversation {
-	in := textinput.New()
+	in := newInput()
 	in.Prompt = "> "
 	in.Placeholder = "Type a message, Enter to send"
 	in.SetVirtualCursor(true) // the view is composed of panes; a drawn cursor is simplest

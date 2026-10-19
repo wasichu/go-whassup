@@ -52,7 +52,7 @@ type login struct {
 }
 
 func newLogin() login {
-	in := textinput.New()
+	in := newInput()
 	in.Prompt = "Phone: "
 	in.Placeholder = "+1 555 123 4567"
 	in.SetVirtualCursor(true)

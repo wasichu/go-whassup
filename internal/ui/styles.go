@@ -1,6 +1,9 @@
 package ui
 
-import "charm.land/lipgloss/v2"
+import (
+	"charm.land/bubbles/v2/textinput"
+	"charm.land/lipgloss/v2"
+)
 
 // Colors use ANSI 16-color indexes so they follow the user's terminal theme.
 var (
@@ -34,4 +37,14 @@ var (
 // pageStyle fills a full-screen page, clipping to its height.
 func pageStyle(width, height int) lipgloss.Style {
 	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Padding(0, 1)
+}
+
+// newInput is a text input with a solid (non-blinking) cursor, used for
+// every input so they all behave alike.
+func newInput() textinput.Model {
+	in := textinput.New()
+	s := in.Styles()
+	s.Cursor.Blink = false
+	in.SetStyles(s)
+	return in
 }

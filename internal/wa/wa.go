@@ -60,6 +60,11 @@ type Client interface {
 	// ErrNotPaired before pairing, and an error while disconnected.
 	SendText(ctx context.Context, chat, text string) error
 
+	// PhoneNumbers maps privacy IDs ("…@lid" keys) to phone-number chat keys,
+	// for those WhatsApp has told this device about since; the rest are
+	// left out. It reads the local session, so it's cheap.
+	PhoneNumbers(ctx context.Context, lids []string) (map[string]string, error)
+
 	// SendReply sends text as a reply to message to, quoting it; it comes
 	// back as a Message event (with ReplyTo) like SendText's.
 	SendReply(ctx context.Context, chat, text string, to Message) error

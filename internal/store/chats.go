@@ -247,9 +247,11 @@ func (s *Store) Details(ctx context.Context, chat string) (ChatDetails, error) {
 		return d, fmt.Errorf("loading chat details: %w", err)
 	}
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT gp.user_jid, gp.is_admin,
+		SELECT COALESCE(lm.pn, gp.user_jid), gp.is_admin,
 		       `+personName("ct", "")+` AS display
-		FROM group_participants gp LEFT JOIN contacts ct ON ct.jid = gp.user_jid
+		FROM group_participants gp
+		LEFT JOIN lid_map lm ON lm.lid = gp.user_jid
+		LEFT JOIN contacts ct ON ct.jid = COALESCE(lm.pn, gp.user_jid)
 		WHERE gp.group_jid = ?
 		ORDER BY gp.is_admin DESC, display = '', lower(display), gp.user_jid`, chat)
 	if err != nil {
@@ -373,4 +375,33 @@ func (s *Store) FindChat(ctx context.Context, query string) (ChatSummary, error)
 		}
 		return ChatSummary{}, fmt.Errorf("%q matches several chats: %s", query, strings.Join(names, ", "))
 	}
+}
+
+// UnresolvedPrivacyIDs lists the privacy IDs (…@lid) we hold for senders,
+// reply authors and group members without knowing their number yet.
+func (s *Store) UnresolvedPrivacyIDs(ctx context.Context) ([]string, error) {
+	return queryAll(ctx, s.db, `
+		SELECT jid FROM (
+			SELECT sender_jid AS jid FROM messages WHERE sender_jid LIKE '%@lid'
+			UNION SELECT reply_sender FROM messages WHERE reply_sender LIKE '%@lid'
+			UNION SELECT user_jid FROM group_participants WHERE user_jid LIKE '%@lid'
+		) WHERE jid NOT IN (SELECT lid FROM lid_map) ORDER BY jid`, nil,
+		func(rows *sql.Rows) (string, error) {
+			var jid string
+			err := rows.Scan(&jid)
+			return jid, err
+		})
+}
+
+// SaveLIDMap records who privacy IDs are (lid -> phone-number key).
+func (s *Store) SaveLIDMap(ctx context.Context, m map[string]string) error {
+	return s.inTx(ctx, "saving privacy IDs", func(tx *sql.Tx) error {
+		for lid, pn := range m {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO lid_map (lid, pn) VALUES (?, ?)
+				ON CONFLICT (lid) DO UPDATE SET pn = excluded.pn`, lid, pn); err != nil {
+				return fmt.Errorf("privacy ID %s: %w", lid, err)
+			}
+		}
+		return nil
+	})
 }

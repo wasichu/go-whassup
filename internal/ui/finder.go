@@ -23,7 +23,7 @@ type finder struct {
 }
 
 func newFinder() finder {
-	in := textinput.New()
+	in := newInput()
 	in.Prompt = "Find: "
 	in.Placeholder = "name or number"
 	in.SetVirtualCursor(true)

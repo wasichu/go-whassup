@@ -35,13 +35,14 @@ Relative `XDG_*` values are ignored, as the XDG spec requires.
 
 whatsmeow does **not** persist message content, so we do.
 
-**Schema (v14; migrations in `schema.go`, tracked by `PRAGMA user_version`, append-only):**
+**Schema (v15; migrations in `schema.go`, tracked by `PRAGMA user_version`, append-only):**
 
 | Table | Columns |
 | --- | --- |
 | `chats` | `jid` PK, `name`, `is_group`, `last_message_at`, `last_read_at` (unix s; v3; chats existing at upgrade count as read), `muted_until` (unix s, 0 = not muted; v12; from history sync and mute changes on other devices), `community_jid` + `is_community` + `is_announcements` (v14: a group's community, from group info; see "Communities" below) |
 | `messages` | PK `(chat_jid, id)`, `sender_jid`, `push_name`, `ts` (unix s), `from_me`, `kind`, `body` BLOB, `codec`, `media` BLOB + `media_codec` (the attachment's message, sealed like text: media key, path, type, size, and WhatsApp's embedded JPEG thumbnail, ≤64 KB, kept since 2026-10-18 for previews), `edited_at`, `deleted`, `reply_id` + `reply_sender` (v13: what a reply answers; only the pointer, plaintext like `reactions.message_id`; the quote is looked up when shown, so it follows edits and deletes and needs no sealing) |
 | `contacts` | `jid` PK, `name` (your address-book name for them), `push_name` (the name they chose), `business_name`. Filled by contact snapshots/updates, history sync and incoming messages. v2 added `name` and `business_name`. |
+| `lid_map` | `lid` PK, `pn` (v15: privacy IDs whose phone number WhatsApp revealed after their rows were stored; see "Privacy IDs" below) |
 
 **Behaviour:**
 - **Writing.** `store.Recorder` is registered directly with `AddEventHandler`, not through a
@@ -81,6 +82,17 @@ whatsmeow does **not** persist message content, so we do.
   1. Set any `[history] request_*` options.
   2. Run `go-whassup login -relink`, and leave it running until the `history sync` lines
      stop. It unlinks the old session (on the phone too, when reachable) before pairing.
+
+### Privacy IDs
+
+WhatsApp addresses some people by a privacy ID (`…@lid`) instead of their number.
+Senders and members are keyed by phone number when whatsmeow can map the ID, but a
+message often arrives before the mapping does, and is stored under the ID. When
+contacts, groups or history arrive, the Recorder asks whatsmeow about the IDs we hold
+(`UnresolvedPrivacyIDs`, `Client.PhoneNumbers`, a local lookup) and records the answers
+in `lid_map`. Reads resolve through it: messages, search and group members come back
+keyed by phone number, with that person's name. Stored rows aren't rewritten, because
+reactions are sealed against their sender's key.
 
 ### Communities
 

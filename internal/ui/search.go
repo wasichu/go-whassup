@@ -53,7 +53,7 @@ func probeSearch(ctx context.Context, st Store) tea.Cmd {
 }
 
 func (m Model) openSearch() (Model, tea.Cmd) {
-	in := textinput.New()
+	in := newInput()
 	in.Prompt = "Search: "
 	in.Placeholder = "words in messages"
 	in.SetVirtualCursor(true)

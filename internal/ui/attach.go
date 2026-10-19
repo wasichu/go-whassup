@@ -23,7 +23,7 @@ type attach struct {
 }
 
 func newAttach(width int) attach {
-	path := textinput.New()
+	path := newInput()
 	path.Prompt = "File:    "
 	path.Placeholder = "~/Pictures/photo.jpg"
 	path.SetVirtualCursor(true)
@@ -31,7 +31,7 @@ func newAttach(width int) attach {
 	path.SetWidth(max(width-14, 10))
 	path.ShowSuggestions = true
 	path.KeyMap.AcceptSuggestion.SetEnabled(false) // tab is pathCompleter.complete
-	caption := textinput.New()
+	caption := newInput()
 	caption.Prompt = "Caption: "
 	caption.Placeholder = "optional"
 	caption.SetVirtualCursor(true)

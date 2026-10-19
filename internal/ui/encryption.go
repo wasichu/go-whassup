@@ -133,7 +133,7 @@ type passphrase struct {
 }
 
 func newPassphrase(next config.Config) *passphrase {
-	in := textinput.New()
+	in := newInput()
 	in.Prompt = "Passphrase: "
 	in.EchoMode = textinput.EchoPassword
 	in.SetVirtualCursor(true)

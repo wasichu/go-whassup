@@ -129,13 +129,14 @@ func (s *Store) Quotes(ctx context.Context, chat string, ids []string) (map[stri
 // messages m), oldest first.
 func (s *Store) messagesWhere(ctx context.Context, chat, where string, args ...any) ([]wa.Message, error) {
 	rows, err := queryAll(ctx, s.db, `
-		SELECT id, sender_jid, push_name, ts, from_me, kind, body, codec, is_group, sender_name, edited_at, deleted, media, media_codec,
+		SELECT id, sender_key, push_name, ts, from_me, kind, body, codec, is_group, sender_name, edited_at, deleted, media, media_codec,
 		       reply_id, reply_sender FROM (
-			SELECT m.*, c.is_group,
+			SELECT m.*, c.is_group, COALESCE(lm.pn, m.sender_jid) AS sender_key,
 			       `+personName("ct", "m.push_name")+` AS sender_name
 			FROM messages m
 			JOIN chats c ON c.jid = m.chat_jid
-			LEFT JOIN contacts ct ON ct.jid = m.sender_jid
+			LEFT JOIN lid_map lm ON lm.lid = m.sender_jid
+			LEFT JOIN contacts ct ON ct.jid = COALESCE(lm.pn, m.sender_jid)
 			WHERE `+where+`
 		) ORDER BY ts, id`, args, scanMessage)
 	if err != nil {

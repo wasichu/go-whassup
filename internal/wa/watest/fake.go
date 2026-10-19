@@ -34,6 +34,8 @@ type Client struct {
 	// SendErr fails SendText; otherwise sent messages are emitted and recorded.
 	SendErr error
 	Sent    []wa.Message
+	// LIDs maps privacy IDs to phone-number keys, for PhoneNumbers.
+	LIDs map[string]string
 	// Reactions sent with SendReaction (replies land in Sent, with ReplyTo).
 	ReactionsSent []wa.Reaction
 	// Files sent with SendFile; DownloadData is what Download writes (or
@@ -379,4 +381,17 @@ func (c *Client) SentReactions() []wa.Reaction {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return slices.Clone(c.ReactionsSent)
+}
+
+// PhoneNumbers returns what LIDs knows about lids.
+func (c *Client) PhoneNumbers(_ context.Context, lids []string) (map[string]string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := map[string]string{}
+	for _, l := range lids {
+		if pn, ok := c.LIDs[l]; ok {
+			out[l] = pn
+		}
+	}
+	return out, nil
 }

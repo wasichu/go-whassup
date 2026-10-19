@@ -47,7 +47,7 @@ the status line. If the device isn't linked, it opens the **login screen** inste
 | `pgup`/`pgdn` | scroll messages | scroll messages |
 | `/` | find a chat or contact (new chats too) | (typed) |
 | `s` | search message text | (typed) |
-| `ctrl+r` | | reply or react: pick a message (see below) |
+| `ctrl+r` | | pick a message: reply, react, see who sent it (see below) |
 | `ctrl+o` | | view attachments: open (downloads if needed), save a copy |
 | `ctrl+t` | | attach file: send one to this chat |
 | `i` | chat info: number, or a group's topic and members | (typed) |
@@ -116,7 +116,8 @@ names stay readable on disk.**
   chosen name along with messages, so a member who has never posted may only have a
   number. Some groups identify members by a **privacy ID** instead of their number;
   such a member with no name shows as *unknown member*, not as the ID (which isn't a
-  phone number).
+  phone number). WhatsApp often reveals who they are later; their name then shows
+  the next time contacts or groups update (each time go-whassup connects).
 - **Communities** appear in the chat list as a heading (not selectable) with their
   groups indented beneath it, placed by the community's most recent message; `↑`/`↓`
   step over the heading. The announcement group is listed as **Announcements**

@@ -1193,3 +1193,33 @@ func TestPerson(t *testing.T) {
 		t.Errorf("a stranger should come back with only the JID: %+v, %v", p, err)
 	}
 }
+
+func TestPrivacyIDsResolvedWhenRevealed(t *testing.T) {
+	st := openStore(t, "", nil)
+	ctx := t.Context()
+	const lid = "98765432109876@lid"
+	client := &watest.Client{Paired: true}
+	(&Recorder{Store: st, Log: slog.New(slog.NewTextHandler(io.Discard, nil))}).Attach(client)
+	m := msg(group, "1", t0, "hello")
+	m.Sender, m.IsGroup = lid, true
+	client.Emit(m)
+	if err := st.SaveGroups(ctx, []wa.Group{{JID: group, Name: "Book club", Participants: []wa.Participant{{JID: lid}}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Later WhatsApp reveals the number, and a contacts update brings names.
+	client.LIDs = map[string]string{lid: bob}
+	client.Emit(wa.Contacts{List: []wa.Contact{{JID: bob, PushName: "Bobby"}}})
+
+	msgs, err := st.Messages(ctx, group, 0)
+	if err != nil || len(msgs) != 1 || msgs[0].Sender != bob || msgs[0].SenderName != "~Bobby" {
+		t.Fatalf("message = %+v, %v; want sender %s named ~Bobby", msgs, err, bob)
+	}
+	d, err := st.Details(ctx, group)
+	if err != nil || len(d.Members) != 1 || d.Members[0].JID != bob || d.Members[0].Name != "~Bobby" {
+		t.Errorf("members = %+v, %v", d.Members, err)
+	}
+	if left, err := st.UnresolvedPrivacyIDs(ctx); err != nil || len(left) != 0 {
+		t.Errorf("still unresolved: %v, %v", left, err)
+	}
+}

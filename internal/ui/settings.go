@@ -34,7 +34,7 @@ type settings struct {
 }
 
 func newSettings(cfg config.Config) settings {
-	in := textinput.New()
+	in := newInput()
 	in.Prompt = ""
 	in.SetVirtualCursor(true)
 	in.CharLimit = 512

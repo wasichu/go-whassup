@@ -152,6 +152,15 @@ ALTER TABLE chats ADD COLUMN community_jid TEXT NOT NULL DEFAULT '';
 ALTER TABLE chats ADD COLUMN is_community INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE chats ADD COLUMN is_announcements INTEGER NOT NULL DEFAULT 0;
 `,
+	// 15: who privacy IDs are. Senders stored under a privacy ID (…@lid)
+	// before WhatsApp revealed their number are resolved through this when
+	// read; stored rows keep their keys (reactions are sealed against them).
+	`
+CREATE TABLE lid_map (
+	lid TEXT PRIMARY KEY,
+	pn  TEXT NOT NULL
+);
+`,
 }
 
 // migrate brings the schema up to date inside one transaction.
