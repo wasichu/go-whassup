@@ -81,5 +81,5 @@ settle it, and the tap works regardless.
    `just release v0.1.0` binaries.
 2. Create the tap, add the formula, and test it with `--build-from-source`, `test` and
    `audit`.
-3. Add the tap's install line to the README.
+3. Uncomment the Homebrew row in the README's install table.
 4. Automate the bump on release.

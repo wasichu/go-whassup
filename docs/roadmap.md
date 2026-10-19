@@ -99,9 +99,10 @@ step lands or the plan changes.
 - [x] **LICENSE: MPL-2.0**, matching whatsmeow (decided 2026-10-18).
 - [x] **README for users:** what it is, an "unofficial; against WhatsApp's terms" warning,
   install steps. AGENTS.md and `docs/` stay contributor-facing.
-- [ ] **Screenshots from the demo** (`go-whassup demo`, fictional data only; never
-  anonymised real ones). Optionally a GIF scripted with charmbracelet/vhs (a dev tool,
-  not a dependency).
+- [ ] **README recording from the demo** (fictional data only; never anonymised real
+  ones): `just gif` records `docs/assets/demo.gif` from `docs/assets/demo.tape` with vhs
+  (a dev tool, not a dependency); then uncomment it in the README. VHS can't show inline
+  images, so a still of the previews in Ghostty is worth adding by hand.
 - [x] **CI:** GitHub Actions running `just check` via the mise action, so CI uses the same
   pinned tools (`.github/workflows/check.yml`; Linux and macOS).
 - [x] **Release binaries:** cgo-free cross-compiles for darwin/linux/windows ×

@@ -56,8 +56,7 @@ clean:
 index:
     graft build
 
-# Cross-compile cgo-free release binaries into dist/, stamped with the
-# version (e.g. `just release v0.1.0`), plus SHA256SUMS.
+# Cross-compile release binaries + SHA256SUMS into dist/ (e.g. `just release v0.1.0`)
 release version:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -72,3 +71,7 @@ release version:
     done
     cd dist && if command -v sha256sum >/dev/null; then sha256sum go-whassup-* > SHA256SUMS; else shasum -a 256 go-whassup-* > SHA256SUMS; fi
     ls -l
+
+# Record docs/assets/demo.gif from `go-whassup demo` (fictional data; needs vhs)
+gif: build
+    PATH="$PWD/bin:$PATH" vhs docs/assets/demo.tape

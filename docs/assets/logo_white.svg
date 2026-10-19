@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 170" width="640" height="170" role="img" aria-label="go-whassup: WhatsApp in your terminal">
+  <!-- A chat bubble holding a terminal prompt. Deliberately not WhatsApp's logo or green. -->
+  <path d="M30 22 H158 Q178 22 178 42 V112 Q178 132 158 132 H72 L40 156 L46 132 H30 Q10 132 10 112 V42 Q10 22 30 22 Z"
+        fill="none" stroke="#f0f6fc" stroke-width="8" stroke-linejoin="round"/>
+  <text x="38" y="98" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="52" font-weight="700" fill="#3cc6b8">&gt;_</text>
+  <text x="206" y="92" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="62" font-weight="700" fill="#f0f6fc">go-whassup</text>
+  <text x="208" y="134" font-family="ui-sans-serif, -apple-system, Segoe UI, Helvetica, Arial, sans-serif" font-size="24" fill="#9198a1">WhatsApp in your terminal</text>
+</svg>
