@@ -155,8 +155,8 @@ func (s *senderCard) about(r rootAPI) []string {
 
 // reactionGroup is everyone who reacted with one emoji.
 type reactionGroup struct {
-	emoji string
-	names []string // rendered: dimmed when only a number
+	emoji    string
+	reactors []store.Reactor
 }
 
 // groupReactors groups reactions by emoji as WhatsApp does: the most
@@ -170,14 +170,23 @@ func groupReactors(rs []store.Reactor) []reactionGroup {
 			i = len(gs) - 1
 		}
 		if r.Mine {
-			gs[i].names = slices.Insert(gs[i].names, 0, "You")
+			gs[i].reactors = slices.Insert(gs[i].reactors, 0, r)
 			continue
 		}
-		name, named := store.PersonLabel(r.Name, "", r.JID)
-		gs[i].names = append(gs[i].names, nameStyle(named, lipgloss.NewStyle()).Render(name))
+		gs[i].reactors = append(gs[i].reactors, r)
 	}
-	slices.SortStableFunc(gs, func(a, b reactionGroup) int { return len(b.names) - len(a.names) })
+	slices.SortStableFunc(gs, func(a, b reactionGroup) int { return len(b.reactors) - len(a.reactors) })
 	return gs
+}
+
+// reactorName is how a reactor is shown: "You", or their name, dimmed
+// when it's only a number.
+func reactorName(r store.Reactor) string {
+	if r.Mine {
+		return "You"
+	}
+	name, named := store.PersonLabel(r.Name, "", r.JID)
+	return nameStyle(named, lipgloss.NewStyle()).Render(name)
 }
 
 // reactionLines renders groups as "  👍 12  Ada, ~Bobby, …", wrapping
@@ -185,15 +194,16 @@ func groupReactors(rs []store.Reactor) []reactionGroup {
 func reactionLines(gs []reactionGroup, width int) []string {
 	digits := 1
 	for _, g := range gs {
-		digits = max(digits, len(strconv.Itoa(len(g.names))))
+		digits = max(digits, len(strconv.Itoa(len(g.reactors))))
 	}
 	var lines []string
 	for _, g := range gs {
-		prefix := fmt.Sprintf("  %s %*d  ", g.emoji, digits, len(g.names))
+		prefix := fmt.Sprintf("  %s %*d  ", g.emoji, digits, len(g.reactors))
 		indent := strings.Repeat(" ", ansi.StringWidth(prefix))
 		line := prefix
-		for i, name := range g.names {
-			if i < len(g.names)-1 {
+		for i, r := range g.reactors {
+			name := reactorName(r)
+			if i < len(g.reactors)-1 {
 				name += ","
 			}
 			switch {
