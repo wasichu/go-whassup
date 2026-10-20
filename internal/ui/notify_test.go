@@ -125,3 +125,17 @@ func TestNotifySequenceIsSafe(t *testing.T) {
 		t.Errorf("truncate = %q", got)
 	}
 }
+
+func TestGroupNotificationUsesYourContactName(t *testing.T) {
+	h := newNotifyHarness(t)
+	h.addContact(wa.Contact{JID: ada, Name: "Ada Lovelace", PushName: "Ada"})
+	if err := h.st.SaveGroups(t.Context(), []wa.Group{{JID: book, Name: "Book club"}}); err != nil {
+		t.Fatal(err)
+	}
+	h.client.Emit(wa.Message{ID: "g1", Chat: book, Sender: ada, PushName: "Ada", IsGroup: true,
+		Timestamp: time.Now(), Kind: wa.KindText, Text: "chapter 4?"})
+	h.settle()
+	if got := h.notifications(); len(got) != 1 || !strings.Contains(got[0], "Ada Lovelace: chapter 4?") {
+		t.Errorf("notifications = %q, want your name for Ada, not ~Ada", got)
+	}
+}

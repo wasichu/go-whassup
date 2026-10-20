@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -44,8 +45,28 @@ func (m *Model) notify(msg wa.Message, now time.Time) tea.Cmd {
 		return nil
 	}
 	m.notified[msg.Chat] = now
-	title, body := notificationText(cfg.Preview, msg, chat, m.ownJID)
-	return tea.Raw(notifySequence(m.deps.Notify, title, body))
+	ctx, st, term, own := m.ctx, m.deps.Store, m.deps.Notify, m.ownJID
+	return func() tea.Msg {
+		msg.SenderName = contactName(ctx, st, msg)
+		title, body := notificationText(cfg.Preview, msg, chat, own)
+		return tea.RawMsg{Msg: notifySequence(term, title, body)}
+	}
+}
+
+// contactName is your address book's name for a group message's sender.
+// A message that just arrived carries only the name the sender chose (the
+// store adds yours when messages are read back), so without this a contact
+// would be shown as "~Ada" rather than "Ada Lovelace". Runs off the UI
+// goroutine (it reads the store).
+func contactName(ctx context.Context, st Store, msg wa.Message) string {
+	if !msg.IsGroup || msg.SenderName != "" || st == nil {
+		return msg.SenderName
+	}
+	p, err := st.Person(ctx, msg.Sender)
+	if err != nil {
+		return "" // the notification still names them by their chosen name
+	}
+	return p.Name
 }
 
 // notificationText is what a notification shows, per the preview setting.

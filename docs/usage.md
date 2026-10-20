@@ -118,6 +118,9 @@ names stay readable on disk.**
   such a member with no name shows as *unknown member*, not as the ID (which isn't a
   phone number). WhatsApp often reveals who they are later; their name then shows
   the next time contacts or groups update (each time go-whassup connects).
+  `go-whassup listen` prints messages as they arrive without consulting your contacts,
+  so it names group senders by the name they chose (`~Ada`) even when they're in your
+  address book; the TUI, desktop notifications and the `db` commands use your names.
 - **Communities** appear in the chat list as a heading (not selectable) with their
   groups indented beneath it, placed by the community's most recent message; `↑`/`↓`
   step over the heading. The announcement group is listed as **Announcements**
