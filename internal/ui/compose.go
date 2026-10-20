@@ -134,12 +134,21 @@ func isPlus(msg tea.KeyPressMsg) bool {
 	return msg.Text == "+" || msg.Code == '+' || msg.ShiftedCode == '+'
 }
 
+// The outcomes of c; the next key while picking clears them.
+const (
+	copiedNotice = "Copied the message text."
+	noTextNotice = "That message has no text to copy."
+)
+
 // pickKey handles keys while picking a message: ↑/↓ move, r replies, e
-// reacts, + searches every emoji to react with, i shows who sent it, esc
-// goes back to typing.
+// reacts, + searches every emoji to react with, i shows who sent it, c
+// copies its text, esc goes back to typing.
 // Other keys do nothing (nothing types).
 func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	c := &m.conv
+	if m.notice == copiedNotice || m.notice == noTextNotice {
+		m.notice = "" // it was about the previous key
+	}
 	switch {
 	case key.Matches(msg, keys.Blur):
 		c.stopPicking()
@@ -163,8 +172,26 @@ func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		if target, ok := c.pickedMessage(); ok {
 			return m.openSender(target)
 		}
+	case msg.String() == "c":
+		return m.copyPicked()
 	}
 	return m, nil
+}
+
+// copyPicked copies the selected message's text (or caption) to the
+// clipboard, with mentions named as shown ("@Ada").
+func (m Model) copyPicked() (Model, tea.Cmd) {
+	target, ok := m.conv.pickedMessage()
+	if !ok {
+		return m, nil
+	}
+	text := plainMentions(target.Text, m.conv.mentions, m.conv.own)
+	if strings.TrimSpace(text) == "" {
+		m.notice, m.noticeIsErr = noTextNotice, false
+		return m, nil
+	}
+	m.notice, m.noticeIsErr = copiedNotice, false
+	return m, tea.SetClipboard(text)
 }
 
 // reactKey handles keys on the reaction strip.

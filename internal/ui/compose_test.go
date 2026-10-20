@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -196,5 +197,32 @@ func TestPlusOpensEmojiSearch(t *testing.T) {
 				t.Errorf("+ should open emoji search for a1:\n%s", ansi.Strip(h.view()))
 			}
 		})
+	}
+}
+
+func TestCopySelectedMessageText(t *testing.T) {
+	h := openAda(t)
+	h.key("ctrl+r")
+	m, cmd := h.model().pickKey(tea.KeyPressMsg{Code: 'c', Text: "c"})
+	if cmd == nil || !reflect.DeepEqual(cmd(), tea.SetClipboard("hello from ada")()) {
+		t.Fatalf("c should copy the message text; got %v", cmd)
+	}
+	if m.notice != copiedNotice {
+		t.Errorf("notice = %q", m.notice)
+	}
+	if m, _ = m.pickKey(tea.KeyPressMsg{Code: tea.KeyUp}); m.notice != "" {
+		t.Errorf("the next key should clear the notice, got %q", m.notice)
+	}
+
+	photo := wa.Message{ID: "p1", Chat: ada, Sender: ada, Timestamp: day.Add(time.Hour), Kind: wa.KindImage}
+	if _, err := h.st.SaveMessages(t.Context(), []wa.Message{photo}); err != nil {
+		t.Fatal(err)
+	}
+	h.client.Emit(wa.HistorySync{})
+	h.settle()
+	h.key("esc")
+	h.key("ctrl+r") // the uncaptioned photo, now newest
+	if m, cmd = h.model().pickKey(tea.KeyPressMsg{Code: 'c', Text: "c"}); cmd != nil || m.notice != noTextNotice {
+		t.Errorf("a photo without a caption has nothing to copy: cmd %v, notice %q", cmd, m.notice)
 	}
 }
