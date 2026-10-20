@@ -165,6 +165,9 @@ func TestFindChat(t *testing.T) {
 	if _, err := st.FindChat(ctx, "nobody"); !errors.Is(err, ErrChatNotFound) {
 		t.Errorf("not-found error = %v, want ErrChatNotFound", err)
 	}
+	if _, err := st.Details(ctx, "15550009999@s.whatsapp.net"); !errors.Is(err, ErrChatNotFound) {
+		t.Errorf("Details of an unknown chat = %v, want ErrChatNotFound", err)
+	}
 }
 
 func TestPrune(t *testing.T) {

@@ -112,31 +112,28 @@ const chatSummaryQuery = `
 // Chats lists chats, most recently active first. A community itself isn't
 // a chat (its groups are), so it's listed only if it somehow has messages.
 func (s *Store) Chats(ctx context.Context) ([]ChatSummary, error) {
-	rows, err := s.db.QueryContext(ctx, chatSummaryQuery+`
+	chats, err := queryAll(ctx, s.db, chatSummaryQuery+`
 		WHERE NOT c.is_community OR EXISTS (SELECT 1 FROM messages m WHERE m.chat_jid = c.jid)
-		ORDER BY c.last_message_at DESC, c.jid`)
+		ORDER BY c.last_message_at DESC, c.jid`, nil, scanChatSummary)
 	if err != nil {
 		return nil, fmt.Errorf("listing chats: %w", err)
 	}
-	defer rows.Close()
-	var chats []ChatSummary
-	for rows.Next() {
-		var c ChatSummary
-		var last, read, muted int64
-		if err := rows.Scan(&c.JID, &c.Name, &c.IsGroup, &last, &read, &c.Messages, &c.Unread, &c.MemberCount, &muted,
-			&c.CommunityJID, &c.Community, &c.InCommunity); err != nil {
-			return nil, fmt.Errorf("listing chats: %w", err)
-		}
-		c.LastMessageAt, c.LastReadAt = time.Unix(last, 0), time.Unix(read, 0)
-		if muted != 0 {
-			c.MutedUntil = time.Unix(muted, 0)
-		}
-		chats = append(chats, c)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("listing chats: %w", err)
-	}
 	return chats, nil
+}
+
+// scanChatSummary reads one row of chatSummaryQuery.
+func scanChatSummary(rows *sql.Rows) (ChatSummary, error) {
+	var c ChatSummary
+	var last, read, muted int64
+	if err := rows.Scan(&c.JID, &c.Name, &c.IsGroup, &last, &read, &c.Messages, &c.Unread, &c.MemberCount, &muted,
+		&c.CommunityJID, &c.Community, &c.InCommunity); err != nil {
+		return c, err
+	}
+	c.LastMessageAt, c.LastReadAt = time.Unix(last, 0), time.Unix(read, 0)
+	if muted != 0 {
+		c.MutedUntil = time.Unix(muted, 0)
+	}
+	return c, nil
 }
 
 // SaveGroups records group names, topics and (when known) membership. A
@@ -259,16 +256,14 @@ func (s *Store) Details(ctx context.Context, chat string) (ChatDetails, error) {
 }
 
 func (s *Store) chat(ctx context.Context, jid string) (ChatSummary, error) {
-	chats, err := s.Chats(ctx)
+	chats, err := queryAll(ctx, s.db, chatSummaryQuery+` WHERE c.jid = ?`, []any{jid}, scanChatSummary)
 	if err != nil {
-		return ChatSummary{}, err
+		return ChatSummary{}, fmt.Errorf("loading chat %s: %w", jid, err)
 	}
-	for _, c := range chats {
-		if c.JID == jid {
-			return c, nil
-		}
+	if len(chats) == 0 {
+		return ChatSummary{}, fmt.Errorf("%w: %q", ErrChatNotFound, jid)
 	}
-	return ChatSummary{}, fmt.Errorf("%w: %q", ErrChatNotFound, jid)
+	return chats[0], nil
 }
 
 // Names returns the best known display name for each of jids that has one
