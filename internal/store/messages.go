@@ -272,17 +272,10 @@ func countReactions(rs []openedReaction) map[string][]wa.ReactionCount {
 // Reactor is one person's reaction to a message.
 type Reactor struct {
 	JID   string // their phone-number JID where known (privacy IDs resolved)
-	Name  string // as personName (falling back to their last push name here); "" if unknown
+	Name  string // as personName: contact name, "~" push name, business; "" if unknown
 	Emoji string
 	Mine  bool
 }
-
-// lastPushName is SQL for the name a reactor (alias r) last sent with a
-// message in the chat: reactions don't carry one, and strangers' names
-// arrive only with their messages.
-const lastPushName = `(SELECT m.push_name FROM messages m
-	WHERE m.chat_jid = r.chat_jid AND m.sender_jid IN (r.sender_jid, lm.pn) AND m.push_name != ''
-	ORDER BY m.ts DESC LIMIT 1)`
 
 // Reactors lists who reacted to a message and with what, oldest first.
 func (s *Store) Reactors(ctx context.Context, chat, id string) ([]Reactor, error) {
@@ -293,7 +286,7 @@ func (s *Store) Reactors(ctx context.Context, chat, id string) ([]Reactor, error
 		codec  int
 	}
 	rows, err := queryAll(ctx, s.db, `
-		SELECT r.sender_jid, COALESCE(lm.pn, r.sender_jid), `+personName("ct", lastPushName)+`, r.emoji, r.codec, r.from_me
+		SELECT r.sender_jid, COALESCE(lm.pn, r.sender_jid), `+personName("ct", "")+`, r.emoji, r.codec, r.from_me
 		FROM reactions r
 		LEFT JOIN lid_map lm ON lm.lid = r.sender_jid
 		LEFT JOIN contacts ct ON ct.jid = COALESCE(lm.pn, r.sender_jid)

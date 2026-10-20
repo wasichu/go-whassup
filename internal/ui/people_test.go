@@ -34,6 +34,10 @@ func groupWithStrangers(t *testing.T) *harness {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	// As the recorder does for every message it stores.
+	if err := h.st.SavePushNames(t.Context(), map[string]string{stranger: "Bobby"}); err != nil {
+		t.Fatal(err)
+	}
 	h.client.Emit(wa.HistorySync{})
 	h.settle()
 	h.selectChat(book)
