@@ -56,7 +56,8 @@ step lands or the plan changes.
    dwell while focused, `[privacy] mark_read` = local-only/read-receipts-off/read-receipts-on. *(Live test pending.)*
 3. [x] **Edits, deletes and reactions** applied to stored messages and shown in the
    TUI. *(Live test pending.)* Sending replies and reactions shipped in v0.2.0
-   (`ctrl+r`; reactions confirmed live in a group). Follow-up: sending edits/deletes.
+   (`ctrl+r`; reactions confirmed live in a group); who reacted shows on the `i` card
+   since v0.2.4. Follow-up: sending edits/deletes.
 4. [x] **Media:**
    - download and open attachments (`o`), with an extension allowlist;
    - send files (`a`): photos for JPEG/PNG/WebP, documents otherwise;
