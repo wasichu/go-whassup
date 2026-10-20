@@ -134,7 +134,7 @@ func isPlus(msg tea.KeyPressMsg) bool {
 	return msg.Text == "+" || msg.Code == '+' || msg.ShiftedCode == '+'
 }
 
-// The outcomes of c; the next key while picking clears them.
+// The outcomes of c, scoped: the next key while picking clears them.
 const (
 	copiedNotice = "Copied the message text."
 	noTextNotice = "That message has no text to copy."
@@ -146,9 +146,7 @@ const (
 // Other keys do nothing (nothing types).
 func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	c := &m.conv
-	if m.notice == copiedNotice || m.notice == noTextNotice {
-		m.notice = "" // it was about the previous key
-	}
+	m.clearScoped() // a "Copied" was about the previous key
 	switch {
 	case key.Matches(msg, keys.Blur):
 		c.stopPicking()
@@ -187,10 +185,10 @@ func (m Model) copyPicked() (Model, tea.Cmd) {
 	}
 	text := plainMentions(target.Text, m.conv.mentions, m.conv.own)
 	if strings.TrimSpace(text) == "" {
-		m.notice, m.noticeIsErr = noTextNotice, false
+		m.sayScoped(noTextNotice)
 		return m, nil
 	}
-	m.notice, m.noticeIsErr = copiedNotice, false
+	m.sayScoped(copiedNotice)
 	return m, tea.SetClipboard(text)
 }
 

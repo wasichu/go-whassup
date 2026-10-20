@@ -36,6 +36,30 @@ func renderHelpSection(s helpSection) string {
 	return strings.Join(lines, "\n")
 }
 
+// notice is the status line's message: an error, a hint, or an outcome.
+// A scoped one is about what's selected right now ("File opened.",
+// "Copied …"), so the next move clears it (clearScoped); the rest stay
+// until replaced.
+type notice struct {
+	text   string
+	err    bool
+	scoped bool
+}
+
+// say shows text in the status line until it's replaced.
+func (m *Model) say(text string) { m.notice = notice{text: text} }
+
+// sayScoped shows text about the current selection; see clearScoped.
+func (m *Model) sayScoped(text string) { m.notice = notice{text: text, scoped: true} }
+
+// clearScoped drops a notice about the previous selection, keeping
+// errors and hints.
+func (m *Model) clearScoped() {
+	if m.notice.scoped {
+		m.notice = notice{}
+	}
+}
+
 func (m Model) statusLine() string {
 	var state string
 	switch m.conn {
@@ -57,12 +81,12 @@ func (m Model) statusLine() string {
 	if n := m.sub.Dropped(); n > 0 {
 		parts = append(parts, errorStyle.Render(fmt.Sprintf("%d events dropped", n)))
 	}
-	if m.notice != "" {
+	if m.notice.text != "" {
 		style := statusStyle
-		if m.noticeIsErr {
+		if m.notice.err {
 			style = errorStyle
 		}
-		parts = append(parts, style.Render(m.notice))
+		parts = append(parts, style.Render(m.notice.text))
 	}
 	// Hints fill what's left, dropping whole ones ("…") rather than
 	// cutting one mid-word.

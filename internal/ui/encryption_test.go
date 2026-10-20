@@ -77,7 +77,7 @@ func TestEncryptionTurnsOnLive(t *testing.T) {
 	h.withEncryption(enc, config.KeySourceKeyring)
 	h.toggleEncryption("y")
 	h.waitSaves(1)
-	h.waitFor("the finish notice", func() bool { return strings.Contains(h.model().notice, "Encryption is on") })
+	h.waitFor("the finish notice", func() bool { return strings.Contains(h.model().notice.text, "Encryption is on") })
 	if got := enc.got(); len(got) != 1 || !got[0].on || got[0].source != config.KeySourceKeyring {
 		t.Fatalf("Set calls = %+v", got)
 	}
@@ -91,7 +91,7 @@ func TestEncryptionTurnsOnLive(t *testing.T) {
 	h.key("enter") // and off again: no passphrase, decrypts
 	h.key("y")
 	h.waitSaves(2)
-	h.waitFor("the decrypt notice", func() bool { return strings.Contains(h.model().notice, "search is back") })
+	h.waitFor("the decrypt notice", func() bool { return strings.Contains(h.model().notice.text, "search is back") })
 	if got := enc.got(); len(got) != 2 || got[1].on {
 		t.Fatalf("Set calls = %+v", got)
 	}
@@ -194,11 +194,11 @@ func TestSearchComesBackWhenDecrypted(t *testing.T) {
 func TestEncryptionFailureWording(t *testing.T) {
 	h := newHarness(t, true)
 	h.send(encryptionDoneMsg{seq: h.model().encSeq, err: &store.ResealError{Chat: "c", ID: "m1", Err: errors.New("message authentication failed")}})
-	if n := h.model().notice; !strings.Contains(n, "stops there every time") || strings.Contains(n, "retried") {
+	if n := h.model().notice.text; !strings.Contains(n, "stops there every time") || strings.Contains(n, "retried") {
 		t.Errorf("unreadable value: %q", n)
 	}
 	h.send(encryptionDoneMsg{seq: h.model().encSeq, err: errors.New("disk I/O error")})
-	if n := h.model().notice; !strings.Contains(n, "retried at the next start") {
+	if n := h.model().notice.text; !strings.Contains(n, "retried at the next start") {
 		t.Errorf("other failure: %q", n)
 	}
 }

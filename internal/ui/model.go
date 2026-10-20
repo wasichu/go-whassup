@@ -66,9 +66,8 @@ type Model struct {
 	showHelp      bool
 	focus         focus
 	conn          connState
-	notice        string // last error or hint, shown in the status line
-	noticeIsErr   bool
-	trueColor     bool // terminal renders 24-bit color (inline images need it)
+	notice        notice // shown in the status line (status.go)
+	trueColor     bool   // terminal renders 24-bit color (inline images need it)
 
 	chats     chatList
 	conv      conversation
@@ -107,11 +106,11 @@ func New(ctx context.Context, deps Deps, sub *wa.Subscription) Model {
 	m := Model{ctx: ctx, deps: deps, sub: sub, configs: &configWriter{}, conv: newConversation(), login: newLogin(), conn: connConnecting, help: h, ownJID: deps.Client.OwnJID(), termFocused: true, downloading: map[string]bool{}, notified: map[string]time.Time{}}
 	switch {
 	case deps.Notice != "":
-		m.notice = deps.Notice
+		m.say(deps.Notice)
 	case deps.FocusHint != "":
-		m.notice = deps.FocusHint
+		m.say(deps.FocusHint)
 	case deps.Notify.Hint != "" && deps.Config.Notifications.Enabled:
-		m.notice = deps.Notify.Hint
+		m.say(deps.Notify.Hint)
 	}
 	if !deps.Client.IsPaired() {
 		m.conn = connNotPaired
@@ -225,7 +224,7 @@ func (m Model) actionDone(msg tea.Msg) (Model, tea.Cmd) {
 		if msg.err != nil {
 			m.setError("sending file", msg.err)
 		} else {
-			m.notice = ""
+			m.notice = notice{}
 		}
 	case sendResultMsg:
 		if msg.err != nil {
@@ -286,7 +285,7 @@ func (m Model) messagesLoaded(msg messagesLoadedMsg) Model {
 	m.conv.setMessages(msg.msgs)
 	if h := m.conv.highlight; h != "" {
 		if _, ok := m.conv.lineOf[h]; !ok {
-			m.notice, m.noticeIsErr = fmt.Sprintf("That message is older than the %d loaded here.", messagesPerChat), false
+			m.say(fmt.Sprintf("That message is older than the %d loaded here.", messagesPerChat))
 			m.conv.highlight = ""
 		}
 	}
@@ -377,7 +376,7 @@ func (m Model) sendInput() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.conv.input.Reset()
-	m.notice = ""
+	m.notice = notice{}
 	if to := m.conv.replyTo; to != nil {
 		m.conv.setReply(nil)
 		return m, sendReply(m.ctx, m.deps.Client, m.conv.chat.JID, text, *to)
@@ -444,7 +443,7 @@ func (m Model) handleEvent(evt wa.Event) (tea.Model, tea.Cmd) {
 		var done bool
 		if m, loginCmd, done = m.loginEvent(evt); done {
 			m.screen = screenMain
-			m.notice, m.noticeIsErr = "Linked. History will appear as your phone sends it.", false
+			m.say("Linked. History will appear as your phone sends it.")
 		}
 	}
 	next = tea.Batch(next, loginCmd)
@@ -485,7 +484,7 @@ func (m Model) handleEvent(evt wa.Event) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) setError(what string, err error) {
-	m.notice, m.noticeIsErr = fmt.Sprintf("%s: %v", what, err), true
+	m.notice = notice{text: fmt.Sprintf("%s: %v", what, err), err: true}
 	m.deps.Log.Error(what, "err", err)
 }
 

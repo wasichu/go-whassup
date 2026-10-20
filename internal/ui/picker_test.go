@@ -140,19 +140,19 @@ func TestSaveAttachmentCopy(t *testing.T) {
 	h.key("enter") // into the message box
 	h.key("ctrl+o")
 	h.key("d")
-	h.waitFor("the saved copy", func() bool { return strings.HasPrefix(h.model().notice, "Saved to ") })
+	h.waitFor("the saved copy", func() bool { return strings.HasPrefix(h.model().notice.text, "Saved to ") })
 	data, err := os.ReadFile(filepath.Join(save, "report.pdf"))
 	if err != nil || string(data) != "%PDF-1.7" {
 		t.Fatalf("saved copy = %q, %v", data, err)
 	}
-	if n := h.model().notice; !strings.HasPrefix(n, "Saved to ") || !strings.HasSuffix(n, "report.pdf") {
+	if n := h.model().notice.text; !strings.HasPrefix(n, "Saved to ") || !strings.HasSuffix(n, "report.pdf") {
 		t.Errorf("notice = %q", n)
 	}
 	if v := ansi.Strip(h.view()); !strings.Contains(v, "esc back") || !strings.Contains(v, "d save a copy") {
 		t.Errorf("the attachments view should show its keys, esc included:\n%s", v)
 	}
 	h.key("d") // again: a second copy, not an overwrite
-	h.waitFor("the second copy", func() bool { return strings.HasSuffix(h.model().notice, "report (1).pdf") })
+	h.waitFor("the second copy", func() bool { return strings.HasSuffix(h.model().notice.text, "report (1).pdf") })
 	if _, err := os.Stat(filepath.Join(save, "report (1).pdf")); err != nil {
 		t.Errorf("second save: %v", err)
 	}
@@ -170,11 +170,11 @@ func TestOpenedNoticeIsShortAndClearsOnMove(t *testing.T) {
 	h.key("ctrl+o")
 	h.key("enter") // open the newest
 	h.settle()
-	if n := h.model().notice; n != "File opened." {
+	if n := h.model().notice.text; n != "File opened." {
 		t.Fatalf("notice = %q, want just \"File opened.\" (no cache file name)", n)
 	}
 	h.key("down")
-	if n := h.model().notice; n != "" {
+	if n := h.model().notice.text; n != "" {
 		t.Errorf("moving to another attachment should clear the notice, got %q", n)
 	}
 }
@@ -187,11 +187,11 @@ func TestOpenedNoticeGoesWhenLeaving(t *testing.T) {
 	h.key("ctrl+o")
 	h.key("enter")
 	h.settle()
-	if h.model().notice != "File opened." {
-		t.Fatalf("notice = %q", h.model().notice)
+	if h.model().notice.text != "File opened." {
+		t.Fatalf("notice = %q", h.model().notice.text)
 	}
 	h.key("esc")
-	if n := h.model().notice; n != "" || h.model().screen != screenMain {
+	if n := h.model().notice.text; n != "" || h.model().screen != screenMain {
 		t.Errorf("esc back to the chat should clear the notice, got %q", n)
 	}
 
@@ -199,7 +199,7 @@ func TestOpenedNoticeGoesWhenLeaving(t *testing.T) {
 	h.key("ctrl+o")
 	h.key("esc")
 	h.send(mediaOpenedMsg{chat: ada, id: "doc1", path: "/cache/abc.pdf"})
-	if n := h.model().notice; n != "" {
+	if n := h.model().notice.text; n != "" {
 		t.Errorf("late \"File opened.\" on the chat screen: %q", n)
 	}
 }

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -207,11 +208,11 @@ func TestCopySelectedMessageText(t *testing.T) {
 	if cmd == nil || !reflect.DeepEqual(cmd(), tea.SetClipboard("hello from ada")()) {
 		t.Fatalf("c should copy the message text; got %v", cmd)
 	}
-	if m.notice != copiedNotice {
-		t.Errorf("notice = %q", m.notice)
+	if m.notice.text != copiedNotice {
+		t.Errorf("notice = %q", m.notice.text)
 	}
-	if m, _ = m.pickKey(tea.KeyPressMsg{Code: tea.KeyUp}); m.notice != "" {
-		t.Errorf("the next key should clear the notice, got %q", m.notice)
+	if m, _ = m.pickKey(tea.KeyPressMsg{Code: tea.KeyUp}); m.notice.text != "" {
+		t.Errorf("the next key should clear the notice, got %q", m.notice.text)
 	}
 
 	photo := wa.Message{ID: "p1", Chat: ada, Sender: ada, Timestamp: day.Add(time.Hour), Kind: wa.KindImage}
@@ -222,7 +223,21 @@ func TestCopySelectedMessageText(t *testing.T) {
 	h.settle()
 	h.key("esc")
 	h.key("ctrl+r") // the uncaptioned photo, now newest
-	if m, cmd = h.model().pickKey(tea.KeyPressMsg{Code: 'c', Text: "c"}); cmd != nil || m.notice != noTextNotice {
-		t.Errorf("a photo without a caption has nothing to copy: cmd %v, notice %q", cmd, m.notice)
+	if m, cmd = h.model().pickKey(tea.KeyPressMsg{Code: 'c', Text: "c"}); cmd != nil || m.notice.text != noTextNotice {
+		t.Errorf("a photo without a caption has nothing to copy: cmd %v, notice %q", cmd, m.notice.text)
+	}
+}
+
+func TestMovingKeepsErrorsButClearsScopedNotices(t *testing.T) {
+	h := openAda(t)
+	h.key("ctrl+r")
+	m := h.model()
+	m.setError("sending", errors.New("offline"))
+	if m, _ = m.pickKey(tea.KeyPressMsg{Code: tea.KeyUp}); !m.notice.err {
+		t.Errorf("an error should outlast a move, got %+v", m.notice)
+	}
+	m.sayScoped("about the old selection")
+	if m, _ = m.pickKey(tea.KeyPressMsg{Code: tea.KeyDown}); m.notice.text != "" {
+		t.Errorf("a scoped notice should clear on the next key, got %+v", m.notice)
 	}
 }

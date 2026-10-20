@@ -39,7 +39,7 @@ func (m Model) openPicker() (Model, tea.Cmd) {
 		}
 	}
 	if len(items) == 0 {
-		m.notice, m.noticeIsErr = "No attachments in this chat.", false
+		m.say("No attachments in this chat.")
 		return m, nil
 	}
 	m.screen, m.picker = screenPicker, picker{items: items, preview: previewer{owner: "picker", tmux: m.deps.Graphics.Tmux}}
@@ -62,7 +62,7 @@ func (p *picker) update(r rootAPI, msg tea.Msg) (bool, tea.Cmd) {
 func (p *picker) key(r rootAPI, k tea.KeyPressMsg) (bool, tea.Cmd) {
 	switch {
 	case key.Matches(k, keys.Back):
-		r.notify("") // what it said was about this view's attachments
+		r.clearNotice() // what it said was about this view's attachments
 		return true, p.preview.hide()
 	case key.Matches(k, keys.Up):
 		return false, p.move(r, -1)
@@ -82,7 +82,7 @@ func (p *picker) move(r rootAPI, delta int) tea.Cmd {
 		return nil
 	}
 	p.selected = next
-	r.notify("") // an outcome ("File opened.") was about the previous attachment
+	r.clearNotice() // an outcome ("File opened.") was about the previous attachment
 	return p.highlightChanged(r.inlineImages())
 }
 
@@ -144,7 +144,7 @@ func (m *Model) fetch(item wa.Message, verb string, then func(context.Context, D
 		return nil
 	}
 	m.downloading[item.ID] = true
-	m.notice, m.noticeIsErr = verb+" "+mediaLabel(item)+"…", false
+	m.sayScoped(verb + " " + mediaLabel(item) + "…") // answered by the result
 	return then(m.ctx, m.deps, m.conv.chat.JID, item)
 }
 
@@ -182,27 +182,28 @@ func (m Model) mediaOpened(msg mediaOpenedMsg) (Model, tea.Cmd) {
 	delete(m.downloading, msg.id)
 	switch {
 	case errors.Is(msg.err, wa.ErrMediaExpired):
-		m.notice, m.noticeIsErr = "That file is no longer on WhatsApp's servers; ask the sender to send it again.", false
+		m.say("That file is no longer on WhatsApp's servers; ask the sender to send it again.")
 	case msg.err != nil && msg.save:
 		m.setError("saving attachment", msg.err)
 	case msg.save:
-		m.notice, m.noticeIsErr = "Saved to "+tildePath(msg.path), false
+		saved := "Saved to " + tildePath(msg.path)
 		if m.deps.Config.Encryption.Enabled {
-			m.notice += " (not encrypted)"
+			saved += " (not encrypted)"
 		}
+		m.say(saved)
 	case errors.Is(msg.err, media.ErrNotOpenable):
 		// The cached copy's path means nothing to the user (hashed name,
 		// maybe a temporary folder); say what they can do instead.
-		m.notice, m.noticeIsErr = "Not opened: unrecognised file type. Press d to save a copy.", false
+		m.say("Not opened: unrecognised file type. Press d to save a copy.")
 	case msg.err != nil:
 		m.setError("opening attachment", msg.err)
 	default:
 		// The cached file's name is a hash: nothing worth showing. And only
 		// while the attachments view is still open: it's no news elsewhere.
 		if m.screen == screenPicker {
-			m.notice, m.noticeIsErr = "File opened.", false
-		} else if m.notice != "" && !m.noticeIsErr {
-			m.notice = "" // the "Downloading …" this answers
+			m.sayScoped("File opened.")
+		} else {
+			m.clearScoped() // the "Downloading …" this answers
 		}
 	}
 	if msg.chat == m.conv.chat.JID {

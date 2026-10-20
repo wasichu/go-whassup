@@ -74,7 +74,8 @@ func (r rootAPI) own() string                     { return r.m.ownJID }
 func (r rootAPI) chat() store.ChatSummary         { return r.m.conv.chat }
 func (r rootAPI) cached(id string) bool           { return r.m.conv.cached[id] }
 func (r rootAPI) downloading(id string) bool      { return r.m.downloading[id] }
-func (r rootAPI) notify(text string)              { r.m.notice, r.m.noticeIsErr = text, false }
+func (r rootAPI) notify(text string)              { r.m.say(text) }
+func (r rootAPI) clearNotice()                    { r.m.notice = notice{} }
 func (r rootAPI) setError(what string, err error) { r.m.setError(what, err) }
 
 // openChat leaves the page for chat c (see Model.openChat).

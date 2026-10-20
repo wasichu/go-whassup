@@ -91,9 +91,9 @@ func waitEncryption(done <-chan error, seq int, on bool) tea.Cmd {
 func (m *Model) encryptionStarted(done <-chan error, on bool) tea.Cmd {
 	m.encSeq++
 	if on {
-		m.notice, m.noticeIsErr = "Encrypting stored messages in the background…", false
+		m.say("Encrypting stored messages in the background…")
 	} else {
-		m.notice, m.noticeIsErr = "Decrypting stored messages in the background…", false
+		m.say("Decrypting stored messages in the background…")
 	}
 	return waitEncryption(done, m.encSeq, on)
 }
@@ -113,9 +113,9 @@ func (m Model) encryptionDone(msg encryptionDoneMsg) (Model, tea.Cmd) {
 	case msg.err != nil:
 		m.setError("changing encryption stopped (it's retried at the next start)", msg.err)
 	case msg.on:
-		m.notice, m.noticeIsErr = "Encryption is on: stored messages are encrypted.", false
+		m.say("Encryption is on: stored messages are encrypted.")
 	default:
-		m.notice, m.noticeIsErr = "Encryption is off: messages decrypted, and search is back.", false
+		m.say("Encryption is off: messages decrypted, and search is back.")
 	}
 	if m.screen != screenSearch {
 		return m, nil
