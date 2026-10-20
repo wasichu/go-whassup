@@ -98,8 +98,7 @@ func (p *picker) startPreview(r rootAPI, msg previewTickMsg) tea.Cmd {
 		return nil
 	}
 	it, chat, cache := p.items[p.selected], r.chat().JID, r.deps().Media
-	w, h := r.size()
-	_, cols, rows := splitLayout(w, h-1)
+	_, cols, rows := splitLayout(r.pageSize())
 	return p.preview.load(it.ID, cols, rows, func(cols, rows int) ([]byte, error) {
 		return attachmentPreview(cache, chat, it, cols, rows)
 	})

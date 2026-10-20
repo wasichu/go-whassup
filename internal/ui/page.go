@@ -92,9 +92,6 @@ func (r rootAPI) jumpTo(hit store.SearchHit) tea.Cmd {
 	return cmd
 }
 
-// size is the terminal's size in cells.
-func (r rootAPI) size() (width, height int) { return r.m.width, r.m.height }
-
 // pageSize is the size a page's view gets: the screen less the status line.
 func (r rootAPI) pageSize() (width, height int) { return r.m.width, r.m.bodyHeight() }
 

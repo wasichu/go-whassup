@@ -178,8 +178,7 @@ func (b *browser) startPreview(r rootAPI, msg previewTickMsg) tea.Cmd {
 	if !b.preview.due(msg) || !ok {
 		return nil
 	}
-	w, h := r.size()
-	_, cols, rows := splitLayout(w, h-1)
+	_, cols, rows := splitLayout(r.pageSize())
 	path := filepath.Join(b.dir, e.name)
 	return b.preview.load(path, cols, rows, func(cols, rows int) ([]byte, error) { return previewPNG(path, cols, rows) })
 }
