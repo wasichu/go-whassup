@@ -169,8 +169,10 @@ func TestSenderLabel(t *testing.T) {
 		want string
 	}{
 		{wa.Message{FromMe: true, PushName: "Me"}, "me"},
-		{wa.Message{PushName: "Ada", Sender: "1@s"}, "Ada"},
-		{wa.Message{Sender: "1@s"}, "1@s"},
+		{wa.Message{SenderName: "Ada Lovelace", PushName: "Ada", Sender: "15551234567@s.whatsapp.net"}, "Ada Lovelace"},
+		{wa.Message{PushName: "Ada", Sender: "15551234567@s.whatsapp.net"}, "~Ada"},
+		{wa.Message{Sender: "15551234567@s.whatsapp.net"}, "+15551234567"},
+		{wa.Message{Sender: "98765432109876@lid"}, "unknown member"}, // not the ID: it isn't a number
 	}
 	for _, tt := range tests {
 		if got := senderLabel(tt.msg); got != tt.want {

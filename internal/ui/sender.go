@@ -66,7 +66,7 @@ func (s *senderCard) update(r rootAPI, msg tea.Msg) (bool, tea.Cmd) {
 			return true, nil
 		case msg.String() == "c" && !store.IsPrivacyID(s.jid):
 			s.copied = true
-			return false, tea.SetClipboard(numberOf(s.jid))
+			return false, tea.SetClipboard(store.NumberOf(s.jid))
 		}
 	}
 	return false, nil
@@ -105,7 +105,7 @@ func (s *senderCard) view(r rootAPI, width, height int) string {
 	if store.IsPrivacyID(s.jid) {
 		lines = append(lines, "Number:              "+faintStyle.Render("hidden by WhatsApp (this group uses privacy IDs)"))
 	} else {
-		lines = append(lines, "Number:              "+numberOf(s.jid))
+		lines = append(lines, "Number:              "+store.NumberOf(s.jid))
 	}
 	if s.copied {
 		lines = append(lines, "", faintStyle.Render("Copied to the clipboard (if your terminal allows it)."))

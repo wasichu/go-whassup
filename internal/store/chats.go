@@ -70,13 +70,6 @@ type ChatSummary struct {
 	InCommunity  string
 }
 
-// UnknownPerson names someone WhatsApp identifies only by a privacy ID
-// ("…@lid": a code, not their number) who hasn't told us a name.
-const UnknownPerson = "unknown member"
-
-// IsPrivacyID reports whether jid is a privacy ID rather than a number.
-func IsPrivacyID(jid string) bool { return strings.HasSuffix(jid, "@lid") }
-
 // Muted reports whether the chat is muted at now.
 func (c ChatSummary) Muted(now time.Time) bool { return c.MutedUntil.After(now) }
 
@@ -85,14 +78,7 @@ func (c ChatSummary) Title() string {
 	if c.Name != "" {
 		return c.Name
 	}
-	// Someone not in the address book: show their number, like the phone.
-	if user, ok := strings.CutSuffix(c.JID, "@s.whatsapp.net"); ok {
-		return "+" + user
-	}
-	if IsPrivacyID(c.JID) {
-		return UnknownPerson // a privacy ID isn't a number worth showing
-	}
-	return c.JID
+	return NumberOf(c.JID) // someone not in the address book, like the phone
 }
 
 // titleSQL picks a chat's display name, like WhatsApp does: for a group its

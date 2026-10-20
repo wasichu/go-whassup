@@ -229,8 +229,8 @@ func newDivider(msgs []wa.Message, newFrom time.Time) (count, at int) {
 // messageLine is one message's unwrapped line: time, sender and body
 // (with edit/delete markers and attachment info).
 func messageLine(m wa.Message, chat store.ChatSummary, opts renderOpts) string {
-	who := senderName(m, chat)
-	name := nameStyle(who, senderStyle).Render(who)
+	who, named := senderLabel(m, chat)
+	name := nameStyle(named, senderStyle).Render(who)
 	if m.FromMe {
 		name = fromMeStyle.Render("me")
 	}
@@ -253,40 +253,29 @@ func messageLine(m wa.Message, chat store.ChatSummary, opts renderOpts) string {
 	return faintStyle.Render(m.Timestamp.Local().Format("15:04")) + " " + name + ": " + body
 }
 
-// senderName labels an incoming message: in a DM the chat's own title, in a
-// group the sender's best known name (address book, else "~" and the name
-// they chose), falling back to their number, or "unknown member" for a
-// privacy ID.
-func senderName(m wa.Message, chat store.ChatSummary) string {
+// senderLabel labels an incoming message: in a DM the chat's own title,
+// in a group how its author is shown (store.Author). named is false for a
+// fallback (a number, "unknown member").
+func senderLabel(m wa.Message, chat store.ChatSummary) (label string, named bool) {
 	if !m.IsGroup && chat.Name != "" {
-		return chat.Name
+		return chat.Name, true
 	}
-	if m.SenderName != "" {
-		return m.SenderName
-	}
-	if m.PushName != "" {
-		return "~" + m.PushName
-	}
-	return numberOf(m.Sender)
+	return store.Author(m)
 }
 
-// numberOf is how a person without a name is shown: "+15551234567", or
-// "unknown member" for a privacy ID (which isn't their number).
-func numberOf(jid string) string {
-	if store.IsPrivacyID(jid) || jid == "" {
-		return store.UnknownPerson
-	}
-	user, _, _ := strings.Cut(jid, "@")
-	return "+" + user
+// senderName is senderLabel's text, where styling doesn't matter.
+func senderName(m wa.Message, chat store.ChatSummary) string {
+	label, _ := senderLabel(m, chat)
+	return label
 }
 
-// nameStyle dims a name that's only a number or "unknown member", so real
-// names stand out.
-func nameStyle(name string, named lipgloss.Style) lipgloss.Style {
-	if strings.HasPrefix(name, "+") || name == store.UnknownPerson {
+// nameStyle dims a label that isn't a name (a number, "unknown member"),
+// so real names stand out.
+func nameStyle(named bool, style lipgloss.Style) lipgloss.Style {
+	if !named {
 		return faintStyle
 	}
-	return named
+	return style
 }
 
 // renderReactions summarises reactions as "👍 2  ❤️", marking the user's own.

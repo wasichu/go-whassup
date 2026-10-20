@@ -69,7 +69,7 @@ func (in *info) view(r rootAPI, width, height int) string {
 	d := in.details
 	lines := []string{paneTitleStyle.Render(chatTitle(d.ChatSummary, r.own())), ""}
 	if !d.IsGroup {
-		lines = append(lines, "Number:  "+numberOf(d.JID))
+		lines = append(lines, "Number:  "+store.NumberOf(d.JID))
 		if d.PushName != "" && "~"+d.PushName != d.Name && d.PushName != d.Name {
 			lines = append(lines, "Calls themselves: "+d.PushName)
 		}
@@ -92,15 +92,12 @@ func (in *info) view(r rootAPI, width, height int) string {
 // memberLine is one group member: name (or number, dimmed), number, admin.
 // A privacy ID has no number to show.
 func memberLine(mem store.Member, own string) string {
-	number := numberOf(mem.JID)
-	name := mem.Name
-	if name == "" {
-		name = number
-	}
+	number := store.NumberOf(mem.JID)
+	name, named := store.PersonLabel(mem.Name, "", mem.JID)
 	if mem.JID == own {
 		name = strings.TrimPrefix(name, "~") + " (You)"
 	}
-	line := "  " + nameStyle(name, lipgloss.NewStyle()).Render(name)
+	line := "  " + nameStyle(named, lipgloss.NewStyle()).Render(name)
 	if mem.Name != "" && !store.IsPrivacyID(mem.JID) {
 		line += "  " + faintStyle.Render(number)
 	}

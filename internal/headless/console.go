@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/wasichu/go-whassup/internal/store"
 	"github.com/wasichu/go-whassup/internal/wa"
 )
 
@@ -188,16 +189,11 @@ func (c Console) printEvent(evt wa.Event) {
 }
 
 func senderLabel(m wa.Message) string {
-	switch {
-	case m.FromMe:
+	if m.FromMe {
 		return "me"
-	case m.SenderName != "":
-		return m.SenderName
-	case m.PushName != "":
-		return m.PushName
-	default:
-		return m.Sender
 	}
+	label, _ := store.Author(m) // the TUI's rule: "~" for chosen names, never a privacy ID
+	return label
 }
 
 func (c Console) prompt(label string) (string, error) {

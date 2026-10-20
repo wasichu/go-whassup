@@ -120,6 +120,12 @@ There are two kinds of consumers:
   whatsmeow's `ParseWebMessage`. Empty batches aren't emitted. App-state sync,
   receipts and presence are still only logged at debug level.
 
+- **How a person is shown** is decided in one place, used by the TUI and the headless
+  commands alike: `personName` (SQL, in `store/chats.go`) picks your address book's name,
+  else `~` and their chosen name, else a business name; `store.PersonLabel`/`Author`/
+  `NumberOf` (`store/people.go`) fall back to `+number`, or "unknown member" for a privacy
+  ID, and report whether the label is a real name (the TUI dims the fallbacks).
+
 ## TUI structure (`internal/ui`)
 
 - **One root `Model`** with a `screen`, a `?` help overlay, and the state of every
