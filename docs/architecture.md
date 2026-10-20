@@ -33,6 +33,9 @@ cmd/go-whassup (main: signals + exit code only)
   enforced by depguard in `.golangci.yml`. Everything else depends on the
   `wa.Client` interface and plain `wa.Event` values (strings and `time.Time`,
   never whatsmeow types).
+- **`wa.Client` is one interface on purpose**, though it has grown past a dozen methods:
+  it's the adapter boundary, with one real implementation and one fake, and splitting
+  it would buy nothing yet (reviewed 2026-10-20).
 - **`internal/wa/watest`** holds the shared fake `wa.Client`. Use it in tests for
   `headless`, `ui` and future packages rather than writing ad-hoc fakes.
 
@@ -129,7 +132,14 @@ There are two kinds of consumers:
 ## TUI structure (`internal/ui`)
 
 - **One root `Model`** with a `screen`, a `?` help overlay, and the state of every
-  screen in its own field. Everything changes only in `Update`.
+  screen in its own field. Everything changes only in `Update`. The field count grows
+  with each page; that's the Elm/Bubble Tea shape, kept on purpose (reviewed
+  2026-10-20). Pages already stay out of the root through `page` and `rootAPI`, so
+  splitting the struct would add indirection without removing coupling.
+- **The status line's message is a `notice`** (`status.go`): `say` for hints and
+  outcomes, `setError` for errors, `sayScoped` for news about the current selection
+  ("File opened.", "Copied …"), which the next move drops with `clearScoped`. Don't
+  clear a notice by comparing its text.
 - **The main and login screens live in the root**: they react to protocol events and
   own focus, drafts, the read timer and pairing. `draft` holds a chat opened from the
   finder that has no messages yet (`setDraft` also gives the chat list its placeholder
