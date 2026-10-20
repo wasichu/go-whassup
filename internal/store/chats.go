@@ -91,8 +91,9 @@ func (c ChatSummary) Title() string {
 const titleSQL = `CASE WHEN c.is_group THEN ` + groupTitleSQL + ` ELSE COALESCE(
 	NULLIF(ct.name, ''), NULLIF(c.name, ''), '~' || NULLIF(ct.push_name, ''), NULLIF(ct.business_name, ''), '') END`
 
+// groupTitleSQL needs the community's row joined as p (chatSummaryQuery).
 const groupTitleSQL = `COALESCE(
-	NULLIF((SELECT p.name FROM chats p WHERE p.jid = c.community_jid), '') || ' › ' ||
+	NULLIF(p.name, '') || ' › ' ||
 		CASE WHEN c.is_announcements THEN 'Announcements' ELSE c.name END,
 	CASE WHEN c.is_announcements AND c.name != '' THEN c.name || ' › Announcements' END,
 	c.name)`
