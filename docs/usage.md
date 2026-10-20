@@ -197,8 +197,11 @@ Web links (`http://`, `https://`) in messages are underlined and clickable: your
 terminal opens them, usually with cmd-click (macOS) or ctrl-click. go-whassup
 marks them with OSC 8 hyperlinks and opens nothing itself; the text shown is always the
 whole address, so a link can't hide where it goes. Ghostty, kitty, iTerm2 and WezTerm
-support this; tmux 3.4+ passes links through with
-`set -as terminal-features ',*:hyperlinks'`.
+support this. In tmux 3.4+:
+- add `set -as terminal-features ',*:hyperlinks'` to your tmux config, then detach and
+  reattach (tmux reads terminal features when a client attaches);
+- with `set -g mouse on`, tmux receives your clicks, so add **Shift**: cmd-shift-click
+  in Ghostty.
 
 ### Edits, deletes and reactions
 
