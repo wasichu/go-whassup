@@ -68,6 +68,7 @@ func (m Model) updatePage(msg tea.Msg) (_ Model, _ tea.Cmd, ok bool) {
 type rootAPI struct{ m *Model }
 
 func (r rootAPI) ctx() context.Context            { return r.m.ctx }
+func (r rootAPI) configWriter() *configWriter     { return r.m.configs }
 func (r rootAPI) deps() Deps                      { return r.m.deps }
 func (r rootAPI) own() string                     { return r.m.ownJID }
 func (r rootAPI) chat() store.ChatSummary         { return r.m.conv.chat }

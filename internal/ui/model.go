@@ -74,6 +74,7 @@ type Model struct {
 	conv      conversation
 	login     login
 	settings  settings
+	configs   *configWriter // saves settings in order (settings.go)
 	finder    finder
 	picker    picker
 	attach    attach
@@ -103,7 +104,7 @@ func New(ctx context.Context, deps Deps, sub *wa.Subscription) Model {
 	h := help.New()
 	h.Styles.ShortKey, h.Styles.FullKey = statusStyle.Bold(true), senderStyle
 	h.Styles.ShortDesc, h.Styles.ShortSeparator = statusStyle, statusStyle
-	m := Model{ctx: ctx, deps: deps, sub: sub, conv: newConversation(), login: newLogin(), conn: connConnecting, help: h, ownJID: deps.Client.OwnJID(), termFocused: true, downloading: map[string]bool{}, notified: map[string]time.Time{}}
+	m := Model{ctx: ctx, deps: deps, sub: sub, configs: &configWriter{}, conv: newConversation(), login: newLogin(), conn: connConnecting, help: h, ownJID: deps.Client.OwnJID(), termFocused: true, downloading: map[string]bool{}, notified: map[string]time.Time{}}
 	switch {
 	case deps.Notice != "":
 		m.notice = deps.Notice
@@ -196,6 +197,9 @@ func (m Model) forward(msg tea.Msg) (Model, tea.Cmd) {
 // configSaved adopts a saved config (even if the settings page has closed
 // meanwhile) and lets the page show the outcome.
 func (m Model) configSaved(msg configSavedMsg) (Model, tea.Cmd) {
+	if msg.superseded {
+		return m, nil // a newer save was written and reports itself
+	}
 	var reload tea.Cmd
 	if msg.saved {
 		m.deps.Config = msg.cfg

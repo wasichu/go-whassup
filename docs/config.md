@@ -33,7 +33,8 @@ TUI's Settings screen (`,`) reads and writes it.
   empty text setting asks for it at once, and Esc drops the choice too. The TUI renders and edits them generically, so a new setting appears there
   with no UI code. A change goes through `Validate` → `Save` → `ApplyConfig` (wired in
   `internal/app`), which updates the client's pairing options and the recorder's
-  retention, then prunes.
+  retention, then prunes. Saves run off the UI goroutine one at a time, newest wins
+  (`configWriter`): quick changes (`←` `←`) can't land out of order.
 - **Adding a setting:**
   1. Add a field with `toml` and `comment` tags (plus `applies:"pairing"` if it only
      matters when linking).

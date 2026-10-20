@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -186,4 +188,32 @@ func hasSettingRow(view, key string) bool {
 		}
 	}
 	return false
+}
+
+func TestConfigSavesNewestWins(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	var applied []string
+	deps := Deps{ConfigPath: path, ApplyConfig: func(_ context.Context, c config.Config) error {
+		applied = append(applied, c.Encryption.KeySource)
+		return nil
+	}}
+	older, newer := config.Default(), config.Default()
+	older.Encryption.KeySource, newer.Encryption.KeySource = "prompt", "keyring"
+	w := &configWriter{}
+	saveOlder, saveNewer := w.save(t.Context(), deps, older), w.save(t.Context(), deps, newer)
+
+	// The newer save finishes first; the older one must not then overwrite it.
+	if msg := saveNewer().(configSavedMsg); !msg.saved {
+		t.Fatalf("newer save: %+v", msg)
+	}
+	if msg := saveOlder().(configSavedMsg); !msg.superseded || msg.saved {
+		t.Errorf("older save should be skipped: %+v", msg)
+	}
+	got, err := config.Load(path)
+	if err != nil || got.Encryption.KeySource != "keyring" {
+		t.Errorf("on disk: %q, %v; want keyring", got.Encryption.KeySource, err)
+	}
+	if len(applied) != 1 || applied[0] != "keyring" {
+		t.Errorf("applied = %v, want just keyring", applied)
+	}
 }

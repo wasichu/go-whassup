@@ -3,6 +3,8 @@ package ui
 import (
 	"context"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
@@ -49,22 +51,46 @@ type configSavedMsg struct {
 	// encryption, if set, is a re-seal the change started (see Encryption).
 	encryption   <-chan error
 	encryptionOn bool
+	// superseded: a newer save was written first, so this one was skipped.
+	superseded bool
 }
 
-// saveConfig writes cfg and applies it to the running app. Both happen off
-// the UI goroutine; the result comes back as configSavedMsg.
-func saveConfig(ctx context.Context, deps Deps, cfg config.Config) tea.Cmd {
-	return func() tea.Msg {
-		if err := config.Save(deps.ConfigPath, cfg); err != nil {
-			return configSavedMsg{err: err}
-		}
-		if deps.ApplyConfig != nil {
-			if err := deps.ApplyConfig(ctx, cfg); err != nil {
-				return configSavedMsg{cfg: cfg, saved: true, err: err}
-			}
-		}
-		return configSavedMsg{cfg: cfg, saved: true}
+// configWriter runs saves one at a time, newest wins. Each change starts
+// a save off the UI goroutine, so two quick changes (← ←) would otherwise
+// race, and the older one could land last on disk and in the running app.
+// A save takes its number when it's created, in key-press order, and is
+// skipped if a newer one has already been written.
+type configWriter struct {
+	mu      sync.Mutex
+	next    atomic.Uint64
+	written uint64 // the newest save written; guarded by mu
+}
+
+// save returns a command that writes cfg and applies it to the running app,
+// off the UI goroutine; the result comes back as configSavedMsg. Call it
+// on the UI goroutine, so numbering follows the order of changes.
+func (w *configWriter) save(ctx context.Context, deps Deps, cfg config.Config) tea.Cmd {
+	seq := w.next.Add(1)
+	return func() tea.Msg { return w.write(ctx, deps, cfg, seq) }
+}
+
+// write saves cfg as save number seq, unless a newer one got there first.
+func (w *configWriter) write(ctx context.Context, deps Deps, cfg config.Config, seq uint64) configSavedMsg {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if seq < w.written {
+		return configSavedMsg{superseded: true}
 	}
+	w.written = seq
+	if err := config.Save(deps.ConfigPath, cfg); err != nil {
+		return configSavedMsg{err: err}
+	}
+	if deps.ApplyConfig != nil {
+		if err := deps.ApplyConfig(ctx, cfg); err != nil {
+			return configSavedMsg{cfg: cfg, saved: true, err: err}
+		}
+	}
+	return configSavedMsg{cfg: cfg, saved: true}
 }
 
 func (m Model) openSettings() Model {
@@ -128,7 +154,7 @@ func (s *settings) applyEncryption(r rootAPI, next config.Config, pass []byte) t
 	if next.Encryption.Enabled {
 		s.busy = "Setting up encryption (your keychain may ask for permission)…"
 	}
-	return applyEncryption(r.ctx(), r.deps(), next, pass)
+	return applyEncryption(r.ctx(), r.deps(), r.configWriter(), next, pass)
 }
 
 func (s *settings) help() []key.Binding {
@@ -274,12 +300,15 @@ func (s *settings) commit(r rootAPI, next config.Config) tea.Cmd {
 		s.busy = "…"
 		return checkPassphrase(r.ctx(), enc, next)
 	}
-	return saveConfig(r.ctx(), r.deps(), next)
+	return r.configWriter().save(r.ctx(), r.deps(), next)
 }
 
 // savedResult shows the outcome of a save. (The root adopts the saved
 // config even if this page has closed meanwhile.)
 func (s *settings) savedResult(r rootAPI, msg configSavedMsg) {
+	if msg.superseded {
+		return // the newer save reports
+	}
 	s.busy = ""
 	staged := s.staged != nil
 	s.staged = nil

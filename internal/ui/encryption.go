@@ -60,7 +60,8 @@ func checkPassphrase(ctx context.Context, enc Encryption, next config.Config) te
 // applyEncryption turns encryption on or off and, only if that worked,
 // saves the config: a failure (keychain refused, password_command broken)
 // must not leave a file that says otherwise.
-func applyEncryption(ctx context.Context, deps Deps, next config.Config, pass []byte) tea.Cmd {
+func applyEncryption(ctx context.Context, deps Deps, w *configWriter, next config.Config, pass []byte) tea.Cmd {
+	save := w.save(ctx, deps, next) // numbered now, on the UI goroutine
 	return func() tea.Msg {
 		on := next.Encryption.Enabled
 		done, err := deps.Encryption.Set(ctx, on, next.Encryption.KeySource, pass)
@@ -71,7 +72,7 @@ func applyEncryption(ctx context.Context, deps Deps, next config.Config, pass []
 			}
 			return configSavedMsg{err: fmt.Errorf("%s: %w", verb, err)}
 		}
-		msg := saveConfig(ctx, deps, next)().(configSavedMsg)
+		msg := save().(configSavedMsg)
 		msg.encryption, msg.encryptionOn = done, on
 		if !msg.saved {
 			msg.err = fmt.Errorf("%w (encryption changed for now; it reverts at the next start)", msg.err)
