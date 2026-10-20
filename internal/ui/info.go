@@ -54,7 +54,9 @@ func (in *info) update(r rootAPI, msg tea.Msg) (bool, tea.Cmd) {
 		case key.Matches(msg, keys.Up):
 			in.offset = max(in.offset-1, 0)
 		case key.Matches(msg, keys.Down):
-			in.offset = min(in.offset+1, max(len(in.details.Members)-1, 0))
+			w, h := r.pageSize()
+			_, members, rows := in.layout(r, w, h)
+			in.offset = min(in.offset+1, maxScroll(len(members), rows))
 		}
 	}
 	return false, nil
@@ -66,27 +68,35 @@ func (in *info) view(r rootAPI, width, height int) string {
 	if !in.loaded {
 		return lipgloss.NewStyle().Width(width).Height(height).Padding(0, 1).Render("Loading…")
 	}
+	head, members, rows := in.layout(r, width, height)
+	return pageStyle(width, height).Render(strings.Join(append(head, scrollWindow(members, in.offset, rows)...), "\n"))
+}
+
+// layout is the page's fixed top (title, topic, member count), the member
+// lines, and how many rows of the page those get. update uses it too, to
+// stop scrolling at the end.
+func (in *info) layout(r rootAPI, width, height int) (head, members []string, rows int) {
 	d := in.details
-	lines := []string{paneTitleStyle.Render(chatTitle(d.ChatSummary, r.own())), ""}
+	head = []string{paneTitleStyle.Render(chatTitle(d.ChatSummary, r.own())), ""}
 	if !d.IsGroup {
-		lines = append(lines, "Number:  "+store.NumberOf(d.JID))
+		head = append(head, "Number:  "+store.NumberOf(d.JID))
 		if d.PushName != "" && "~"+d.PushName != d.Name && d.PushName != d.Name {
-			lines = append(lines, "Calls themselves: "+d.PushName)
+			head = append(head, "Calls themselves: "+d.PushName)
 		}
-		return pageStyle(width, height).Render(strings.Join(lines, "\n"))
+		return head, nil, 0
 	}
 	if d.Topic != "" {
-		lines = append(lines, lipgloss.NewStyle().Width(min(width-4, 80)).Render(d.Topic), "")
+		head = append(head, lipgloss.NewStyle().Width(min(width-4, 80)).Render(d.Topic), "")
 	}
-	lines = append(lines, senderStyle.Render(fmt.Sprintf("%d members", len(d.Members))))
+	head = append(head, senderStyle.Render(fmt.Sprintf("%d members", len(d.Members))))
 	if len(d.Members) == 0 {
-		lines = append(lines, faintStyle.Render("Member list arrives after go-whassup connects."))
+		head = append(head, faintStyle.Render("Member list arrives after go-whassup connects."))
 	}
-	rows := max(height-len(lines)-1, 1)
-	for i := in.offset; i < len(d.Members) && i < in.offset+rows; i++ {
-		lines = append(lines, memberLine(d.Members[i], r.own()))
+	for _, mem := range d.Members {
+		members = append(members, memberLine(mem, r.own()))
 	}
-	return pageStyle(width, height).Render(strings.Join(lines, "\n"))
+	// A long topic wraps, so the head is measured, not counted.
+	return head, members, max(height-lipgloss.Height(strings.Join(head, "\n"))-1, 2)
 }
 
 // memberLine is one group member: name (or number, dimmed), number, admin.

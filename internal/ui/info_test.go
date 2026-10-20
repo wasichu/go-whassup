@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/wasichu/go-whassup/internal/wa"
@@ -58,5 +60,32 @@ func TestPersonInfo(t *testing.T) {
 		if !strings.Contains(v, want) {
 			t.Errorf("person info missing %q:\n%s", want, v)
 		}
+	}
+}
+
+func TestLongMemberListScrolls(t *testing.T) {
+	h := newHarness(t, true)
+	var members []wa.Participant
+	for i := range 30 {
+		members = append(members, wa.Participant{JID: fmt.Sprintf("1555000%04d@s.whatsapp.net", i)})
+	}
+	h.client.Emit(wa.Groups{List: []wa.Group{{JID: book, Name: "Book club",
+		Topic: strings.Repeat("a long topic that wraps ", 10), Participants: members}}})
+	h.client.Emit(wa.Message{ID: "g1", Chat: book, Sender: bob, IsGroup: true, Timestamp: day.Add(time.Hour),
+		Kind: wa.KindText, Text: "hi"})
+	h.settle()
+	h.send(tea.WindowSizeMsg{Width: 100, Height: 20})
+	h.selectChat(book)
+	h.key("i")
+	h.settle()
+	v := ansi.Strip(h.view())
+	if !strings.Contains(v, "30 members") || !strings.Contains(v, "more (↑/↓ scroll)") {
+		t.Fatalf("a long member list should end in a more line, under the whole topic:\n%s", v)
+	}
+	for range 40 {
+		h.key("down")
+	}
+	if v := ansi.Strip(h.view()); !strings.Contains(v, "+15550000029") || !strings.Contains(v, "↑") {
+		t.Errorf("scrolled to the end, the last member should show:\n%s", v)
 	}
 }

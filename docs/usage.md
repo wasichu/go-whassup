@@ -107,7 +107,8 @@ names stay readable on disk.**
   groups after connecting (at most hourly), and a refresh of a single group when it
   changes. Group headers show the member count.
 - **`i`** shows a group's topic and members (admins first), or a person's number and
-  the name they chose for themselves.
+  the name they chose for themselves. A member list too long for the screen ends in
+  `↓ N more`; `↑`/`↓` scroll it.
 - **Mentions** like `@15551234567` show as **@Ada** when the number is a known contact,
   and as a highlighted **@you** when it's you. Unknown numbers are dimmed.
 - **Names.** People in your address book appear by your name for them. Others appear
