@@ -1,5 +1,5 @@
 [tools]
-go = "1.27.2"
+go = "1.27.3"
 just = "1.59.0"
 # gopls also serves the Go MCP server used by coding agents (see .mcp.json).
 "go:golang.org/x/tools/gopls" = "0.24.0"
