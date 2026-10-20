@@ -47,7 +47,7 @@ the status line. If the device isn't linked, it opens the **login screen** inste
 | `pgup`/`pgdn` | scroll messages | scroll messages |
 | `/` | find a chat or contact (new chats too) | (typed) |
 | `s` | search message text | (typed) |
-| `ctrl+r` | | select a message: reply, react, copy, see who sent it (see below) |
+| `ctrl+r` | | select a message: reply, react, copy, see who sent it or reacted (see below) |
 | `ctrl+o` | | view attachments: open (downloads if needed), save a copy |
 | `ctrl+t` | | attach file: send one to this chat |
 | `i` | chat info: number, or a group's topic and members | (typed) |
@@ -178,7 +178,8 @@ names stay readable on disk.**
   `esc` leaves the box.
 - **`i` shows who sent it**: your contact name for them, the name they chose, and
   their number (`c` copies it, in terminals that allow clipboard access; tmux needs
-  `set-clipboard on`). `esc` goes back to picking.
+  `set-clipboard on`). Below that, **who reacted** and with what, oldest first
+  (`👍  Ada`; numbers dimmed as elsewhere). `esc` goes back to picking.
 - **`c` copies its text** (or a photo's caption) to the clipboard, mentions written
   as names (`@Ada`). Like copying a number, this needs a terminal that allows
   clipboard access.

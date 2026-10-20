@@ -6,24 +6,27 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/wasichu/go-whassup/internal/store"
 	"github.com/wasichu/go-whassup/internal/wa"
 )
 
 // senderCard is "i" while picking a message: who sent it, with the names
-// we know and their number, which c copies.
+// we know and their number (which c copies), and who reacted to it.
 type senderCard struct {
-	msg    wa.Message
-	jid    string
-	person store.Person
-	loaded bool
-	copied bool
+	msg      wa.Message
+	jid      string
+	person   store.Person
+	reactors []store.Reactor
+	loaded   bool
+	copied   bool
 }
 
-type personLoadedMsg struct {
-	person store.Person
-	err    error
+type senderLoadedMsg struct {
+	person   store.Person
+	reactors []store.Reactor
+	err      error
 }
 
 var senderHelp = []key.Binding{
@@ -31,10 +34,14 @@ var senderHelp = []key.Binding{
 	keys.Back,
 }
 
-func loadPerson(ctx context.Context, st Store, jid string) tea.Cmd {
+func loadSender(ctx context.Context, st Store, jid string, m wa.Message) tea.Cmd {
 	return func() tea.Msg {
 		p, err := st.Person(ctx, jid)
-		return personLoadedMsg{person: p, err: err}
+		if err != nil {
+			return senderLoadedMsg{err: err}
+		}
+		rs, err := st.Reactors(ctx, m.Chat, m.ID)
+		return senderLoadedMsg{person: p, reactors: rs, err: err}
 	}
 }
 
@@ -46,17 +53,17 @@ func (m Model) openSender(target wa.Message) (Model, tea.Cmd) {
 		jid = m.ownJID
 	}
 	m.screen, m.sender = screenSender, senderCard{msg: target, jid: jid}
-	return m, loadPerson(m.ctx, m.deps.Store, jid)
+	return m, loadSender(m.ctx, m.deps.Store, jid, target)
 }
 
 func (s *senderCard) update(r rootAPI, msg tea.Msg) (bool, tea.Cmd) {
 	switch msg := msg.(type) {
-	case personLoadedMsg:
+	case senderLoadedMsg:
 		if msg.err != nil {
 			r.setError("looking up the sender", msg.err)
 			return true, nil
 		}
-		s.person, s.loaded = msg.person, true
+		s.person, s.reactors, s.loaded = msg.person, msg.reactors, true
 		if s.person.PushName == "" {
 			s.person.PushName = s.msg.PushName // sent with the message, not saved as a contact
 		}
@@ -107,8 +114,26 @@ func (s *senderCard) view(r rootAPI, width, height int) string {
 	} else {
 		lines = append(lines, "Number:              "+store.NumberOf(s.jid))
 	}
+	lines = append(lines, reactorLines(s.reactors)...)
 	if s.copied {
 		lines = append(lines, "", faintStyle.Render("Copied to the clipboard (if your terminal allows it)."))
 	}
 	return pageStyle(width, height).Render(strings.Join(lines, "\n") + "\n\n" + keyLine(s.help()))
+}
+
+// reactorLines lists who reacted, oldest first: "  👍  Ada", with your own
+// as "You" and unnamed people dimmed, as elsewhere.
+func reactorLines(rs []store.Reactor) []string {
+	if len(rs) == 0 {
+		return nil
+	}
+	lines := []string{"", "Reactions:"}
+	for _, r := range rs {
+		name, named := store.PersonLabel(r.Name, "", r.JID)
+		if r.Mine {
+			name, named = "You", true
+		}
+		lines = append(lines, "  "+r.Emoji+"  "+nameStyle(named, lipgloss.NewStyle()).Render(name))
+	}
+	return lines
 }

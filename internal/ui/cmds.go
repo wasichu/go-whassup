@@ -28,6 +28,7 @@ type Store interface {
 	Details(ctx context.Context, chat string) (store.ChatDetails, error)
 	Names(ctx context.Context, jids []string) (map[string]string, error)
 	Person(ctx context.Context, jid string) (store.Person, error)
+	Reactors(ctx context.Context, chat, id string) ([]store.Reactor, error)
 	Quotes(ctx context.Context, chat string, ids []string) (map[string]wa.Message, error)
 	Search(ctx context.Context, query string, limit int) ([]store.SearchHit, error)
 	MarkRead(ctx context.Context, chat string, at time.Time) error

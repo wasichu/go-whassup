@@ -1226,3 +1226,41 @@ func TestPrivacyIDsResolvedWhenRevealed(t *testing.T) {
 		t.Errorf("still unresolved: %v, %v", left, err)
 	}
 }
+
+func TestReactors(t *testing.T) {
+	st := openStore(t, "", nil)
+	ctx := t.Context()
+	enable(t, st, 10) // emoji are sealed against the sender as stored
+	const lid = "98765432109876@lid"
+	const cee = "15550002222@s.whatsapp.net" // a stranger: a name only from their messages
+	fromCee := msg(group, "2", t0.Add(time.Minute), "me too")
+	fromCee.Sender, fromCee.PushName = cee, "Cee"
+	mustSave(t, st, msg(group, "1", t0, "party?"), fromCee)
+	if err := st.SaveContacts(ctx, []wa.Contact{{JID: ada, Name: "Ada"}, {JID: bob, PushName: "Bobby"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SaveReactions(ctx, []wa.Reaction{
+		{Chat: group, MessageID: "1", Sender: lid, Emoji: "🎉", At: t0},
+		{Chat: group, MessageID: "1", Sender: ada, Emoji: "❤️", At: t0.Add(time.Second)},
+		{Chat: group, MessageID: "1", Sender: "me", FromMe: true, Emoji: "👍", At: t0.Add(2 * time.Second)},
+		{Chat: group, MessageID: "1", Sender: cee, Emoji: "😂", At: t0.Add(3 * time.Second)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SaveLIDMap(ctx, map[string]string{lid: bob}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.Reactors(ctx, group, "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []Reactor{
+		{JID: bob, Name: "~Bobby", Emoji: "🎉"},
+		{JID: ada, Name: "Ada", Emoji: "❤️"},
+		{JID: "me", Emoji: "👍", Mine: true},
+		{JID: cee, Name: "~Cee", Emoji: "😂"},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("reactors = %+v, want %+v", got, want)
+	}
+}

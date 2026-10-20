@@ -53,12 +53,19 @@ func TestStrangersNamedWithTildeOrUnknown(t *testing.T) {
 
 func TestSenderCard(t *testing.T) {
 	h := groupWithStrangers(t)
+	if err := h.st.SaveReactions(t.Context(), []wa.Reaction{
+		{Chat: book, MessageID: "s1", Sender: stranger, Emoji: "🎉", At: day.Add(2 * time.Hour)},
+		{Chat: book, MessageID: "s1", Sender: "me", FromMe: true, Emoji: "👍", At: day.Add(3 * time.Hour)},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	h.key("ctrl+r")
 	h.key("up") // Bobby's message
 	h.key("i")
 	h.settle()
 	v := ansi.Strip(h.view())
-	for _, want := range []string{"Not in your contacts", "Calls themselves:    ~Bobby", "Number:              +15550001111", "c copy number"} {
+	for _, want := range []string{"Not in your contacts", "Calls themselves:    ~Bobby", "Number:              +15550001111", "c copy number",
+		"Reactions:", "  🎉  ~Bobby", "  👍  You"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("card missing %q:\n%s", want, v)
 		}
@@ -76,7 +83,7 @@ func TestSenderCard(t *testing.T) {
 	h.key("i")
 	h.settle()
 	v = ansi.Strip(h.view())
-	if !strings.Contains(v, "hidden by WhatsApp") || strings.Contains(v, "copy number") {
+	if !strings.Contains(v, "hidden by WhatsApp") || strings.Contains(v, "copy number") || strings.Contains(v, "Reactions:") {
 		t.Errorf("a privacy ID has no number to show or copy:\n%s", v)
 	}
 }

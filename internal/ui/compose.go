@@ -141,8 +141,8 @@ const (
 )
 
 // pickKey handles keys while picking a message: ↑/↓ move, r replies, e
-// reacts, + searches every emoji to react with, i shows who sent it, c
-// copies its text, esc goes back to typing.
+// reacts, + searches every emoji to react with, i shows who sent it and who
+// reacted, c copies its text, esc goes back to typing.
 // Other keys do nothing (nothing types).
 func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	c := &m.conv

@@ -269,6 +269,55 @@ func countReactions(rs []openedReaction) map[string][]wa.ReactionCount {
 	return perMsg
 }
 
+// Reactor is one person's reaction to a message.
+type Reactor struct {
+	JID   string // their phone-number JID where known (privacy IDs resolved)
+	Name  string // as personName (falling back to their last push name here); "" if unknown
+	Emoji string
+	Mine  bool
+}
+
+// lastPushName is SQL for the name a reactor (alias r) last sent with a
+// message in the chat: reactions don't carry one, and strangers' names
+// arrive only with their messages.
+const lastPushName = `(SELECT m.push_name FROM messages m
+	WHERE m.chat_jid = r.chat_jid AND m.sender_jid IN (r.sender_jid, lm.pn) AND m.push_name != ''
+	ORDER BY m.ts DESC LIMIT 1)`
+
+// Reactors lists who reacted to a message and with what, oldest first.
+func (s *Store) Reactors(ctx context.Context, chat, id string) ([]Reactor, error) {
+	type row struct {
+		Reactor
+		stored string // the sender key the emoji is sealed against
+		emoji  []byte
+		codec  int
+	}
+	rows, err := queryAll(ctx, s.db, `
+		SELECT r.sender_jid, COALESCE(lm.pn, r.sender_jid), `+personName("ct", lastPushName)+`, r.emoji, r.codec, r.from_me
+		FROM reactions r
+		LEFT JOIN lid_map lm ON lm.lid = r.sender_jid
+		LEFT JOIN contacts ct ON ct.jid = COALESCE(lm.pn, r.sender_jid)
+		WHERE r.chat_jid = ? AND r.message_id = ? ORDER BY r.ts`, []any{chat, id},
+		func(rows *sql.Rows) (row, error) {
+			var r row
+			err := rows.Scan(&r.stored, &r.JID, &r.Name, &r.emoji, &r.codec, &r.Mine)
+			return r, err
+		})
+	if err != nil {
+		return nil, fmt.Errorf("loading reactors: %w", err)
+	}
+	out := make([]Reactor, len(rows))
+	for i, r := range rows {
+		emoji, err := s.open(r.emoji, r.codec, chat, id, reactionColumn(r.stored))
+		if err != nil {
+			return nil, err
+		}
+		r.Emoji = string(emoji)
+		out[i] = r.Reactor
+	}
+	return out, nil
+}
+
 // EditMessage replaces a message's text with a newer edit. It reports
 // whether the message was found (an edit can arrive before its original).
 // Text goes through seal like every other write.
