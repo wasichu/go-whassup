@@ -1,10 +1,13 @@
 package ui
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/wasichu/go-whassup/internal/store"
@@ -65,7 +68,7 @@ func TestSenderCard(t *testing.T) {
 	h.settle()
 	v := ansi.Strip(h.view())
 	for _, want := range []string{"Not in your contacts", "Calls themselves:    ~Bobby", "Number:              +15550001111", "c copy number",
-		"Reactions:", "  🎉  ~Bobby", "  👍  You"} {
+		"Reactions (2):", "  🎉 1  ~Bobby", "  👍 1  You"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("card missing %q:\n%s", want, v)
 		}
@@ -116,5 +119,67 @@ func TestInputCursorDoesNotBlink(t *testing.T) {
 	}
 	if newInput().Styles().Cursor.Blink {
 		t.Error("inputs should have a solid cursor")
+	}
+}
+
+func TestReactionsGroupAndWrap(t *testing.T) {
+	name := func(n string) store.Reactor { return store.Reactor{JID: n, Name: n} }
+	rs := []store.Reactor{
+		{JID: "x", Name: "Ada", Emoji: "❤️"},
+		{JID: "a", Name: "Abe", Emoji: "👍"}, {JID: "b", Name: "Bea", Emoji: "👍"},
+		{JID: "me", Emoji: "👍", Mine: true},
+	}
+	for _, n := range []string{"Cy", "Di", "Ed", "Flo", "Gus"} {
+		r := name(n)
+		r.Emoji = "👍"
+		rs = append(rs, r)
+	}
+	got := reactionLines(groupReactors(rs), 30)
+	for i := range got {
+		got[i] = ansi.Strip(got[i])
+	}
+	want := []string{
+		"  👍 8  You, Abe, Bea, Cy, Di,", // most popular first, you first in yours
+		"        Ed, Flo, Gus",          // wrapped whole names, under the first
+		"  ❤️ 1  Ada",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("lines =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestLongReactionListScrolls(t *testing.T) {
+	h := groupWithStrangers(t)
+	var rs []wa.Reaction
+	emoji := []string{"👍", "❤️", "😂", "😮", "😢", "🙏", "🎉", "🔥", "👏", "💯", "😍", "🤔", "👀", "✅", "🙌", "💪", "😅", "🥳", "🤣", "😊"}
+	for i, e := range emoji { // twenty emoji: twenty lines, more than fit
+		rs = append(rs, wa.Reaction{Chat: book, MessageID: "s1", Sender: fmt.Sprintf("1555000%04d@s.whatsapp.net", i),
+			Emoji: e, At: day.Add(time.Duration(2+i) * time.Hour)})
+	}
+	if err := h.st.SaveReactions(t.Context(), rs); err != nil {
+		t.Fatal(err)
+	}
+	h.send(tea.WindowSizeMsg{Width: 100, Height: 20})
+	h.key("ctrl+r")
+	h.key("up") // Bobby's message
+	h.key("i")
+	h.settle()
+	v := ansi.Strip(h.view())
+	if !strings.Contains(v, "Reactions (20):") || !strings.Contains(v, "more (↑/↓ scroll)") || !strings.Contains(v, "esc back") {
+		t.Fatalf("a long list should be cut with a more line, keys still shown:\n%s", v)
+	}
+	if strings.Contains(v, "😊") {
+		t.Errorf("the last reaction shouldn't fit yet:\n%s", v)
+	}
+	for range 40 { // past the end: stops there
+		h.key("down")
+	}
+	v = ansi.Strip(h.view())
+	if !strings.Contains(v, "😊") || !strings.Contains(v, "↑") || strings.Contains(v, "👍 1") {
+		t.Errorf("scrolled to the end, the last reaction should show and the first be above:\n%s", v)
+	}
+	h.key("up") // one up from the end moves at once (no overscroll to undo)
+	if v := ansi.Strip(h.view()); !strings.Contains(v, "↓ 1 more") {
+		t.Errorf("one up from the end should leave one below:\n%s", v)
 	}
 }

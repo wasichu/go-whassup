@@ -505,6 +505,9 @@ func (m Model) View() tea.View {
 	return v
 }
 
+// bodyHeight is the screen's height above the status line.
+func (m *Model) bodyHeight() int { return m.height - 1 }
+
 func (m Model) render() string {
 	if m.width == 0 {
 		return ""
@@ -512,7 +515,7 @@ func (m Model) render() string {
 	if m.width < minWidth || m.height < minHeight {
 		return fmt.Sprintf("Terminal too small (%dx%d); need at least %dx%d.", m.width, m.height, minWidth, minHeight)
 	}
-	bodyH := m.height - 1
+	bodyH := m.bodyHeight()
 	var body string
 	switch {
 	case m.showHelp:

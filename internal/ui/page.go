@@ -95,6 +95,9 @@ func (r rootAPI) jumpTo(hit store.SearchHit) tea.Cmd {
 // size is the terminal's size in cells.
 func (r rootAPI) size() (width, height int) { return r.m.width, r.m.height }
 
+// pageSize is the size a page's view gets: the screen less the status line.
+func (r rootAPI) pageSize() (width, height int) { return r.m.width, r.m.bodyHeight() }
+
 // inlineImages reports whether images can be shown (see Model.inlineImages).
 func (r rootAPI) inlineImages() bool { return r.m.inlineImages() }
 

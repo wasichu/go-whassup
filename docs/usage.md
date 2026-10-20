@@ -178,8 +178,9 @@ names stay readable on disk.**
   `esc` leaves the box.
 - **`i` shows who sent it**: your contact name for them, the name they chose, and
   their number (`c` copies it, in terminals that allow clipboard access; tmux needs
-  `set-clipboard on`). Below that, **who reacted** and with what, oldest first
-  (`👍  Ada`; numbers dimmed as elsewhere). `esc` goes back to picking.
+  `set-clipboard on`). Below that, **who reacted**, grouped by emoji with the most
+  popular first (`👍 3  You, Ada, ~Bobby`; numbers dimmed as elsewhere). A list too
+  long for the screen ends in `↓ N more`; `↑`/`↓` scroll it. `esc` goes back to picking.
 - **`c` copies its text** (or a photo's caption) to the clipboard, mentions written
   as names (`@Ada`). Like copying a number, this needs a terminal that allows
   clipboard access.

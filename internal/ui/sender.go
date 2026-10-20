@@ -2,11 +2,15 @@ package ui
 
 import (
 	"context"
+	"fmt"
+	"slices"
+	"strconv"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/wasichu/go-whassup/internal/store"
 	"github.com/wasichu/go-whassup/internal/wa"
@@ -19,6 +23,7 @@ type senderCard struct {
 	jid      string
 	person   store.Person
 	reactors []store.Reactor
+	offset   int // reaction lines scrolled past
 	loaded   bool
 	copied   bool
 }
@@ -74,6 +79,12 @@ func (s *senderCard) update(r rootAPI, msg tea.Msg) (bool, tea.Cmd) {
 		case msg.String() == "c" && !store.IsPrivacyID(s.jid):
 			s.copied = true
 			return false, tea.SetClipboard(store.NumberOf(s.jid))
+		case key.Matches(msg, keys.Up):
+			s.offset = max(s.offset-1, 0)
+		case key.Matches(msg, keys.Down):
+			w, h := r.pageSize()
+			_, reactions, rows := s.layout(r, w, h)
+			s.offset = min(s.offset+1, maxScroll(len(reactions), rows))
 		}
 	}
 	return false, nil
@@ -88,14 +99,36 @@ func (s *senderCard) help() []key.Binding {
 }
 
 func (s *senderCard) view(r rootAPI, width, height int) string {
+	head, reactions, rows := s.layout(r, width, height)
+	if !s.loaded {
+		return pageStyle(width, height).Render(strings.Join(head, "\n"))
+	}
+	lines := append(head, scrollWindow(reactions, s.offset, rows)...)
+	return pageStyle(width, height).Render(strings.Join(lines, "\n") + "\n\n" + keyLine(s.help()))
+}
+
+// layout is the card's fixed top (who sent it), its reaction lines, and
+// how many rows of the page those get. update uses it too, to stop
+// scrolling at the end.
+func (s *senderCard) layout(r rootAPI, width, height int) (head, reactions []string, rows int) {
+	head = s.about(r)
+	if !s.loaded || len(s.reactors) == 0 {
+		return head, nil, 0
+	}
+	head = append(head, "", fmt.Sprintf("Reactions (%d):", len(s.reactors)))
+	reactions = reactionLines(groupReactors(s.reactors), width-2) // the page's padding
+	return head, reactions, max(height-len(head)-2, 2)            // a blank line and the keys below
+}
+
+// about is who sent the message: the names we know and their number.
+func (s *senderCard) about(r rootAPI) []string {
 	who := senderName(s.msg, r.chat())
 	if s.msg.FromMe {
 		who = "You"
 	}
 	lines := []string{paneTitleStyle.Render(who), ""}
 	if !s.loaded {
-		lines = append(lines, faintStyle.Render("Loading…"))
-		return pageStyle(width, height).Render(strings.Join(lines, "\n"))
+		return append(lines, faintStyle.Render("Loading…"))
 	}
 	p := s.person
 	if p.Name != "" {
@@ -114,26 +147,90 @@ func (s *senderCard) view(r rootAPI, width, height int) string {
 	} else {
 		lines = append(lines, "Number:              "+store.NumberOf(s.jid))
 	}
-	lines = append(lines, reactorLines(s.reactors)...)
 	if s.copied {
-		lines = append(lines, "", faintStyle.Render("Copied to the clipboard (if your terminal allows it)."))
-	}
-	return pageStyle(width, height).Render(strings.Join(lines, "\n") + "\n\n" + keyLine(s.help()))
-}
-
-// reactorLines lists who reacted, oldest first: "  👍  Ada", with your own
-// as "You" and unnamed people dimmed, as elsewhere.
-func reactorLines(rs []store.Reactor) []string {
-	if len(rs) == 0 {
-		return nil
-	}
-	lines := []string{"", "Reactions:"}
-	for _, r := range rs {
-		name, named := store.PersonLabel(r.Name, "", r.JID)
-		if r.Mine {
-			name, named = "You", true
-		}
-		lines = append(lines, "  "+r.Emoji+"  "+nameStyle(named, lipgloss.NewStyle()).Render(name))
+		lines = append(lines, faintStyle.Render("Copied to the clipboard (if your terminal allows it)."))
 	}
 	return lines
+}
+
+// reactionGroup is everyone who reacted with one emoji.
+type reactionGroup struct {
+	emoji string
+	names []string // rendered: dimmed when only a number
+}
+
+// groupReactors groups reactions by emoji as WhatsApp does: the most
+// popular first (ties in order of first use), you first within yours.
+func groupReactors(rs []store.Reactor) []reactionGroup {
+	var gs []reactionGroup
+	for _, r := range rs {
+		i := slices.IndexFunc(gs, func(g reactionGroup) bool { return g.emoji == r.Emoji })
+		if i < 0 {
+			gs = append(gs, reactionGroup{emoji: r.Emoji})
+			i = len(gs) - 1
+		}
+		if r.Mine {
+			gs[i].names = slices.Insert(gs[i].names, 0, "You")
+			continue
+		}
+		name, named := store.PersonLabel(r.Name, "", r.JID)
+		gs[i].names = append(gs[i].names, nameStyle(named, lipgloss.NewStyle()).Render(name))
+	}
+	slices.SortStableFunc(gs, func(a, b reactionGroup) int { return len(b.names) - len(a.names) })
+	return gs
+}
+
+// reactionLines renders groups as "  👍 12  Ada, ~Bobby, …", wrapping
+// whole names onto lines indented under the first, within width.
+func reactionLines(gs []reactionGroup, width int) []string {
+	digits := 1
+	for _, g := range gs {
+		digits = max(digits, len(strconv.Itoa(len(g.names))))
+	}
+	var lines []string
+	for _, g := range gs {
+		prefix := fmt.Sprintf("  %s %*d  ", g.emoji, digits, len(g.names))
+		indent := strings.Repeat(" ", ansi.StringWidth(prefix))
+		line := prefix
+		for i, name := range g.names {
+			if i < len(g.names)-1 {
+				name += ","
+			}
+			switch {
+			case i == 0:
+				line += name
+			case ansi.StringWidth(line)+1+ansi.StringWidth(name) <= width:
+				line += " " + name
+			default:
+				lines = append(lines, ansi.Truncate(line, width, "…"))
+				line = indent + name
+			}
+		}
+		lines = append(lines, ansi.Truncate(line, width, "…"))
+	}
+	return lines
+}
+
+// maxScroll is how far lines can scroll in rows: until the last line
+// shows above the "more" line.
+func maxScroll(n, rows int) int {
+	if n <= rows {
+		return 0
+	}
+	return n - (rows - 1)
+}
+
+// scrollWindow is the rows of lines shown from offset; when they don't all
+// fit, the last row says how many more are below (or above, at the end).
+func scrollWindow(lines []string, offset, rows int) []string {
+	if len(lines) <= rows {
+		return lines
+	}
+	start := min(offset, maxScroll(len(lines), rows))
+	visible := rows - 1
+	out := slices.Clone(lines[start : start+visible])
+	if below := len(lines) - start - visible; below > 0 {
+		return append(out, faintStyle.Render(fmt.Sprintf("  ↓ %d more (↑/↓ scroll)", below)))
+	}
+	return append(out, faintStyle.Render(fmt.Sprintf("  ↑ %d more (↑/↓ scroll)", start)))
 }
