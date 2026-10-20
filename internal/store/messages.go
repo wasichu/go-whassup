@@ -289,7 +289,7 @@ func (s *Store) Reactors(ctx context.Context, chat, id string) ([]Reactor, error
 	type row struct {
 		Reactor
 		stored string // the sender key the emoji is sealed against
-		emoji  []byte
+		sealed []byte // the emoji
 		codec  int
 	}
 	rows, err := queryAll(ctx, s.db, `
@@ -300,7 +300,7 @@ func (s *Store) Reactors(ctx context.Context, chat, id string) ([]Reactor, error
 		WHERE r.chat_jid = ? AND r.message_id = ? ORDER BY r.ts`, []any{chat, id},
 		func(rows *sql.Rows) (row, error) {
 			var r row
-			err := rows.Scan(&r.stored, &r.JID, &r.Name, &r.emoji, &r.codec, &r.Mine)
+			err := rows.Scan(&r.stored, &r.JID, &r.Name, &r.sealed, &r.codec, &r.Mine)
 			return r, err
 		})
 	if err != nil {
@@ -308,7 +308,7 @@ func (s *Store) Reactors(ctx context.Context, chat, id string) ([]Reactor, error
 	}
 	out := make([]Reactor, len(rows))
 	for i, r := range rows {
-		emoji, err := s.open(r.emoji, r.codec, chat, id, reactionColumn(r.stored))
+		emoji, err := s.open(r.sealed, r.codec, chat, id, reactionColumn(r.stored))
 		if err != nil {
 			return nil, err
 		}
