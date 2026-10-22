@@ -1,0 +1,92 @@
+# Weekly (and on demand): moves whatsmeow to the newest commit on its main
+# branch and opens a pull request to review. Nothing merges by itself.
+# See docs/dependencies.md.
+name: bump-whatsmeow
+on:
+  schedule:
+    - cron: "17 14 * * 1" # Mondays, 14:17 UTC
+  workflow_dispatch:
+permissions:
+  contents: write # push the deps/whatsmeow branch
+  pull-requests: write # open or update its pull request
+  actions: write # start the check workflow on it
+concurrency: bump-whatsmeow
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    env:
+      BRANCH: deps/whatsmeow
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: jdx/mise-action@v5
+      - name: Update whatsmeow
+        id: bump
+        run: |
+          version() { mise exec -- go list -m -f '{{.Version}}' go.mau.fi/whatsmeow; }
+          old=$(version)
+          mise exec -- go get go.mau.fi/whatsmeow@main
+          mise exec -- go mod tidy
+          new=$(version)
+          echo "old=$old" >> "$GITHUB_OUTPUT"
+          echo "new=$new" >> "$GITHUB_OUTPUT"
+          if [ "$old" = "$new" ]; then echo "whatsmeow is current ($old)"; fi
+      - name: Check
+        id: check
+        if: steps.bump.outputs.old != steps.bump.outputs.new
+        # A failure still opens the pull request: it says the update needs work.
+        run: |
+          set +e
+          just check > check.log 2>&1
+          echo "rc=$?" >> "$GITHUB_OUTPUT"
+          tail -40 check.log
+      - name: Open or update the pull request
+        if: steps.bump.outputs.old != steps.bump.outputs.new
+        env:
+          OLD: ${{ steps.bump.outputs.old }}
+          NEW: ${{ steps.bump.outputs.new }}
+          RC: ${{ steps.check.outputs.rc }}
+        run: |
+          # Pseudo-versions end in the commit's first 12 hex digits.
+          old_sha=${OLD##*-}
+          new_sha=${NEW##*-}
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git commit -qam "deps: whatsmeow ${new_sha}"
+          git push -qf origin "$BRANCH"
+
+          {
+            echo "Moves whatsmeow to the newest commit on its main branch."
+            echo
+            echo "- From \`$OLD\` to \`$NEW\`"
+            echo "- What changed: https://github.com/tulir/whatsmeow/compare/${old_sha}...${new_sha}"
+            echo
+            if [ "$RC" = 0 ]; then
+              echo "\`just check\` passed on Linux."
+            else
+              echo "**\`just check\` failed on Linux** (exit $RC); the update needs work. Last lines:"
+              echo
+              echo '```'
+              tail -40 check.log
+              echo '```'
+            fi
+            echo
+            echo "The full check (Linux and macOS) runs on this branch as the \`check\` workflow."
+            echo
+            echo "Files changed:"
+            echo
+            echo '```'
+            git diff --stat HEAD~1
+            echo '```'
+          } > body.md
+
+          pr=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number')
+          if [ -n "$pr" ]; then
+            gh pr edit "$pr" --title "deps: whatsmeow ${new_sha}" --body-file body.md
+          else
+            gh pr create --head "$BRANCH" --title "deps: whatsmeow ${new_sha}" --body-file body.md
+          fi
+          # Pull requests opened with this token don't trigger workflows;
+          # a dispatched run does, and its checks show on the pull request.
+          gh workflow run check.yml --ref "$BRANCH"

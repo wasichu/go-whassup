@@ -1,10 +1,13 @@
 # Runs the same gate as locally (`just check`), with the tool versions
 # pinned in mise.toml. macOS too: the keychain code path is darwin-only.
+# workflow_dispatch: bump-whatsmeow starts it on its branch (pull requests
+# opened by a workflow don't trigger this one by themselves).
 name: check
 on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:

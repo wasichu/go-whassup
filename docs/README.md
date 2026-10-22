@@ -11,4 +11,5 @@ change to behavior described here updates the doc **in the same commit**.
 | [usage.md](usage.md) | Commands and flags |
 | [config.md](config.md) | Config file, design, and every setting |
 | [roadmap.md](roadmap.md) | Where we are and what's next |
+| [dependencies.md](dependencies.md) | Keeping whatsmeow current: the weekly bump pull request |
 | [homebrew.md](homebrew.md) | Plan for `brew install` from our own tap |
