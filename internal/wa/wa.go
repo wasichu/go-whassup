@@ -73,6 +73,14 @@ type Client interface {
 	// reaction. It comes back as a Reaction event once sent.
 	SendReaction(ctx context.Context, chat string, to Message, emoji string) error
 
+	// SendEdit replaces the text of target, a text message you sent within
+	// EditWindow. It comes back as a MessageEdited event once sent.
+	SendEdit(ctx context.Context, chat string, target Message, text string) error
+
+	// SendDelete deletes target, a message you sent within DeleteWindow,
+	// for everyone. It comes back as a MessageDeleted event once sent.
+	SendDelete(ctx context.Context, chat string, target Message) error
+
 	// MarkRead reports msgs (incoming messages in chat) as read according
 	// to mode. ReadLocal sends nothing and returns nil.
 	MarkRead(ctx context.Context, chat string, msgs []Message, mode ReadMode) error

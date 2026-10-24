@@ -95,7 +95,11 @@ There are two kinds of consumers:
 - **Sent messages.** whatsmeow doesn't echo messages this device sends. After the
   server acknowledges one, `SendText` emits it as a normal `wa.Message` with
   `FromMe` set, so the recorder and UI see it through the same path as everything
-  else. `SendText` returns only an error; there is no second path.
+  else. `SendText` returns only an error; there is no second path. Replies, reactions,
+  edits and deletes work the same way: `SendReaction`, `SendEdit` and `SendDelete` emit
+  `wa.Reaction`, `wa.MessageEdited` and `wa.MessageDeleted` once sent. Edits and
+  deletes are only allowed within `wa.EditWindow` and `wa.DeleteWindow` of sending;
+  the UI checks first, because phones silently ignore a late delete.
 - **Push name.** On each `Connected`, we send presence **`unavailable`** once. This
   registers our display name, so recipients don't see "-" as the sender. "Available"
   would also mark the user online and switch on active read receipts, which we avoid.

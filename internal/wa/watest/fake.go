@@ -38,6 +38,9 @@ type Client struct {
 	LIDs map[string]string
 	// Reactions sent with SendReaction (replies land in Sent, with ReplyTo).
 	ReactionsSent []wa.Reaction
+	// Edits and deletes sent with SendEdit and SendDelete.
+	EditsSent   []wa.MessageEdited
+	DeletesSent []wa.MessageDeleted
 	// Files sent with SendFile; DownloadData is what Download writes (or
 	// DownloadErr fails it).
 	Files        []SentFile
@@ -374,6 +377,53 @@ func (c *Client) SendReaction(_ context.Context, chat string, to wa.Message, emo
 	c.mu.Unlock()
 	c.Emit(r)
 	return nil
+}
+
+// SendEdit records and emits the edit, as WhatsApp.SendEdit does.
+func (c *Client) SendEdit(_ context.Context, chat string, target wa.Message, text string) error {
+	if !c.Paired {
+		return wa.ErrNotPaired
+	}
+	if c.SendErr != nil {
+		return c.SendErr
+	}
+	e := wa.MessageEdited{Chat: chat, ID: target.ID, Kind: wa.KindText, Text: text,
+		At: c.stamp(time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))}
+	c.mu.Lock()
+	c.EditsSent = append(c.EditsSent, e)
+	c.mu.Unlock()
+	c.Emit(e)
+	return nil
+}
+
+// SendDelete records and emits the delete, as WhatsApp.SendDelete does.
+func (c *Client) SendDelete(_ context.Context, chat string, target wa.Message) error {
+	if !c.Paired {
+		return wa.ErrNotPaired
+	}
+	if c.SendErr != nil {
+		return c.SendErr
+	}
+	d := wa.MessageDeleted{Chat: chat, ID: target.ID, At: c.stamp(time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))}
+	c.mu.Lock()
+	c.DeletesSent = append(c.DeletesSent, d)
+	c.mu.Unlock()
+	c.Emit(d)
+	return nil
+}
+
+// SentEdits returns the edits sent so far.
+func (c *Client) SentEdits() []wa.MessageEdited {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.EditsSent)
+}
+
+// SentDeletes returns the deletes sent so far.
+func (c *Client) SentDeletes() []wa.MessageDeleted {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.DeletesSent)
 }
 
 // SentReactions returns the reactions sent so far.
