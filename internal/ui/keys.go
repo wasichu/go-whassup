@@ -65,6 +65,7 @@ var (
 		key.NewBinding(key.WithKeys("+"), key.WithHelp("+", "any emoji")),
 		key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "who sent it, who reacted")),
 		key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "copy text")),
+		key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete for everyone")),
 		hint(keys.Blur, "back"),
 	}
 	reactHelp = []key.Binding{

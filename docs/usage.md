@@ -47,7 +47,7 @@ the status line. If the device isn't linked, it opens the **login screen** inste
 | `pgup`/`pgdn` | scroll messages | scroll messages |
 | `/` | find a chat or contact (new chats too) | (typed) |
 | `s` | search message text | (typed) |
-| `ctrl+r` | | select a message: reply, react, copy, see who sent it or reacted (see below) |
+| `ctrl+r` | | select a message: reply, react, copy, delete, see who sent it or reacted (see below) |
 | `ctrl+o` | | view attachments: open (downloads if needed), save a copy |
 | `ctrl+t` | | attach file: send one to this chat |
 | `i` | chat info: number, or a group's topic and members | (typed) |
@@ -185,6 +185,12 @@ names stay readable on disk.**
 - **`c` copies its text** (or a photo's caption) to the clipboard, mentions written
   as names (`@Ada`). Like copying a number, this needs a terminal that allows
   clipboard access.
+- **`d` deletes it for everyone**, after asking (`y` deletes, `n` or `esc` keeps it).
+  Everyone, you included, then sees "This message was deleted", as when it's done on a
+  phone. It works on your own messages up to 2 days after sending; WhatsApp's limit is
+  about that, and phones ignore a delete that arrives later, so go-whassup says why
+  instead of sending one. ("Delete for me" isn't offered: whatsmeow can't sync it to your
+  other devices, so your phone would still show the message.)
 - **`e` reacts.** A strip of WhatsApp's quick reactions replaces the box:
   `👍 ❤️ 😂 😮 😢 🙏 +`. Press `1`–`6`, or `←`/`→` and `enter`. The strip starts on
   your current reaction, and choosing the reaction you already have removes it, as on the

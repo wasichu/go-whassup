@@ -25,11 +25,13 @@ const moreReactions = len(quickReactions)
 // compose is the message box's reply/react state, kept with the
 // conversation it acts on.
 type compose struct {
-	picking  bool        // choosing a message with ↑/↓
-	picked   string      // its ID (an ID, so new messages can't shift it)
-	reacting bool        // choosing a reaction for the picked message
-	choice   int         // index into quickReactions, or moreReactions
-	replyTo  *wa.Message // the message being replied to, shown above the input
+	picking  bool   // choosing a message with ↑/↓
+	picked   string // its ID (an ID, so new messages can't shift it)
+	reacting bool   // choosing a reaction for the picked message
+	// confirmingDelete asks before deleting the picked message for everyone.
+	confirmingDelete bool
+	choice           int         // index into quickReactions, or moreReactions
+	replyTo          *wa.Message // the message being replied to, shown above the input
 }
 
 // pickable reports whether a message can be replied or reacted to.
@@ -66,9 +68,10 @@ func (c *conversation) showPicked() {
 	c.showMessage(c.picked)
 }
 
-// stopPicking ends picking and reacting, and drops the highlight.
+// stopPicking ends picking, reacting and confirming, and drops the
+// highlight.
 func (c *conversation) stopPicking() {
-	c.picking, c.reacting, c.picked = false, false, ""
+	c.picking, c.reacting, c.confirmingDelete, c.picked = false, false, false, ""
 	c.highlight = ""
 	c.render(false)
 }
@@ -142,7 +145,8 @@ const (
 
 // pickKey handles keys while picking a message: ↑/↓ move, r replies, e
 // reacts, + searches every emoji to react with, i shows who sent it and who
-// reacted, c copies its text, esc goes back to typing.
+// reacted, c copies its text, d deletes it for everyone (edit.go), esc goes
+// back to typing.
 // Other keys do nothing (nothing types).
 func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	c := &m.conv
@@ -172,6 +176,8 @@ func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		}
 	case msg.String() == "c":
 		return m.copyPicked()
+	case msg.String() == "d":
+		return m.startDelete()
 	}
 	return m, nil
 }

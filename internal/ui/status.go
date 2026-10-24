@@ -117,6 +117,8 @@ func (m Model) contextHelp() []key.Binding {
 		return m.page().help()
 	case m.focus == focusInput && m.conv.reacting:
 		return reactHelp
+	case m.focus == focusInput && m.conv.confirmingDelete:
+		return deleteHelp
 	case m.focus == focusInput && m.conv.picking:
 		return pickHelp
 	case m.focus == focusInput:

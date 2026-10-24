@@ -146,9 +146,12 @@ func (c *conversation) view(width, height int, own string) string {
 	if c.replyTo != nil {
 		parts = append(parts, c.replyBanner(width))
 	}
-	if picked, ok := c.pickedMessage(); c.reacting && ok {
-		parts = append(parts, c.reactionStrip(myReaction(picked))) // in place of the input
-	} else {
+	switch picked, ok := c.pickedMessage(); { // the strips go in place of the input
+	case c.reacting && ok:
+		parts = append(parts, c.reactionStrip(myReaction(picked)))
+	case c.confirmingDelete && ok:
+		parts = append(parts, deleteStrip())
+	default:
 		parts = append(parts, c.input.View())
 	}
 	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Render(strings.Join(parts, "\n"))

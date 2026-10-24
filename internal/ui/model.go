@@ -333,6 +333,8 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		switch {
 		case m.conv.reacting:
 			return m.reactKey(msg)
+		case m.conv.confirmingDelete:
+			return m.deleteKey(msg)
 		case m.conv.picking:
 			return m.pickKey(msg)
 		}
