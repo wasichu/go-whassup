@@ -130,7 +130,7 @@ func TestBrowserFolders(t *testing.T) {
 	h.key("ctrl+t")
 	h.settle()
 	h.key("enter") // into Pictures/
-	h.settle()
+	h.waitFor("the folder to load", func() bool { return h.model().browser.dir == filepath.Join(dir, "Pictures") })
 	if b := h.model().browser; b.dir != filepath.Join(dir, "Pictures") || !strings.Contains(ansi.Strip(h.view()), "Empty folder") {
 		t.Fatalf("enter on a folder: dir=%q\n%s", b.dir, ansi.Strip(h.view()))
 	}

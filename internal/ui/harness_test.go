@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -138,23 +141,40 @@ func (h *harness) run(cmd tea.Cmd) {
 	}
 }
 
-// settle delivers results from parked commands that have since completed,
-// until nothing more happens.
+// settleQuiet is how long settle waits for any parked command to finish
+// before deciding nothing more is coming. Some commands never finish
+// while the test runs (the pending waitEvent), so settle can't wait for
+// all of them; it waits on all at once and stops after this long without
+// a result. A store write or directory read that takes a few milliseconds
+// here can take tens on a shared CI runner (which sets CI), so it waits
+// longer there and keeps the local run fast.
+var settleQuiet = func() time.Duration {
+	if os.Getenv("CI") != "" {
+		return 150 * time.Millisecond
+	}
+	return 20 * time.Millisecond
+}()
+
+// settle delivers results from parked commands as they complete, until
+// none has for settleQuiet.
 func (h *harness) settle() {
 	h.t.Helper()
-	for progress := true; progress; {
-		progress = false
-		parked := h.pending
-		h.pending = nil
-		for _, ch := range parked {
-			select {
-			case msg := <-ch:
-				h.deliver(msg)
-				progress = true
-			case <-time.After(20 * time.Millisecond):
-				h.pending = append(h.pending, ch)
-			}
+	for len(h.pending) > 0 {
+		cases := make([]reflect.SelectCase, 0, len(h.pending)+1)
+		for _, ch := range h.pending {
+			cases = append(cases, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(ch)})
 		}
+		cases = append(cases, reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(time.After(settleQuiet))})
+		i, v, _ := reflect.Select(cases)
+		if i == len(h.pending) {
+			return // quiet
+		}
+		h.pending = slices.Delete(h.pending, i, i+1)
+		var msg tea.Msg
+		if v.IsValid() && !v.IsNil() {
+			msg = v.Interface().(tea.Msg)
+		}
+		h.deliver(msg)
 	}
 }
 
