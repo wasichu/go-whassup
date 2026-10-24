@@ -34,6 +34,7 @@ $ go-whassup db search lunch plans
 is synced from your phone and searchable offline.
 
 ↪️ Reply to a message, or react with a quick 👍 ❤️ 😂 or any emoji, searched by name.
+Edit what you sent, or delete it for everyone.
 
 📎 Attachments: open, preview, or save a copy. Send files from a browser with image
 previews, or type a path with tab completion.
@@ -124,7 +125,7 @@ scanning a QR code. History arrives over the next few minutes as the phone sends
 
 In the app, `?` lists every key. The essentials: `↑`/`↓` choose a chat, `enter` to
 write, `esc` back to the list, `/` find a chat or contact, `s` search, `,` settings,
-and `q` quit. While writing, `ctrl+r` replies or reacts, `ctrl+o` views attachments and `ctrl+t`
+and `q` quit. While writing, `ctrl+r` selects a message to reply, react, edit or delete, `ctrl+o` views attachments and `ctrl+t`
 attaches a file.
 
 | What | Where |

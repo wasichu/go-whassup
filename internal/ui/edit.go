@@ -57,6 +57,7 @@ func (m Model) startEdit() (Model, tea.Cmd) {
 	c := &m.conv
 	c.stopPicking()
 	c.setReply(nil)
+	c.setEditing(nil) // an edit already open: its text isn't what was typed
 	c.stash = c.input.Value()
 	c.input.SetValue(target.Text)
 	c.input.CursorEnd()
@@ -144,6 +145,9 @@ func (m Model) deleteKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		if why := deleteRefusal(target, time.Now()); why != "" {
 			m.say(why)
 			return m, nil
+		}
+		if c.editing != nil && c.editing.ID == target.ID {
+			c.setEditing(nil) // nothing left to edit
 		}
 		return m, deleteMessage(m.ctx, m.deps.Client, c.chat.JID, target)
 	case k == "n" || key.Matches(msg, keys.Blur):

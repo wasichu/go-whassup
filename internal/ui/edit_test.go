@@ -11,14 +11,16 @@ import (
 	"github.com/wasichu/go-whassup/internal/wa"
 )
 
-// mineWithAda opens Ada's chat with two of your messages after hers: one
-// sent three days ago (too old to change) and one a minute ago, the newest.
+// mineWithAda opens Ada's chat with three of your messages after hers: one
+// sent three days ago (too old to change), then two minutes and one minute
+// ago, the newest.
 func mineWithAda(t *testing.T) *harness {
 	t.Helper()
 	h := newHarness(t, true)
 	now := time.Now()
 	if _, err := h.st.SaveMessages(t.Context(), []wa.Message{
 		{ID: "old", Chat: ada, Sender: "me@s.whatsapp.net", FromMe: true, Timestamp: now.Add(-72 * time.Hour), Kind: wa.KindText, Text: "from before"},
+		{ID: "earlier", Chat: ada, Sender: "me@s.whatsapp.net", FromMe: true, Timestamp: now.Add(-2 * time.Minute), Kind: wa.KindText, Text: "running late"},
 		{ID: "new", Chat: ada, Sender: "me@s.whatsapp.net", FromMe: true, Timestamp: now.Add(-time.Minute), Kind: wa.KindText, Text: "see you at 5"},
 	}); err != nil {
 		t.Fatal(err)
@@ -59,6 +61,7 @@ func TestDeleteForEveryone(t *testing.T) {
 func TestDeleteRefusesOthersAndOldMessages(t *testing.T) {
 	h := mineWithAda(t)
 	h.key("ctrl+r")
+	h.key("up")
 	h.key("up") // yours, three days old
 	h.key("d")
 	if v := ansi.Strip(h.view()); !strings.Contains(v, "within 2 days") || strings.Contains(v, "for everyone?") {
@@ -121,6 +124,7 @@ func TestEditCancelAndUnchanged(t *testing.T) {
 func TestEditRefusals(t *testing.T) {
 	h := mineWithAda(t)
 	h.key("ctrl+r")
+	h.key("up")
 	h.key("up") // yours, three days old
 	h.key("E")
 	if v := ansi.Strip(h.view()); !strings.Contains(v, "within 15 minutes") || h.model().conv.editing != nil {
@@ -159,5 +163,35 @@ func TestEditTooLateKeepsTheText(t *testing.T) {
 	}
 	if v := ansi.Strip(h.view()); !strings.Contains(v, "Too late to edit") {
 		t.Errorf("should say it was too late:\n%s", v)
+	}
+}
+
+func TestSecondEditKeepsTheDraft(t *testing.T) {
+	h := mineWithAda(t)
+	h.key("draft")
+	h.key("ctrl+r")
+	h.key("E") // the newest
+	h.key("ctrl+r")
+	h.key("up") // the one before
+	h.key("E")
+	if m := h.model(); m.conv.editing == nil || m.conv.editing.ID != "earlier" || m.conv.input.Value() != "running late" {
+		t.Fatalf("the second E should edit the other message: editing=%v input=%q", m.conv.editing, m.conv.input.Value())
+	}
+	h.key("esc")
+	if v := h.model().conv.input.Value(); v != "draft" {
+		t.Errorf("after both edits, the draft should be back, not the first edit's text: %q", v)
+	}
+}
+
+func TestDeletingTheMessageBeingEdited(t *testing.T) {
+	h := mineWithAda(t)
+	h.key("ctrl+r")
+	h.key("E")
+	h.key("ctrl+r")
+	h.key("d")
+	h.key("y")
+	h.settle()
+	if m := h.model(); m.conv.editing != nil || len(h.client.SentDeletes()) != 1 {
+		t.Errorf("deleting the message being edited should end the edit: editing=%v deletes=%d", m.conv.editing, len(h.client.SentDeletes()))
 	}
 }
