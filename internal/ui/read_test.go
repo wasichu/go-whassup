@@ -104,7 +104,7 @@ func TestMarkReadModesSend(t *testing.T) {
 	} {
 		t.Run(setting, func(t *testing.T) {
 			h := newHarnessWithUnread(t, setting)
-			h.settle()
+			h.waitFor("the read to be sent", func() bool { return len(h.client.ReadCalls()) > 0 })
 			calls := h.client.ReadCalls()
 			if len(calls) != 1 || calls[0].Chat != bob || calls[0].Mode != mode || len(calls[0].IDs) != 2 {
 				t.Errorf("read calls = %+v", calls)
@@ -125,10 +125,7 @@ func TestNoReadWhileUnfocused(t *testing.T) {
 		t.Fatalf("read while the terminal was unfocused: unread = %d", got)
 	}
 	h.send(tea.FocusMsg{})
-	h.settle()
-	if got := h.unread(bob); got != 0 {
-		t.Errorf("focusing should read the open chat, unread = %d", got)
-	}
+	h.waitFor("focusing to read the open chat", func() bool { return h.unread(bob) == 0 })
 }
 
 func TestArrowingPastChatsDoesNotReadThem(t *testing.T) {
