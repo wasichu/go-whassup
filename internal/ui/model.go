@@ -359,6 +359,9 @@ func (m Model) inputKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case key.Matches(msg, keys.Blur) && m.conv.replyTo != nil:
 		m.conv.setReply(nil) // esc cancels the reply before leaving the box
 		return m, nil
+	case key.Matches(msg, keys.Blur) && m.conv.editing != nil:
+		m.conv.setEditing(nil) // and an edit, putting back what was typed
+		return m, nil
 	case key.Matches(msg, keys.Blur):
 		m.focus = focusList
 		m.conv.input.Blur()
@@ -371,7 +374,8 @@ func (m Model) inputKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	return m, cmd
 }
 
-// sendInput sends what's typed: as a reply when one is being written.
+// sendInput sends what's typed: as a reply or an edit when one is being
+// written.
 func (m Model) sendInput() (Model, tea.Cmd) {
 	text := strings.TrimSpace(m.conv.input.Value())
 	if text == "" || m.conv.chat.JID == "" {
@@ -379,6 +383,9 @@ func (m Model) sendInput() (Model, tea.Cmd) {
 	}
 	m.conv.input.Reset()
 	m.notice = notice{}
+	if m.conv.editing != nil {
+		return m.sendEdit(text)
+	}
 	if to := m.conv.replyTo; to != nil {
 		m.conv.setReply(nil)
 		return m, sendReply(m.ctx, m.deps.Client, m.conv.chat.JID, text, *to)

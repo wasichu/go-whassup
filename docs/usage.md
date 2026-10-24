@@ -47,7 +47,7 @@ the status line. If the device isn't linked, it opens the **login screen** inste
 | `pgup`/`pgdn` | scroll messages | scroll messages |
 | `/` | find a chat or contact (new chats too) | (typed) |
 | `s` | search message text | (typed) |
-| `ctrl+r` | | select a message: reply, react, copy, delete, see who sent it or reacted (see below) |
+| `ctrl+r` | | select a message: reply, react, edit, delete, copy, see who sent it or reacted (see below) |
 | `ctrl+o` | | view attachments: open (downloads if needed), save a copy |
 | `ctrl+t` | | attach file: send one to this chat |
 | `i` | chat info: number, or a group's topic and members | (typed) |
@@ -185,6 +185,11 @@ names stay readable on disk.**
 - **`c` copies its text** (or a photo's caption) to the clipboard, mentions written
   as names (`@Ada`). Like copying a number, this needs a terminal that allows
   clipboard access.
+- **`E` edits it** (shift+e): your text message goes into the box with a banner
+  (`✎ Editing your message`); change it and press `enter`, and everyone sees the new text
+  marked "(edited)". `esc` cancels, and whatever you'd typed before comes back. WhatsApp
+  allows edits for 15 minutes after sending; if that runs out while you type, the text
+  stays in the box to send as a new message. Replies and captions can't be edited yet.
 - **`d` deletes it for everyone**, after asking (`y` deletes, `n` or `esc` keeps it).
   Everyone, you included, then sees "This message was deleted", as when it's done on a
   phone. It works on your own messages up to 2 days after sending; WhatsApp's limit is

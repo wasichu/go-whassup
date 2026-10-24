@@ -47,8 +47,8 @@ func (c *conversation) resize(width, height int) {
 	c.width, c.height = width, height
 	c.viewport.SetWidth(width)
 	chrome := 3 // header, separator, input
-	if c.replyTo != nil {
-		chrome++ // the reply banner
+	if c.replyTo != nil || c.editing != nil {
+		chrome++ // the reply or edit banner
 	}
 	c.viewport.SetHeight(max(height-chrome, 1))
 	c.input.SetWidth(max(width-lipgloss.Width(c.input.Prompt)-1, 1))
@@ -64,7 +64,10 @@ func (c *conversation) setChat(chat store.ChatSummary) {
 		c.msgs = nil
 		c.newFrom = time.Time{}
 		c.highlight = ""
-		c.compose = compose{} // a reply or pick belongs to the chat it started in
+		if c.editing != nil {
+			c.input.SetValue(c.stash) // never send an edit's text to another chat
+		}
+		c.compose = compose{} // a reply, pick or edit belongs to the chat it started in
 		defer c.resize(c.width, c.height)
 		if chat.Unread > 0 {
 			c.newFrom = chat.LastReadAt // keep the divider while the chat stays open
@@ -143,8 +146,11 @@ func (c *conversation) view(width, height int, own string) string {
 		c.viewport.View(),
 		separatorStyle.Render(strings.Repeat("─", width)),
 	}
-	if c.replyTo != nil {
+	switch {
+	case c.replyTo != nil:
 		parts = append(parts, c.replyBanner(width))
+	case c.editing != nil:
+		parts = append(parts, editBanner())
 	}
 	switch picked, ok := c.pickedMessage(); { // the strips go in place of the input
 	case c.reacting && ok:

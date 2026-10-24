@@ -22,16 +22,17 @@ var quickReactions = [...]string{"👍", "❤️", "😂", "😮", "😢", "🙏
 // moreReactions is the strip's last choice: search every emoji.
 const moreReactions = len(quickReactions)
 
-// compose is the message box's reply/react state, kept with the
+// compose is the message box's reply/react/edit state, kept with the
 // conversation it acts on.
 type compose struct {
-	picking  bool   // choosing a message with ↑/↓
-	picked   string // its ID (an ID, so new messages can't shift it)
-	reacting bool   // choosing a reaction for the picked message
-	// confirmingDelete asks before deleting the picked message for everyone.
-	confirmingDelete bool
+	picking          bool        // choosing a message with ↑/↓
+	picked           string      // its ID (an ID, so new messages can't shift it)
+	reacting         bool        // choosing a reaction for the picked message
+	confirmingDelete bool        // asking before deleting the picked message for everyone
 	choice           int         // index into quickReactions, or moreReactions
 	replyTo          *wa.Message // the message being replied to, shown above the input
+	editing          *wa.Message // your message being edited, its text in the input
+	stash            string      // what was typed before the edit, put back after
 }
 
 // pickable reports whether a message can be replied or reacted to.
@@ -145,8 +146,8 @@ const (
 
 // pickKey handles keys while picking a message: ↑/↓ move, r replies, e
 // reacts, + searches every emoji to react with, i shows who sent it and who
-// reacted, c copies its text, d deletes it for everyone (edit.go), esc goes
-// back to typing.
+// reacted, c copies its text, E edits it and d deletes it for everyone
+// (edit.go), esc goes back to typing.
 // Other keys do nothing (nothing types).
 func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	c := &m.conv
@@ -161,6 +162,7 @@ func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case msg.String() == "r":
 		if target, ok := c.pickedMessage(); ok {
 			c.stopPicking()
+			c.setEditing(nil)
 			c.setReply(&target)
 		}
 	case msg.String() == "e":
@@ -178,6 +180,8 @@ func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m.copyPicked()
 	case msg.String() == "d":
 		return m.startDelete()
+	case isEditKey(msg):
+		return m.startEdit()
 	}
 	return m, nil
 }
