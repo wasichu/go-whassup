@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/wasichu/go-whassup/internal/wa"
@@ -81,10 +80,10 @@ func TestEditYourMessage(t *testing.T) {
 	h := mineWithAda(t)
 	h.key("half typed")
 	h.key("ctrl+r") // the newest: yours, a minute old
-	h.key("E")
+	h.key("e")
 	m := h.model()
 	if m.conv.editing == nil || m.conv.input.Value() != "see you at 5" {
-		t.Fatalf("E should put the message in the box: editing=%v input=%q", m.conv.editing, m.conv.input.Value())
+		t.Fatalf("e should put the message in the box: editing=%v input=%q", m.conv.editing, m.conv.input.Value())
 	}
 	if v := ansi.Strip(h.view()); !strings.Contains(v, "✎ Editing your message") {
 		t.Fatalf("edit banner missing:\n%s", v)
@@ -106,14 +105,14 @@ func TestEditYourMessage(t *testing.T) {
 func TestEditCancelAndUnchanged(t *testing.T) {
 	h := mineWithAda(t)
 	h.key("ctrl+r")
-	h.key("E")
+	h.key("e")
 	h.key("!")
 	h.key("esc") // cancels the edit, stays in the box
 	if m := h.model(); m.conv.editing != nil || m.conv.input.Value() != "" || m.focus != focusInput {
 		t.Fatalf("esc should cancel the edit: editing=%v input=%q focus=%v", m.conv.editing, m.conv.input.Value(), m.focus)
 	}
 	h.key("ctrl+r")
-	h.key("E")
+	h.key("e")
 	h.key("enter") // unchanged: nothing to send
 	h.settle()
 	if es := h.client.SentEdits(); len(es) != 0 {
@@ -126,30 +125,21 @@ func TestEditRefusals(t *testing.T) {
 	h.key("ctrl+r")
 	h.key("up")
 	h.key("up") // yours, three days old
-	h.key("E")
+	h.key("e")
 	if v := ansi.Strip(h.view()); !strings.Contains(v, "within 15 minutes") || h.model().conv.editing != nil {
 		t.Errorf("an old message should say why it can't be edited:\n%s", v)
 	}
 	h.key("up") // Ada's
-	h.key("E")
+	h.key("e")
 	if v := ansi.Strip(h.view()); !strings.Contains(v, "only edit your own messages") {
 		t.Errorf("someone else's message should say why it can't be edited:\n%s", v)
-	}
-}
-
-func TestEditKeyUnderKittyProtocol(t *testing.T) {
-	h := mineWithAda(t)
-	h.key("ctrl+r")
-	h.send(tea.KeyPressMsg{Code: 'e', ShiftedCode: 'E', Mod: tea.ModShift}) // no Text
-	if h.model().conv.editing == nil {
-		t.Error("shift+e should start editing")
 	}
 }
 
 func TestEditTooLateKeepsTheText(t *testing.T) {
 	h := mineWithAda(t)
 	h.key("ctrl+r")
-	h.key("E")
+	h.key("e")
 	h.model().conv.editing.Timestamp = time.Now().Add(-time.Hour) // the window ran out while typing
 	h.key(" sharp")
 	h.key("enter")
@@ -170,12 +160,12 @@ func TestSecondEditKeepsTheDraft(t *testing.T) {
 	h := mineWithAda(t)
 	h.key("draft")
 	h.key("ctrl+r")
-	h.key("E") // the newest
+	h.key("e") // the newest
 	h.key("ctrl+r")
 	h.key("up") // the one before
-	h.key("E")
+	h.key("e")
 	if m := h.model(); m.conv.editing == nil || m.conv.editing.ID != "earlier" || m.conv.input.Value() != "running late" {
-		t.Fatalf("the second E should edit the other message: editing=%v input=%q", m.conv.editing, m.conv.input.Value())
+		t.Fatalf("the second e should edit the other message: editing=%v input=%q", m.conv.editing, m.conv.input.Value())
 	}
 	h.key("esc")
 	if v := h.model().conv.input.Value(); v != "draft" {
@@ -186,7 +176,7 @@ func TestSecondEditKeepsTheDraft(t *testing.T) {
 func TestDeletingTheMessageBeingEdited(t *testing.T) {
 	h := mineWithAda(t)
 	h.key("ctrl+r")
-	h.key("E")
+	h.key("e")
 	h.key("ctrl+r")
 	h.key("d")
 	h.key("y")

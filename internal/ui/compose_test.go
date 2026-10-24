@@ -86,7 +86,7 @@ func TestPickingSkipsDeletedAndEscBacksOut(t *testing.T) {
 func TestReactWithQuickReactionAndRemove(t *testing.T) {
 	h := openAda(t)
 	h.key("ctrl+r")
-	h.key("e")
+	h.key("a")
 	if v := ansi.Strip(h.view()); !strings.Contains(v, "React:") || !strings.Contains(v, "👍") {
 		t.Fatalf("reaction strip missing:\n%s", v)
 	}
@@ -99,7 +99,7 @@ func TestReactWithQuickReactionAndRemove(t *testing.T) {
 
 	// The strip starts on your current reaction: enter again removes it.
 	h.key("ctrl+r")
-	h.key("e")
+	h.key("a")
 	h.key("enter")
 	h.settle()
 	if rs := h.client.SentReactions(); len(rs) != 2 || rs[1].Emoji != "" {
@@ -110,7 +110,7 @@ func TestReactWithQuickReactionAndRemove(t *testing.T) {
 func TestReactWithAnyEmoji(t *testing.T) {
 	h := openAda(t)
 	h.key("ctrl+r")
-	h.key("e")
+	h.key("a")
 	h.key("+")
 	if h.model().screen != screenEmoji {
 		t.Fatalf("+ should open emoji search:\n%s", ansi.Strip(h.view()))
@@ -193,7 +193,7 @@ func TestPlusOpensEmojiSearch(t *testing.T) {
 	if h.model().screen == screenEmoji {
 		t.Fatal("+ while picking shouldn't open emoji search; only the reaction strip offers it")
 	}
-	h.key("e")
+	h.key("a")
 	h.send(kittyPlus)
 	if h.model().screen != screenEmoji || h.model().emojiPick.target.ID != "a1" {
 		t.Errorf("+ on the reaction strip should open emoji search for a1:\n%s", ansi.Strip(h.view()))

@@ -10,7 +10,7 @@ import (
 	"github.com/wasichu/go-whassup/internal/wa"
 )
 
-// Changing your own messages, from select mode: E puts the picked text
+// Changing your own messages, from select mode: e puts the picked text
 // message in the box to edit (enter sends the edit), and d deletes it for
 // everyone after a confirmation. WhatsApp allows each only for your own
 // messages and only for a while after sending (wa.EditWindow,
@@ -34,12 +34,6 @@ func editRefusal(m wa.Message, now time.Time) string {
 		return "WhatsApp only allows edits within 15 minutes of sending."
 	}
 	return ""
-}
-
-// isEditKey reports an "E" however the terminal sends it: as typed text,
-// or (with the kitty keyboard protocol) as shift+e.
-func isEditKey(msg tea.KeyPressMsg) bool {
-	return msg.Text == "E" || msg.String() == "shift+e"
 }
 
 // startEdit puts the picked message's text in the box to edit, keeping

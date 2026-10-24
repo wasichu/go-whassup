@@ -35,7 +35,7 @@ Enter
 Sleep 500ms
 Ctrl+R
 Sleep 800ms
-Type "e"
+Type "a"
 Sleep 1.2s
 Screenshot docs/assets/screenshot-react.png
 Type "1"

@@ -13,7 +13,7 @@ import (
 )
 
 // Replying and reacting, from the message box: ctrl+r picks a message
-// (↑/↓), then r replies to it or e reacts. Reacting offers WhatsApp's
+// (↑/↓), then r replies to it or a reacts. Reacting offers WhatsApp's
 // quick reactions plus "+", which searches every emoji (emojiPage).
 
 // quickReactions are WhatsApp's default quick reactions.
@@ -144,9 +144,9 @@ const (
 	noTextNotice = "That message has no text to copy."
 )
 
-// pickKey handles keys while picking a message: ↑/↓ move, r replies, e
+// pickKey handles keys while picking a message: ↑/↓ move, r replies, a
 // reacts (where + searches every emoji), i shows who sent it and who
-// reacted, c copies its text, E edits it and d deletes it for everyone
+// reacted, c copies its text, e edits it and d deletes it for everyone
 // (edit.go), esc goes back to typing.
 // Other keys do nothing (nothing types).
 func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
@@ -165,7 +165,7 @@ func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 			c.setEditing(nil)
 			c.setReply(&target)
 		}
-	case msg.String() == "e":
+	case msg.String() == "a":
 		if target, ok := c.pickedMessage(); ok {
 			c.reacting, c.choice = true, max(slices.Index(quickReactions[:], myReaction(target)), 0)
 		}
@@ -177,7 +177,7 @@ func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m.copyPicked()
 	case msg.String() == "d":
 		return m.startDelete()
-	case isEditKey(msg):
+	case msg.String() == "e":
 		return m.startEdit()
 	}
 	return m, nil

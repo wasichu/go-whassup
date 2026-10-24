@@ -57,7 +57,7 @@ step lands or the plan changes.
 3. [x] **Edits, deletes and reactions** applied to stored messages and shown in the
    TUI. *(Live test pending.)* Sending replies and reactions shipped in v0.2.0
    (`ctrl+r`; reactions confirmed live in a group); who reacted shows on the `i` card
-   since v0.2.4. Editing your messages (`E`) and deleting them for everyone (`d`)
+   since v0.2.4. Editing your messages (`e`) and deleting them for everyone (`d`)
    followed (editing replies and captions doesn't yet).
 4. [x] **Media:**
    - download and open attachments (`o`), with an extension allowlist;

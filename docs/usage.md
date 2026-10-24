@@ -185,7 +185,7 @@ names stay readable on disk.**
 - **`c` copies its text** (or a photo's caption) to the clipboard, mentions written
   as names (`@Ada`). Like copying a number, this needs a terminal that allows
   clipboard access.
-- **`E` edits it** (shift+e): your text message goes into the box with a banner
+- **`e` edits it**: your text message goes into the box with a banner
   (`✎ Editing your message`); change it and press `enter`, and everyone sees the new text
   marked "(edited)". `esc` cancels, and whatever you'd typed before comes back. WhatsApp
   allows edits for 15 minutes after sending; if that runs out while you type, the text
@@ -196,7 +196,7 @@ names stay readable on disk.**
   about that, and phones ignore a delete that arrives later, so go-whassup says why
   instead of sending one. ("Delete for me" isn't offered: whatsmeow can't sync it to your
   other devices, so your phone would still show the message.)
-- **`e` reacts.** A strip of WhatsApp's quick reactions replaces the box:
+- **`a` reacts.** A strip of WhatsApp's quick reactions replaces the box:
   `👍 ❤️ 😂 😮 😢 🙏 +`. Press `1`–`6`, or `←`/`→` and `enter`. The strip starts on
   your current reaction, and choosing the reaction you already have removes it, as on the
   phone. **`+`** searches every emoji by name or keyword (`laugh` finds 😂, `party` 🎉);
