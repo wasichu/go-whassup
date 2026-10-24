@@ -44,7 +44,8 @@ func TestDeleteForEveryone(t *testing.T) {
 	}
 	h.key("d")
 	h.key("y")
-	h.settle()
+	// The delete comes back as an event, then the chat reloads: wait for it.
+	h.waitFor("the deleted placeholder", func() bool { return strings.Contains(ansi.Strip(h.view()), "This message was deleted") })
 	if ds := h.client.SentDeletes(); len(ds) != 1 || ds[0].ID != "new" || ds[0].Chat != ada {
 		t.Fatalf("deletes sent = %+v", ds)
 	}
@@ -90,7 +91,7 @@ func TestEditYourMessage(t *testing.T) {
 	}
 	h.key(" sharp")
 	h.key("enter")
-	h.settle()
+	h.waitFor("the edited text", func() bool { return strings.Contains(ansi.Strip(h.view()), "see you at 5 sharp (edited)") })
 	if es := h.client.SentEdits(); len(es) != 1 || es[0].ID != "new" || es[0].Text != "see you at 5 sharp" {
 		t.Fatalf("edits sent = %+v", es)
 	}
@@ -180,7 +181,7 @@ func TestDeletingTheMessageBeingEdited(t *testing.T) {
 	h.key("ctrl+r")
 	h.key("d")
 	h.key("y")
-	h.settle()
+	h.waitFor("the delete to be sent", func() bool { return len(h.client.SentDeletes()) == 1 })
 	if m := h.model(); m.conv.editing != nil || len(h.client.SentDeletes()) != 1 {
 		t.Errorf("deleting the message being edited should end the edit: editing=%v deletes=%d", m.conv.editing, len(h.client.SentDeletes()))
 	}
