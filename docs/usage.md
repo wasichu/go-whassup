@@ -200,8 +200,7 @@ names stay readable on disk.**
   `👍 ❤️ 😂 😮 😢 🙏 +`. Press `1`–`6`, or `←`/`→` and `enter`. The strip starts on
   your current reaction, and choosing the reaction you already have removes it, as on the
   phone. **`+`** searches every emoji by name or keyword (`laugh` finds 😂, `party` 🎉);
-  `↑`/`↓` and `enter` react, `esc` backs out. `+` works while picking a message too, so
-  `ctrl+r` `+` goes straight to search. The emoji list is Unicode's, with CLDR's English
+  `↑`/`↓` and `enter` react, `esc` backs out. The emoji list is Unicode's, with CLDR's English
   keywords, built into the binary (`internal/emoji`). It stops at Emoji 16.0: Unicode
   publishes new emoji well before phones and fonts can draw them, and a reaction nobody
   can see shows as a blank box.

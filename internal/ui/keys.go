@@ -62,7 +62,6 @@ var (
 		key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "choose a message")),
 		key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reply")),
 		key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "react")),
-		key.NewBinding(key.WithKeys("+"), key.WithHelp("+", "any emoji")),
 		key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "who sent it, who reacted")),
 		key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "copy text")),
 		key.NewBinding(key.WithKeys("E"), key.WithHelp("E", "edit")),

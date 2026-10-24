@@ -145,7 +145,7 @@ const (
 )
 
 // pickKey handles keys while picking a message: ↑/↓ move, r replies, e
-// reacts, + searches every emoji to react with, i shows who sent it and who
+// reacts (where + searches every emoji), i shows who sent it and who
 // reacted, c copies its text, E edits it and d deletes it for everyone
 // (edit.go), esc goes back to typing.
 // Other keys do nothing (nothing types).
@@ -169,9 +169,6 @@ func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		if target, ok := c.pickedMessage(); ok {
 			c.reacting, c.choice = true, max(slices.Index(quickReactions[:], myReaction(target)), 0)
 		}
-	case isPlus(msg):
-		c.choice = moreReactions
-		return m.chooseReaction()
 	case msg.String() == "i":
 		if target, ok := c.pickedMessage(); ok {
 			return m.openSender(target)
