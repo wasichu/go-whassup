@@ -1,184 +1,116 @@
 # go-whassup
 
-Single-binary WhatsApp client for the terminal, written in Go. Inspired by waha-tui,
-but with a hard goal of **minimal dependencies and no cgo**: one static binary,
-nothing else to install or run.
+Single-binary terminal WhatsApp client in Go. Keep dependencies minimal and build
+with `CGO_ENABLED=0`: one static binary, no extra service or cgo runtime.
 
-## Toolchain (pinned via mise)
+## Working in this repo
 
-- `mise.toml` is the source of truth for tool versions (Go, just, gopls, golangci-lint) and sets
-  `GOTOOLCHAIN=local` and `CGO_ENABLED=0`. Don't change these without being asked.
-- `go.mod`'s `go` directive is the *minimum* language version (1.26, required by
-  whatsmeow), not the pinned toolchain.
-- If mise isn't activated in your shell, a bare `go` may be the wrong version.
-  Run tools through `just` (its recipes use `mise exec`) or `mise exec -- go …`.
+- Preserve unrelated working-tree changes. Do not commit, push, merge, publish,
+  or add a git remote unless asked.
+- Use the package that owns the concern and its existing abstractions before
+  adding another package. Keep `cmd/go-whassup/main.go` limited to startup/exit;
+  `internal/app` wires dependencies, with business logic in other packages.
+- Update docs with the behavior they describe. Start at `docs/README.md`; read
+  `docs/architecture.md` for boundaries/event flow, `docs/pairing.md` for pairing,
+  `docs/storage.md` for persistence, and `docs/config.md` before adding settings.
+  New packages or protocol findings also need architecture/index updates.
+- Keep this file focused on durable project rules. Put detailed design and
+  troubleshooting in `docs/`, and keep executable checks in the Justfile/CI.
+- Finish with the result, validation, and a concrete recommended next step from
+  remaining work or `docs/roadmap.md`. Distinguish work completed from anything
+  needing the user's account, manual testing, or an explicit scope decision.
 
-## Commands (Justfile)
+## Toolchain and validation
 
-| Command | What it does |
+`mise.toml` owns pinned tool versions and sets `GOTOOLCHAIN=local` and
+`CGO_ENABLED=0`. Use `just` (recipes invoke mise) or `mise exec -- go …`;
+a bare `go` may use the wrong version. `go.mod`'s `go` directive is the minimum
+language version, not the pinned toolchain. Change pins only for a requested
+maintenance/toolchain task; preserve the environment settings and only raise the
+minimum language version when required, explaining why.
+
+| Command | Purpose |
 | --- | --- |
-| `just check` | fmt-check + build + vet + lint + test. **Run before declaring any change done.** |
-| `just build` | Builds `bin/go-whassup` |
-| `just run [args]` | Builds and runs: no args = TUI (needs a real terminal); `login [phone]` = pair via phone code; `listen` = headless, prints incoming messages. Flags work before or after the subcommand. Full usage: `docs/usage.md`. |
-| `just test [flags]` | `go test ./...` with extra flags, e.g. `just test -run TestX -v` |
-| `just lint [flags]` | golangci-lint. `.golangci.yml` enforces import boundaries, bans cgo sqlite and Bubble Tea v1, forbids printing to the terminal and discarding errors, and limits function size/complexity (`funlen` 80 lines/50 statements, `gocognit` 20, `nestif` 4; tests exempt from the first two). Fix the code; don't weaken the config or add exclusions. |
-| `just fmt` / `just tidy` | gofmt / `go mod tidy` |
-| `just logs` | Tails the app log |
-| `just index` | Rebuilds the graft context graph |
-| `just emoji` | Regenerates `internal/emoji/emoji.tsv` from Unicode's emoji list and CLDR keywords |
-| `just gif` | Records the README's `demo.gif` and `screenshot-*.png` from `go-whassup demo` (fictional data) with vhs |
-| `just release vX.Y.Z` | Cross-compiles cgo-free binaries for darwin/linux × amd64/arm64 into `dist/` (version stamped; `go-whassup -version`), plus `SHA256SUMS` |
+| `just check` | Required completion gate: formatting, build, vet, lint, tests |
+| `just test [flags]` | Focused tests, e.g. `just test -run TestX -v` |
+| `just build` / `just run [args]` | Build / run; TUI needs a real terminal; CLI usage in `docs/usage.md` |
+| `just fmt` / `just tidy` | Format Go / tidy modules |
+| `just lint [flags]` | Enforce `.golangci.yml`; fix violations instead of weakening checks |
+| `just outdated` | Inspect module updates without changing the module files (network) |
+| `just vulncheck` | Scan reachable code for known Go vulnerabilities (network) |
+| `just index` | Rebuild the Trail code map |
+| `just emoji` / `just gif` | Regenerate emoji data / record fictional demo assets |
+| `just release vX.Y.Z` | Build cgo-free Darwin/Linux release artifacts locally |
 
-Add a recipe when a command starts getting run often. Don't leave long ad-hoc
-invocations in docs.
+Run `just check` before declaring a change done. Tests use disposable fixtures;
+run them and fix failures caused by the change without asking at each step.
+After dependency changes, also run `just tidy` and `just vulncheck`. Report
+checks that could not run and why. Add a recipe for recurring commands.
 
-## Stack (pinned majors; do not mix)
+## Dependencies and APIs
 
-- TUI: `charm.land/bubbletea/v2`, `charm.land/lipgloss/v2` (and `charm.land/bubbles/v2`
-  when needed). **v2 APIs only.** v1 (`github.com/charmbracelet/bubbletea`)
-  is incompatible: v2 `View()` returns `tea.View`, keys arrive as `tea.KeyPressMsg`,
-  and alt-screen is set on the View, not as a program option.
-- Protocol: `go.mau.fi/whatsmeow` (no tagged releases; pseudo-versions).
-- Storage: `modernc.org/sqlite` (pure Go). Never `mattn/go-sqlite3`, which needs cgo.
-- Config: a typed struct in `internal/config`, stored as TOML via `github.com/pelletier/go-toml/v2`.
-  **Not viper** (it's heavy and round-trips badly; see `docs/config.md`). New settings follow
-  the "Adding a setting" steps in `docs/config.md`.
-- **Verify APIs before using them.** These libraries change often. Check with the
-  gopls MCP tool `go_package_api` (or `go doc <pkg>.<Symbol>`) rather than relying on memory.
+- Stdlib first. Explain each new module in the change summary (and commit message
+  if a commit is requested). Test-only modules are acceptable when they replace
+  meaningful harness code.
+- TUI uses `charm.land/bubbletea/v2`, `charm.land/lipgloss/v2`, and
+  `charm.land/bubbles/v2`. Do not mix in v1: v2 `View()` returns `tea.View`, keys
+  are `tea.KeyPressMsg`, and alt-screen belongs on the View.
+- Only `internal/wa` imports `go.mau.fi/whatsmeow`. UI code uses `wa.Client` and
+  tests share `internal/wa/watest`; do not modify upstream protobuf schemas.
+- SQLite is `modernc.org/sqlite` (pure Go), opened only in `internal/sqlite`.
+  Never introduce `mattn/go-sqlite3` or another cgo requirement.
+- Config is a typed `internal/config` struct with TOML via
+  `github.com/pelletier/go-toml/v2`; follow `docs/config.md`, not viper.
+- Verify dependency APIs against installed versions with gopls `go_package_api`
+  or `mise exec -- go doc <pkg>.<Symbol>` before using them.
+- Use gopls `go_symbol_references` before signature changes and
+  `go_rename_symbol` for renames. Run `go_diagnostics` on edited Go files when
+  the MCP tools are available; otherwise use compiler/vet/lint diagnostics.
+- `docs/dependencies.md` describes update ownership: the weekly workflow owns
+  whatsmeow; Renovate owns other modules, Actions, and mise pins. Review updates
+  and their CI results; automation does not authorize merging or major migrations.
 
-## Code intelligence (MCP servers in `.mcp.json`)
+## Runtime invariants
 
-- **graft** (repo-only context graph): use it to navigate *this repo*: where code
-  lives, callers, and blast radius. See the graft section below.
-- **gopls** (type-aware, covers dependencies, version pinned in `mise.toml`):
-  - `go_package_api`: dependency APIs (whatsmeow, bubbletea). It only sees modules
-    already in `go.mod`, so `go get` first, then query.
-  - `go_symbol_references`: run before changing a symbol's signature.
-  - `go_rename_symbol`: renames.
-  - `go_diagnostics`: run on edited files before `just check`.
-  - `go_vulncheck`: run after adding or bumping dependencies.
+- **TEA:** mutate UI state only in `Update()`. Async work returns a `tea.Msg`
+  through a `tea.Cmd`. Receive whatsmeow events through `wa.Subscribe`; a command
+  waits on `sub.C` and returns the event. Do not use `p.Send` or touch/render UI
+  state from background goroutines.
+- **Persistence:** subscriptions can drop events when full. Message recording
+  needs its own non-lossy handler. whatsmeow persists sessions, not our messages;
+  `internal/store` owns `messages.db`. Message text/media keys go through Codec.
+- **Terminal:** Bubble Tea owns stdout/stderr while running. Send all logs,
+  including whatsmeow logs, through `slog` to
+  `$XDG_STATE_HOME/go-whassup/wa.log`; surface user-facing errors in the View.
+  Headless commands use their existing `Console` abstraction.
+- **Errors:** wrap with context and return, or surface in the UI. Do not discard
+  errors with `_ =`; intentionally ignored errors require an explanatory comment.
+- **Privacy:** runtime data belongs in XDG locations via `internal/paths`, never
+  the repo. Data directories are `0700`; DBs and cached media are `0600`. Do not
+  log or commit session credentials, encryption keys, or private message content.
+- **WhatsApp:** preserve the pairing methods on `wa.Client` and follow
+  `docs/pairing.md`. Avoid bot-like behavior: presence spam, automatic read
+  receipts, bulk history fetches, or rapid-fire sends.
 
-## Dependency policy
+## Tests
 
-- Stdlib first. Each new module needs a one-line justification in the commit message.
-- Must build with `CGO_ENABLED=0`.
-- Test-only deps (e.g. `charmbracelet/x/exp/teatest`) are acceptable when they replace
-  meaningful hand-rolled harness code.
+Tests must not require a real WhatsApp account or network access. Drive UI
+`Update()` with messages and assert on state or `View().Content`, using
+`watest.Client`. Use `t.TempDir()` and `t.Setenv()` for filesystem/environment
+fixtures. Keep vulnerability/update queries separate from the offline test suite.
 
-## Docs (`docs/`)
+<!-- trail:start -->
+## Trail — repo context graph
 
-- `docs/` holds design notes and protocol facts that the code alone doesn't explain.
-  `docs/README.md` is the index.
-- **When you change behavior a doc describes, update that doc in the same commit.**
-  New subsystems or non-obvious protocol findings get a doc, or a section in one,
-  plus an index entry.
-- Read the relevant doc before changing pairing, storage, or event flow.
+Use Trail to locate unfamiliar Go code and trace callers before changing shared
+behavior: `trail map` for orientation, `trail ask "<question>" --source` for
+ranked code spans, `trail grep "<literal>"` for exhaustive indexed matches,
+`trail skeleton <file>` for signatures, and `trail callers <symbol>` for edges
+(`--direction out` for dependencies, `--depth N` for a wider impact).
 
-## Layout
-
-```
-cmd/go-whassup/          main.go only: signal ctx -> app.Run -> exit code. Keep it ~20 lines.
-internal/app/        composition root: args, paths, logging, wiring. No business logic.
-internal/paths/      XDG locations (ConfigFile, DataDir, SessionDB, MessagesDB, LogFile)
-internal/config/     typed Config: defaults, Load (strict), Validate, Save (atomic), Fields (generic editing)
-internal/logging/    slog file logger; Cap (a minimum level settable while running)
-internal/wa/         whatsmeow adapter: Client interface, Event types, Subscribe.
-                     ONLY package importing whatsmeow.
-internal/wa/watest/  fake wa.Client shared by all tests
-internal/headless/   login/listen/db commands (Console: In/Out/Log)
-internal/termcaps/   terminal capability detection (Kitty graphics, notifications; incl. via tmux); read-only
-internal/sqlite/     the only place that opens SQLite (driver, DSN, 0600)
-internal/store/      OUR messages.db + Recorder. whatsmeow does NOT persist messages.
-                     Message text and media keys go through Codec only (seal/open).
-internal/media/      attachment cache (hashed names, 0600; Switchable dir), system opener, saving copies
-internal/crypt/      AES-256-GCM (with associated data), key wrapping, Argon2id
-internal/encryption/ at-rest encryption while running: key sources, unlock/create, the
-                     Controller (re-seal at startup or live from Settings)
-internal/keysource/  keyring (security/secret-tool via stdin), password_command, prompt
-internal/fuzzy/      fuzzy name matching (chat finder, emoji search)
-internal/emoji/      embedded, searchable emoji (Unicode names + CLDR keywords); regenerate with `just emoji`
-internal/demo/       `go-whassup demo`: the real TUI on seeded, fictional chats via watest (temp dir)
-internal/ui/         Bubble Tea models + Run. Root Model routes; screens other than main/login
-                     implement `page` (page.go). Imports internal/wa, never whatsmeow.
-```
-
-- **Keep `main.go` short and put logic in `internal/*`.** Add packages as real
-  concerns appear, organized by concern.
-- **Reuse before adding.** Extend the package that owns a concern, and reuse
-  existing abstractions (`wa.Subscribe`, `watest.Client`, `Console`, `paths.Paths`)
-  rather than parallel ones. When you add a package, update this block and
-  `docs/architecture.md`.
-
-## Invariants
-
-- **TEA:** mutate model state only in `Update()`. Async work returns a `tea.Msg` from a `tea.Cmd`.
-- **Goroutines:** whatsmeow event handlers run on background goroutines. Consume events
-  via `wa.Subscribe`. In the TUI, a `tea.Cmd` receives the next event from `sub.C` and
-  returns it as a `tea.Msg`; don't use `p.Send`. Never render or touch UI state off the
-  UI goroutine. Subscriptions drop events when full, so data that must not be lost
-  (the message store) needs its own non-lossy handler.
-- **Terminal ownership:** Bubble Tea owns stdout/stderr while running. All logging,
-  including whatsmeow's logger, goes to `$XDG_STATE_HOME/go-whassup/wa.log` via `slog`.
-  No `fmt.Print*` or `log.Print*` to the terminal once the program starts.
-- **Errors:** wrap with context (`fmt.Errorf("doing X: %w", err)`) and return, or surface
-  in the View. No `_ =` discards. Ignoring an error needs a comment saying why.
-- **Runtime data:** session/message DBs live in `$XDG_DATA_HOME/go-whassup/`, created `0700`.
-  Never write runtime files into the repo, and never commit them.
-- **Pairing:** phone-number code only (`PairPhone`). Keep pairing behind its own method
-  on the `wa` interface so QR pairing can be added later without touching event handling.
-
-## Testing
-
-- Tests must never require a real WhatsApp account or network access.
-- UI: drive `Update()` with messages and assert on the model or `View().Content`, using a
-  fake implementation of the `wa` interface.
-- Use `t.TempDir()` and `t.Setenv()` for anything touching paths or env.
-
-## Don't
-
-- Modify whatsmeow protobuf schemas.
-- Add behavior that looks like a bot (ban risk): presence spam, automatic read
-  receipts, bulk history fetches, rapid-fire sends.
-- Commit, push, or add a git remote unless asked. The repo is local-only for now.
-
-<!-- graft:start -->
-## Graft — repo context graph
-
-This repo is indexed in `graft/`: small linked markdown nodes that explain each
-system and carry exact file:line spans, kept in sync with the code through git.
-
-For ANY task here — understanding how something works, finding where code lives,
-or scoping a change — get context from the graph before grepping or opening
-source files. Re-ask freely (it's cheap) and reuse literal identifiers you
-already have (symbol, error string, file name) as the query. New to this repo?
-Run `graft map` first — a token-budgeted orientation (dir clusters, hubs,
-hotspots), no LLM, no key.
-
-- Run `graft ask "<your question>" --source` → ranked nodes with the relevant
-  code spans inlined (each hit's ≤8-line crux by default; `--full` for whole
-  definitions when the crux isn't enough). Match the tool to the task shape:
-  for understanding or editing, the top node IS the answer — cite its
-  `covers:` file:line spans and edit straight from `--source`. For
-  exhaustive tasks ("every occurrence / every caller of this pattern"), ranked
-  results are top-N, not complete — run `graft grep "<literal>"` instead
-  (exhaustive over indexed files, grouped by enclosing symbol), falling back
-  to raw `grep -rn` only for unindexed files.
-- `graft skeleton <file>` → every definition's signature + span, ~10× cheaper
-  than reading the file; use it to skim an API surface.
-- `graft callers <symbol>` gives precomputed, exact edges — who calls this.
-  Add `--direction out` for what it calls, or `--depth N` to walk
-  transitively for the full blast radius. For structural questions, skip
-  ranking and use this directly.
-- Or browse: `graft/INDEX.md` lists every node; follow the links.
-- Monorepos and folders of multiple repos rank fairly across sub-projects —
-  hits carry `[scope/]` labels naming which one they're from. Narrow with
-  `graft ask "<task>" --in <scope>/` once you know where you're working.
-
-If a returned span is truncated ("+N more lines"), open the file at that exact
-range before finalizing. Only open source files when a node genuinely lacks a
-needed detail, and then at the exact file:line the node points to — never
-re-read whole files.
-
-After big code changes, refresh the graph with `graft build` (deterministic,
-no API key, $0).
-<!-- graft:end -->
+Read the full affected definition when a returned span is truncated. For known
+files, docs/configs, unindexed code, or unavailable/irrelevant graph results, use
+`rg` and read the needed files directly. Refresh with `just index` after large
+code changes. Treat graph output as navigation context; source, configuration,
+and verified checks establish behavior.
+<!-- trail:end -->

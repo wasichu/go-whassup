@@ -4,6 +4,8 @@ just = "1.59.0"
 # gopls also serves the Go MCP server used by coding agents (see .mcp.json).
 "go:golang.org/x/tools/gopls" = "0.24.0"
 golangci-lint = "2.15.0"
+# Official Go vulnerability scanner; a development tool, not a binary dependency.
+"go:golang.org/x/vuln/cmd/govulncheck" = "1.9.0"
 
 [env]
 # mise is the single source of truth for the toolchain; don't let `go` auto-download another one.

@@ -1,13 +1,34 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
+  "enabledManagers": ["gomod", "github-actions", "mise"],
+  "timezone": "America/Chicago",
   "schedule": ["before 6am on monday"],
+  "automerge": false,
   "postUpdateOptions": ["gomodTidy"],
   "packageRules": [
     {
-      "description": "whatsmeow has no tagged releases; Renovate follows its latest pseudo-version",
+      "description": "Keep workflow actions pinned to immutable commits",
+      "matchManagers": ["github-actions"],
+      "pinDigests": true
+    },
+    {
+      "description": "The bump-whatsmeow workflow owns updates to this module",
+      "matchManagers": ["gomod"],
       "matchPackageNames": ["go.mau.fi/whatsmeow"],
-      "groupName": "whatsmeow"
+      "enabled": false
+    },
+    {
+      "description": "Keep the minimum Go language version separate from the mise toolchain",
+      "matchManagers": ["gomod"],
+      "matchDepTypes": ["golang", "toolchain"],
+      "enabled": false
+    },
+    {
+      "description": "Review module major migrations explicitly",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true
     }
   ]
 }

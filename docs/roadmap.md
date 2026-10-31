@@ -121,6 +121,7 @@ step lands or the plan changes.
   with bottles). The bump is manual per release for now (`brew bump-formula-pr`);
   automating it from a release workflow is planned. homebrew-core isn't planned. Plan and draft
   formula: `homebrew.md`.
-- [x] **Dependency bumps:** Renovate (`renovate.json`), gated by CI. Not Dependabot: it
-  can't update pseudo-versions, and whatsmeow has no tags. Renovate also covers
-  `mise.toml` and the GitHub Actions. Needs the Renovate app installed on the repo.
+- [x] **Dependency maintenance:** the weekly whatsmeow workflow follows upstream
+  `main`; Renovate handles other modules, `mise.toml`, and GitHub Actions without
+  auto-merging. CI and weekly vulnerability scans cover Linux and macOS. See
+  `dependencies.md` for setup, validation, and ownership.

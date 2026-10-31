@@ -1,0 +1,19 @@
+# Run independently of source changes: new advisories can affect old code.
+name: vulncheck
+on:
+  schedule:
+    - cron: "43 14 * * 1" # Mondays, 14:43 UTC
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  vulncheck:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
+      - run: just vulncheck

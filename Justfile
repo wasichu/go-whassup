@@ -42,6 +42,14 @@ fmt-check:
 tidy:
     {{go}} mod tidy
 
+# List available module updates without changing go.mod or go.sum (needs network)
+outdated:
+    {{go}} list -m -u all
+
+# Scan reachable code against the Go vulnerability database (needs network)
+vulncheck:
+    mise exec -- govulncheck ./...
+
 # Everything that must pass before a commit
 check: fmt-check build vet lint test
 
@@ -52,9 +60,9 @@ logs:
 clean:
     rm -rf bin
 
-# Rebuild the graft context graph (deterministic, no API key)
+# Rebuild the Trail context graph (deterministic, no API key)
 index:
-    graft build
+    trail build
 
 # Cross-compile release binaries + SHA256SUMS into dist/ (e.g. `just release v0.1.0`)
 release version:

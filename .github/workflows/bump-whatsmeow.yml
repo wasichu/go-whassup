@@ -18,8 +18,10 @@ jobs:
       BRANCH: deps/whatsmeow
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: jdx/mise-action@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: jdx/mise-action@6612f0ef07ed2a736cd1e00a94a065522dd41195 # v5.2.5
       - name: Update whatsmeow
         id: bump
         run: |
@@ -37,7 +39,7 @@ jobs:
         # A failure still opens the pull request: it says the update needs work.
         run: |
           set +e
-          just check > check.log 2>&1
+          (just check && just vulncheck) > check.log 2>&1
           echo "rc=$?" >> "$GITHUB_OUTPUT"
           tail -40 check.log
       - name: Open or update the pull request
@@ -53,7 +55,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -C "$BRANCH"
-          git commit -qam "deps: whatsmeow ${new_sha}"
+          git add go.mod go.sum
+          git commit -qm "deps: whatsmeow ${new_sha}"
           git push -qf origin "$BRANCH"
 
           {
@@ -63,9 +66,9 @@ jobs:
             echo "- What changed: https://github.com/tulir/whatsmeow/compare/${old_sha}...${new_sha}"
             echo
             if [ "$RC" = 0 ]; then
-              echo "\`just check\` passed on Linux."
+              echo "\`just check\` and \`just vulncheck\` passed on Linux."
             else
-              echo "**\`just check\` failed on Linux** (exit $RC); the update needs work. Last lines:"
+              echo "**Validation failed on Linux** (exit $RC); the update needs work. Last lines:"
               echo
               echo '```'
               tail -40 check.log
@@ -87,6 +90,6 @@ jobs:
           else
             gh pr create --head "$BRANCH" --title "deps: whatsmeow ${new_sha}" --body-file body.md
           fi
-          # Pull requests opened with this token don't trigger workflows;
-          # a dispatched run does, and its checks show on the pull request.
+          # Dispatch avoids an approval-required PR workflow run. The check
+          # workflow publishes a commit status for the dependency PR.
           gh workflow run check.yml --ref "$BRANCH"
