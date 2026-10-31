@@ -6,7 +6,7 @@ step lands or the plan changes.
 ## Done
 
 1. **Scaffold:** mise-pinned toolchain, Justfile, lint rules enforcing the AGENTS.md
-   invariants, graft + gopls MCP.
+   invariants, Trail code navigation + gopls MCP.
 2. **Headless pairing and listening:** phone-code pairing (`go-whassup login`),
    `go-whassup listen`. Verified live on 2026-10-18.
 3. **Storage (step 2)**, verified live on 2026-10-18, including a fresh re-link with history backfill:

@@ -9,10 +9,9 @@
 *.db-shm
 *.log
 
-# local tooling state (machine-specific: graft bakes absolute paths into its hooks)
+# machine-specific Claude settings and legacy helper scripts
 /.claude/settings.local.json
-/.claude/settings.json
 /.claude/helpers/
 
-# graft's local graph cache — regenerable, not committed (run `graft build`).
+# legacy graph cache; Trail's cache is excluded by .trail/.gitignore
 /graft/
