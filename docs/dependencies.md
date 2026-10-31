@@ -32,6 +32,11 @@ for this repository and complete onboarding if requested. Merely having
 verify it is active. The whatsmeow workflow additionally requires Settings →
 Actions → General → “Allow GitHub Actions to create and approve pull requests”.
 
+In the Mend Developer Platform, check the repository's Settings → Dependencies:
+Silent mode collects proposed updates without automatically opening PRs. For the
+weekly PR policy above, turn Silent mode off and enable Automated PRs for this
+repository. PR creation is separate from merging; `automerge` remains disabled.
+
 ## whatsmeow workflow
 
 `.github/workflows/bump-whatsmeow.yml` runs weekly, or via Actions →
