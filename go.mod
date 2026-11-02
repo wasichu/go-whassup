@@ -10,7 +10,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/charmbracelet/x/term v0.2.2
 	github.com/pelletier/go-toml/v2 v2.4.3
-	go.mau.fi/whatsmeow v0.0.0-20261031222104-5d4657a5c29e
+	go.mau.fi/whatsmeow v0.0.0-20261102152715-54038813c47f
 	golang.org/x/crypto v0.58.0
 	google.golang.org/protobuf v1.36.12
 	modernc.org/sqlite v1.61.1
