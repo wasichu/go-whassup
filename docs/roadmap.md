@@ -3,6 +3,17 @@
 Each step is a thin vertical slice that runs end to end. Update this file when a
 step lands or the plan changes.
 
+## Next priorities
+
+1. **Voice messages: listening and recording/sending together.** Both are required
+   for this feature. In-app playback and the record/preview/send/discard flow are
+   implemented. Phone-recorded playback and TUI recording/sending were confirmed
+   live by the user on 2026-11-04; Linux audio-device checks remain. Keep the
+   single-binary, no-cgo goal. See `voice.md`.
+2. **Group mention autocomplete**, as a small follow-up: typing `@` suggests group
+   members, and selecting one sends a real WhatsApp mention with the participant
+   ID, rather than only inserting display-name text.
+
 ## Done
 
 1. **Scaffold:** mise-pinned toolchain, Justfile, lint rules enforcing the AGENTS.md
@@ -23,7 +34,8 @@ step lands or the plan changes.
   "unavailable" on connect.
 - [x] Chat list | message pane | input; send text; works offline from the store;
   connection state in the status line. Verified live.
-- [x] Keymap with generated hints and a `?` overlay.
+- [x] Compact context hints, a searchable Ctrl+P actions menu, and scrollable F1 help
+  (`?` also opens help from the chat list).
 - [x] Login screen: phone code, QR choice (`rsc.io/qr`, half-blocks), Re-link, esc to
   cancel. Verified live: TUI re-link and QR scan.
 - [x] Inline QR image via Kitty graphics (Ghostty/kitty, including through tmux with
@@ -66,7 +78,8 @@ step lands or the plan changes.
    - media keys sealed through the codec.
 
    *(Live test pending.)* Follow-ups:
-   - video/audio sent as native media (needs duration/waveform);
+   - ordinary video/audio files sent as native media (voice-note sending is
+     implemented separately; see `voice.md`);
    - a policy for the media cache under encryption;
    - on macOS, setting the quarantine attribute on downloads;
    - inline image previews via Kitty graphics.

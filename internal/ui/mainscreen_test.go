@@ -265,8 +265,8 @@ func TestAttachmentKeysLiveInTheMessageBox(t *testing.T) {
 		return " " + strings.Join(out, " ") + " "
 	}
 	h := newHarness(t, true)
-	if got := keysOf(h.model().contextHelp()); strings.Contains(got, "ctrl+o") || strings.Contains(got, " o ") || !strings.Contains(got, " ? ") {
-		t.Errorf("chat list hints %q: no attachments, and ? for all keys", got)
+	if got := keysOf(h.model().contextHelp()); strings.Contains(got, "ctrl+o") || strings.Contains(got, " o ") || !strings.Contains(got, " F1 ") || !strings.Contains(got, " ctrl+p ") {
+		t.Errorf("chat list hints %q: compact actions and help hints", got)
 	}
 	h.key("o") // no longer a list shortcut
 	if h.model().screen != screenMain {
@@ -274,8 +274,8 @@ func TestAttachmentKeysLiveInTheMessageBox(t *testing.T) {
 	}
 
 	h.key("enter") // into the message box
-	if got := keysOf(h.model().contextHelp()); !strings.Contains(got, " ctrl+o ") || !strings.Contains(got, " ctrl+t ") {
-		t.Errorf("message box hints %q should offer ctrl+o and ctrl+t", got)
+	if got := keysOf(h.model().contextHelp()); strings.Contains(got, " ctrl+o ") || strings.Contains(got, " ctrl+t ") || !strings.Contains(got, " ctrl+p ") {
+		t.Errorf("message box hints %q should offer actions instead of individual attachment shortcuts", got)
 	}
 	h.key("oa") // plain letters are typed
 	if v := h.model().conv.input.Value(); v != "oa" || h.model().screen != screenMain {
@@ -291,15 +291,15 @@ func TestAttachmentKeysLiveInTheMessageBox(t *testing.T) {
 	h.key("/")
 	h.key("car")
 	h.key("enter") // a draft, in the message box
-	if got := keysOf(h.model().contextHelp()); !strings.Contains(got, " ctrl+t ") || strings.Contains(got, " ctrl+o ") {
-		t.Errorf("draft hints %q should offer ctrl+t only", got)
+	if got := keysOf(h.model().contextHelp()); !strings.Contains(got, " ctrl+p ") || strings.Contains(got, " ctrl+o ") {
+		t.Errorf("draft hints %q should offer actions", got)
 	}
 
 	m := h.model()
 	m.setDraft(nil)
 	m.conv.chat = store.ChatSummary{} // nothing selected (no chats yet)
-	if got := keysOf(m.contextHelp()); strings.Contains(got, "ctrl+") {
-		t.Errorf("no chat: hints %q should offer neither", got)
+	if got := keysOf(m.contextHelp()); strings.Contains(got, "ctrl+o") || strings.Contains(got, "ctrl+t") {
+		t.Errorf("no chat: hints %q should offer no attachment shortcuts", got)
 	}
 }
 

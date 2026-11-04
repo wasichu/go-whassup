@@ -45,6 +45,10 @@ func (m *Model) page() page {
 		return &m.emojiPick
 	case screenSender:
 		return &m.sender
+	case screenVoice:
+		return &m.voice
+	case screenActions:
+		return &m.actions
 	}
 	return nil
 }
@@ -111,3 +115,11 @@ func (r rootAPI) openAttachment(item wa.Message) tea.Cmd { return r.m.openAttach
 
 // saveAttachment fetches and saves a copy (see Model.saveAttachment).
 func (r rootAPI) saveAttachment(item wa.Message) tea.Cmd { return r.m.saveAttachment(item) }
+
+func (r rootAPI) openVoice(item wa.Message) tea.Cmd {
+	var cmd tea.Cmd
+	*r.m, cmd = r.m.openVoiceNote(item)
+	return cmd
+}
+
+func (r rootAPI) voiceBackToAttachments() { r.m.screen = screenPicker }

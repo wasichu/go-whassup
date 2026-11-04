@@ -39,6 +39,15 @@ the status line. If the device isn't linked, it opens the **login screen** inste
 
 ### Main screen
 
+The footer shows a few essential keys for the current context. **Ctrl+P** opens
+a searchable actions menu from the main screen, including actions for a selected
+message. Type to filter, use ↑/↓ to choose, Enter to run, and Esc to return.
+The menu also shows the direct shortcuts, which continue to work.
+
+**F1** opens full keyboard help from any screen. Use ↑/↓ or PgUp/PgDn to scroll;
+F1 or Esc closes it. Opening help or the actions menu preserves your draft and
+message selection.
+
 | Key | Chat list focused | Message box focused |
 | --- | --- | --- |
 | `↑`/`↓`, `k`/`j` | select chat | (typed) |
@@ -47,13 +56,16 @@ the status line. If the device isn't linked, it opens the **login screen** inste
 | `pgup`/`pgdn` | scroll messages | scroll messages |
 | `/` | find a chat or contact (new chats too) | (typed) |
 | `s` | search message text | (typed) |
-| `ctrl+r` | | select a message: reply, react, edit, delete, copy, see who sent it or reacted (see below) |
+| `ctrl+r` | | select a message: open/play attachments, reply, react, edit, delete, copy, see who sent it or reacted (see below) |
 | `ctrl+o` | | view attachments: open (downloads if needed), save a copy |
 | `ctrl+t` | | attach file: send one to this chat |
+| `ctrl+g` | | record voice message |
 | `i` | chat info: number, or a group's topic and members | (typed) |
 | `L` | login screen: link, or re-link | (typed) |
 | `,` | settings | (typed) |
-| `?` | key help (any key closes) | (typed) |
+| `ctrl+p` | actions menu | actions menu |
+| `F1` | keyboard help | keyboard help |
+| `?` | keyboard help | (typed) |
 | `q` | quit | (typed) |
 | `ctrl+c` | quit | quit |
 
@@ -130,6 +142,26 @@ names stay readable on disk.**
   named in full: `Community › Announcements`. The community itself has no chat. All of
   this fills in the first time you connect after upgrading.
 
+### Voice messages
+
+- Received voice notes show **[voice message]** and their duration. Open
+  **`ctrl+o`**, select a voice note, and press **Enter** to download and play it
+  inside the app. **Space** pauses/resumes, **`x`** stops, and **Esc** returns to
+  attachments. Playback stops when leaving the voice screen.
+  Alternatively, **`ctrl+r`**, select the message with **↑/↓**, and press **Enter**
+  to play it directly. **Esc** returns to that selected message.
+- In the message box, **`ctrl+g`** starts recording a voice message for the open
+  chat. **Enter** or **Space** stops recording without sending it. Then **Space**
+  previews it, **Enter** sends it as a native WhatsApp voice note, **`r`** starts
+  over, and **Esc** discards it. A failed send keeps the draft for an explicit
+  retry; quitting or discarding loses the unsent draft.
+- macOS uses the default microphone/speaker through Core Audio; allow microphone
+  access for the terminal when prompted. Linux uses the desktop's PulseAudio or
+  PipeWire-Pulse service. No ffmpeg or other helper program is needed.
+- There is no five-minute cutoff. Recording and playback are bounded by the app's
+  100 MB attachment limit. Drafts stay in memory. Received downloads follow the
+  normal media cache policy, including its encryption limitations below.
+
 ### Attachments
 
 - Messages with an attachment show its size, and a ✓ once it's downloaded.
@@ -173,6 +205,9 @@ names stay readable on disk.**
 `ctrl+r` in the message box highlights the newest message; `↑`/`↓` pick another
 (deleted messages are skipped), and `esc` goes back to typing.
 
+- **Enter opens its attachment**, or opens the in-app player for a voice note.
+  Esc from voice playback returns to the same selected message. Text-only
+  messages do nothing on Enter while selecting; your typed draft is preserved.
 - **`r` replies.** A banner above the box shows what you're answering
   (`↪ Replying to Ada: Tea on Saturday?`); type and press `enter` to send it as a proper
   WhatsApp reply, quoted on everyone's phone. `esc` cancels the reply first, a second

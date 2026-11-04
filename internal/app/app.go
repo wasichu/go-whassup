@@ -23,6 +23,7 @@ import (
 	"github.com/wasichu/go-whassup/internal/store"
 	"github.com/wasichu/go-whassup/internal/termcaps"
 	"github.com/wasichu/go-whassup/internal/ui"
+	"github.com/wasichu/go-whassup/internal/voice"
 	"github.com/wasichu/go-whassup/internal/wa"
 )
 
@@ -230,6 +231,7 @@ func tuiDeps(cfg config.Config, p paths.Paths, client *wa.WhatsApp, st *store.St
 		Media:      crypto.Cache(),
 		Encryption: crypto,
 		OpenFile:   media.Open,
+		Voice:      voice.New(),
 	}
 }
 

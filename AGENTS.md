@@ -59,6 +59,8 @@ checks that could not run and why. Add a recipe for recurring commands.
   tests share `internal/wa/watest`; do not modify upstream protobuf schemas.
 - SQLite is `modernc.org/sqlite` (pure Go), opened only in `internal/sqlite`.
   Never introduce `mattn/go-sqlite3` or another cgo requirement.
+- `internal/voice` owns audio devices and the Opus codec; `internal/wa` owns native
+  WhatsApp voice-note sending. Read `docs/voice.md` before changing either flow.
 - Config is a typed `internal/config` struct with TOML via
   `github.com/pelletier/go-toml/v2`; follow `docs/config.md`, not viper.
 - Verify dependency APIs against installed versions with gopls `go_package_api`

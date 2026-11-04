@@ -159,6 +159,8 @@ func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		c.movePick(-1)
 	case key.Matches(msg, keys.Down):
 		c.movePick(1)
+	case key.Matches(msg, keys.Send):
+		return m.openPickedAttachment()
 	case msg.String() == "r":
 		if target, ok := c.pickedMessage(); ok {
 			c.stopPicking()
@@ -181,6 +183,19 @@ func (m Model) pickKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m.startEdit()
 	}
 	return m, nil
+}
+
+// openPickedAttachment preserves the message selection and any typed draft.
+func (m Model) openPickedAttachment() (Model, tea.Cmd) {
+	target, ok := m.conv.pickedMessage()
+	if !ok || target.Deleted || target.Media == nil {
+		return m, nil
+	}
+	if target.Media.Voice {
+		return m.openVoiceNote(target)
+	}
+	cmd := m.openAttachment(target)
+	return m, cmd
 }
 
 // copyPicked copies the selected message's text (or caption) to the

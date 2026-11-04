@@ -9,6 +9,7 @@ change to behavior described here updates the doc **in the same commit**.
 | [pairing.md](pairing.md) | Phone-code pairing sequence and WhatsApp's server-side restrictions |
 | [storage.md](storage.md) | Where data lives, the session DB, SQLite settings |
 | [usage.md](usage.md) | Commands and flags |
+| [voice.md](voice.md) | Native voice messages, audio backends, draft lifecycle, and validation |
 | [config.md](config.md) | Config file, design, and every setting |
 | [roadmap.md](roadmap.md) | Where we are and what's next |
 | [dependencies.md](dependencies.md) | Module/tool/Action updates, weekly whatsmeow PRs, and vulnerability scans |

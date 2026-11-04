@@ -36,6 +36,8 @@ const (
 	screenBrowse
 	screenEmoji
 	screenSender
+	screenVoice
+	screenActions
 )
 
 type focus int
@@ -64,6 +66,7 @@ type Model struct {
 	width, height int
 	screen        screen
 	showHelp      bool
+	helpScroll    int
 	focus         focus
 	conn          connState
 	notice        notice // shown in the status line (status.go)
@@ -82,9 +85,12 @@ type Model struct {
 	browser   browser
 	emojiPick emojiPage  // the "+" reaction search (emojipage.go)
 	sender    senderCard // "i" while picking a message (sender.go)
-	browseDir string     // last folder a file was picked from (browser)
-	draft     string     // JID of an open chat that has no messages yet
-	ownJID    string     // the linked account, for labelling the chat with yourself
+	voice     voicePage
+	voiceSeq  int
+	actions   actionsPage
+	browseDir string // last folder a file was picked from (browser)
+	draft     string // JID of an open chat that has no messages yet
+	ownJID    string // the linked account, for labelling the chat with yourself
 
 	downloading map[string]bool // attachment downloads in flight, by message ID
 
@@ -133,9 +139,23 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	next, cmd := m.update(msg)
+	if value, ok := next.(Model); ok && m.screen == screenVoice && value.screen != screenVoice {
+		// Protocol events can change screens too (e.g. logout while recording).
+		m.voice.cancel()
+		value.voice = voicePage{}
+		next = value
+	}
+	return next, cmd
+}
+
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		if m.screen == screenActions {
+			m.actions.input.SetWidth(max(msg.Width-12, 1))
+		}
 		m.help.SetWidth(msg.Width)
 		m.layout()
 		return m, nil
@@ -311,9 +331,15 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		hidePreview := tea.Batch(m.browser.preview.hide(), m.picker.preview.hide())
 		return m, tea.Sequence(hide, hidePreview, tea.Quit)
 	}
-	if m.showHelp {
-		m.showHelp = false // any key closes the overlay
+	if key.Matches(msg, keys.Help) {
+		m.showHelp, m.helpScroll = !m.showHelp, 0
 		return m, nil
+	}
+	if m.showHelp {
+		return m.helpKey(msg), nil
+	}
+	if m.screen == screenMain && !m.conv.reacting && !m.conv.confirmingDelete && key.Matches(msg, keys.Actions) {
+		return m.openActions()
 	}
 	if m.screen == screenLogin {
 		return m.loginKey(msg)
@@ -349,6 +375,8 @@ func (m Model) inputKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Media):
 		return m.openPicker()
+	case key.Matches(msg, keys.Voice):
+		return m.openVoiceRecorder()
 	case key.Matches(msg, keys.Attach):
 		return m.openAttach()
 	case key.Matches(msg, keys.Pick):
@@ -399,8 +427,8 @@ func (m Model) listKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Quit):
 		return m, tea.Quit
-	case key.Matches(msg, keys.Help):
-		m.showHelp = true
+	case key.Matches(msg, keys.HelpAlias):
+		m.showHelp, m.helpScroll = true, 0
 	case key.Matches(msg, keys.Login):
 		return m.openLogin(""), nil
 	case key.Matches(msg, keys.Settings):

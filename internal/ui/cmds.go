@@ -15,6 +15,7 @@ import (
 	"github.com/wasichu/go-whassup/internal/media"
 	"github.com/wasichu/go-whassup/internal/store"
 	"github.com/wasichu/go-whassup/internal/termcaps"
+	"github.com/wasichu/go-whassup/internal/voice"
 	"github.com/wasichu/go-whassup/internal/wa"
 )
 
@@ -39,6 +40,12 @@ type MediaCache interface {
 	Lookup(chat, id string) (string, bool)
 	Fetch(ctx context.Context, d media.Downloader, chat, id string, m wa.Media) (string, error)
 	Put(chat, id, src string, m wa.Media) error
+}
+
+// VoiceAudio allows audio-device-free UI tests.
+type VoiceAudio interface {
+	Record(context.Context) (voice.Clip, error)
+	Play(context.Context, []byte, time.Duration) error
 }
 
 // Deps are the UI's collaborators, wired by internal/app.
@@ -66,6 +73,7 @@ type Deps struct {
 	// viewer (media.Open). Both optional: without them media can't be opened.
 	Media    MediaCache
 	OpenFile func(path string) error
+	Voice    VoiceAudio
 
 	// Notice, if set, is shown in the status line at startup (e.g. that
 	// stored messages are being encrypted in the background).

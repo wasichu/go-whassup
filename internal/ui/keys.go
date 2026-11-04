@@ -7,13 +7,13 @@ import (
 )
 
 // keys is the single source of truth for key bindings: handlers match
-// against it and the status-line hints and ? overlay are generated from it.
+// against it and the status-line hints and F1 overlay are generated from it.
 var keys = struct {
 	// Chat list (main screen, list focused).
-	Up, Down, Open, Quit, Find, Search, Info, Login, Settings, Help key.Binding
+	Up, Down, Open, Quit, Find, Search, Info, Login, Settings, Help, HelpAlias, Actions key.Binding
 	// Message input focused. Attachments use ctrl keys there: plain
 	// letters are typed.
-	Send, Blur, Media, Attach, Pick key.Binding
+	Send, Blur, Media, Attach, Pick, Voice key.Binding
 	// Main screen, either focus.
 	PageUp, PageDown key.Binding
 	// Lists on the login and settings screens.
@@ -29,11 +29,14 @@ var keys = struct {
 	Search:    key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "search messages")),
 	Media:     key.NewBinding(key.WithKeys("ctrl+o"), key.WithHelp("ctrl+o", "view attachments")),
 	Attach:    key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("ctrl+t", "attach file")),
-	Pick:      key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "select a message: reply, react, edit, delete, copy, who sent it")),
+	Voice:     key.NewBinding(key.WithKeys("ctrl+g"), key.WithHelp("ctrl+g", "record voice message")),
+	Pick:      key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "select a message")),
 	Info:      key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "chat info")),
 	Login:     key.NewBinding(key.WithKeys("L"), key.WithHelp("L", "link or re-link")),
 	Settings:  key.NewBinding(key.WithKeys(","), key.WithHelp(",", "settings")),
-	Help:      key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "all keys")),
+	Help:      key.NewBinding(key.WithKeys("f1"), key.WithHelp("F1", "help")),
+	HelpAlias: key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help (chat list)")),
+	Actions:   key.NewBinding(key.WithKeys("ctrl+p"), key.WithHelp("ctrl+p", "actions")),
 	Send:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "send")),
 	Blur:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back to chats")),
 	PageUp:    key.NewBinding(key.WithKeys("pgup"), key.WithHelp("pgup", "scroll up")),
@@ -48,18 +51,23 @@ var keys = struct {
 
 // Binding sets per context, rendered with help.ShortHelpView/FullHelpView.
 var (
-	// The status line shows a few essentials (short descriptions); ? shows
+	// The status line shows a few essentials (short descriptions); F1 shows
 	// every key, by section (mainHelpSections).
 	listHelp = []key.Binding{
 		key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "chats")),
-		hint(keys.Open, "write"), hint(keys.Find, "find"), hint(keys.Search, "search"), keys.Help, keys.Quit,
+		hint(keys.Open, "write"), keys.Actions, keys.Help, keys.Quit,
 	}
 	inputHelp = []key.Binding{
-		keys.Send, hint(keys.Blur, "chats"), hint(keys.Pick, "select message"), hint(keys.Media, "attachments"),
-		hint(keys.Attach, "attach file"),
+		keys.Send, hint(keys.Blur, "chats"), keys.Actions, keys.Help,
 	}
 	pickHelp = []key.Binding{
+		hint(keys.Send, "open/play"),
+		key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "info")),
+		keys.Actions, keys.Help, hint(keys.Blur, "back"),
+	}
+	pickFullHelp = []key.Binding{
 		key.NewBinding(key.WithKeys("up", "down"), key.WithHelp("↑/↓", "choose a message")),
+		hint(keys.Send, "open attachment / play voice"),
 		key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reply")),
 		key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "react")),
 		key.NewBinding(key.WithKeys("i"), key.WithHelp("i", "who sent it, who reacted")),
@@ -106,9 +114,10 @@ var (
 	pickerHelp       = []key.Binding{keys.Up, keys.Down, hint(keys.Select, "open"), saveKey, keys.Back}
 	settingsHelp     = []key.Binding{keys.Up, keys.Down, keys.Edit, settingsPrev, keys.Back}
 	mainHelpSections = []helpSection{
-		{"Chat list", []key.Binding{keys.Up, keys.Down, keys.Open, keys.Find, keys.Search, keys.Info, keys.Login, keys.Settings, keys.Help, keys.Quit}},
-		{"Writing a message", []key.Binding{keys.Send, keys.Blur, keys.Pick, keys.Media, keys.Attach, keys.PageUp, keys.PageDown}},
-		{"Anywhere", []key.Binding{keys.ForceQuit}},
+		{"Chat list", []key.Binding{keys.Up, keys.Down, keys.Open, keys.Actions, keys.Find, keys.Search, keys.Info, keys.Login, keys.Settings, keys.HelpAlias, keys.Quit}},
+		{"Writing a message", []key.Binding{keys.Send, keys.Blur, keys.Actions, keys.Pick, keys.Media, keys.Attach, keys.Voice, keys.PageUp, keys.PageDown}},
+		{"Selected message", pickFullHelp},
+		{"Anywhere", []key.Binding{keys.Help, keys.ForceQuit}},
 	}
 )
 

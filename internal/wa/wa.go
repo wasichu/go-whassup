@@ -3,6 +3,7 @@ package wa
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"time"
 )
@@ -93,6 +94,9 @@ type Client interface {
 	// document) and returns its message ID; see WhatsApp.SendFile.
 	SendFile(ctx context.Context, chat, path, caption string) (id string, err error)
 
+	// SendVoice sends an Ogg Opus recording as a native push-to-talk voice note.
+	SendVoice(ctx context.Context, chat string, data []byte, seconds uint32, waveform []byte) (string, error)
+
 	// Download writes a message's attachment to dst. ErrMediaExpired means
 	// WhatsApp no longer has it.
 	Download(ctx context.Context, m Media, dst *os.File) error
@@ -165,6 +169,9 @@ type Message struct {
 
 // Summary renders the message for one-line display, e.g. "[image] caption".
 func (m Message) Summary() string {
+	if m.Media != nil && m.Media.Voice {
+		return fmt.Sprintf("[voice message] %d:%02d", m.Media.Seconds/60, m.Media.Seconds%60)
+	}
 	if m.Kind == KindText {
 		return m.Text
 	}

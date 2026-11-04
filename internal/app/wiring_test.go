@@ -38,7 +38,7 @@ func TestTUIDepsFullyWired(t *testing.T) {
 	// here instead of silently being left unset.
 	required := map[string]bool{
 		"Client": true, "Encryption": true, "Store": true, "Log": true, "Config": true, "ConfigPath": true,
-		"ApplyConfig": true, "Media": true, "OpenFile": true,
+		"ApplyConfig": true, "Media": true, "OpenFile": true, "Voice": true,
 	}
 	mayBeEmpty := map[string]bool{
 		"Graphics":  true, // depends on the terminal

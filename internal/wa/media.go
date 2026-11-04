@@ -28,6 +28,9 @@ type Media struct {
 	// Thumbnail is the small JPEG preview WhatsApp embeds in photo, video
 	// and document messages (kept in Data; nil for older stored messages).
 	Thumbnail []byte
+	// Voice distinguishes push-to-talk notes from ordinary audio attachments.
+	Voice   bool
+	Seconds uint32
 }
 
 // maxThumbnail drops unusually large embedded thumbnails rather than store
@@ -81,7 +84,11 @@ func mediaOf(msg *waE2E.Message) *Media {
 	if err != nil {
 		return nil // can't happen for a message we just unmarshalled
 	}
-	return &Media{Data: data, Mime: mimeType, FileName: name, Size: int64(size), Thumbnail: thumb}
+	media := &Media{Data: data, Mime: mimeType, FileName: name, Size: int64(size), Thumbnail: thumb}
+	if audio := wrapped.GetAudioMessage(); audio != nil {
+		media.Voice, media.Seconds = audio.GetPTT(), audio.GetSeconds()
+	}
+	return media
 }
 
 // keepThumbnail keeps an embedded thumbnail unless it's oversized.

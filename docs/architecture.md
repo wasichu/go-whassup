@@ -12,6 +12,7 @@ cmd/go-whassup (main: signals + exit code only)
          ├─► internal/encryption  at-rest encryption: keys, live re-seal (Controller)
          │      └─► internal/crypt, internal/keysource
          ├─► internal/media     attachment cache, opener, saving copies
+         ├─► internal/voice     cgo-free voice recording/playback and Ogg Opus codec
          ├─► internal/store     messages.db + Recorder      │
          └─► internal/wa        whatsmeow adapter         ◄─┘     └─► session.db
                 internal/wa/watest   fake wa.Client for tests and the demo
@@ -38,6 +39,10 @@ cmd/go-whassup (main: signals + exit code only)
   it would buy nothing yet (reviewed 2026-10-20).
 - **`internal/wa/watest`** holds the shared fake `wa.Client`. Use it in tests for
   `headless`, `ui` and future packages rather than writing ad-hoc fakes.
+- **`internal/voice`** owns native audio devices and streaming Opus encoding/decoding.
+  `ui.Deps.Voice` is injectable; UI tests never open devices. The voice page owns
+  cancellation and ignores stale results. Drafts stay in memory; `wa.SendVoice`
+  uploads and emits a normal message only after an explicit send action.
 
 ## Event flow and goroutines
 
@@ -135,7 +140,7 @@ There are two kinds of consumers:
 
 ## TUI structure (`internal/ui`)
 
-- **One root `Model`** with a `screen`, a `?` help overlay, and the state of every
+- **One root `Model`** with a `screen`, a scrollable `F1` help overlay, and the state of every
   screen in its own field. Everything changes only in `Update`. The field count grows
   with each page; that's the Elm/Bubble Tea shape, kept on purpose (reviewed
   2026-10-20). Pages already stay out of the root through `page` and `rootAPI`, so
@@ -150,7 +155,7 @@ There are two kinds of consumers:
   row); it turns into a normal selection when the chat appears in the store.
 - **Every other screen is a `page`** (`page.go`): finder, search, attachments (picker),
   send file (attach, typed with completion; browser, with image previews), chat info and
-  settings. A page implements `update`, `view` and
+  settings, voice recording/playback, and the searchable actions menu. A page implements `update`, `view` and
   `help`, and the root just routes: `m.page()` maps `screen` to the active page, keys
   and any message the root doesn't handle go to it, and `done` returns to main.
   A page's own async results (directory, search hits, chat details) reach it only
@@ -162,9 +167,11 @@ There are two kinds of consumers:
 - **`ui.Deps`** also carries `Config`, `ConfigPath` and an `ApplyConfig` hook, so the UI
   never reaches into the recorder or client internals to apply settings.
 - **`keys.go` is the single keymap.** Handlers use `key.Matches`, and hints/help render
-  the same bindings with `bubbles/help`.
+  the same bindings. The footer shows essentials; F1 shows full descriptions, and
+  Ctrl+P lists context actions with their direct shortcuts.
 - **Focus gates shortcuts.** Keys reach the message input only when it's focused, and
-  global shortcuts only fire from the list.
+  letter shortcuts only fire from the list. F1 and Ctrl+C work everywhere; Ctrl+P
+  opens actions from the main screen while writing or selecting messages.
 - **Colours** use the 16-colour ANSI palette, so they follow the user's terminal
   theme. The only fixed colours are the QR's black/white, because scanners need them
   and themes remap ANSI black/white.

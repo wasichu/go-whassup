@@ -177,9 +177,12 @@ func TestQuotesNameMentions(t *testing.T) {
 func TestNarrowStatusDropsWholeHints(t *testing.T) {
 	h := openAda(t)
 	h.send(tea.WindowSizeMsg{Width: 70, Height: 20})
+	m := h.model()
+	m.say("Copied message.") // A notice leaves less room for the compact hints.
+	h.m = m
 	lines := strings.Split(ansi.Strip(h.view()), "\n")
 	status := strings.TrimRight(lines[len(lines)-1], " ")
-	if !strings.HasSuffix(status, "…") || strings.Contains(status, "reply/r…") {
+	if !strings.HasSuffix(status, "…") || strings.Contains(status, "ctrl+p act…") || !strings.Contains(status, "esc chats") {
 		t.Errorf("hints should end with a whole one, then …: %q", status)
 	}
 }

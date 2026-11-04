@@ -44,6 +44,7 @@ type Client struct {
 	// Files sent with SendFile; DownloadData is what Download writes (or
 	// DownloadErr fails it).
 	Files        []SentFile
+	Voices       []SentVoice
 	DownloadData []byte
 	DownloadErr  error
 	// DownloadFor, if set, chooses the downloaded content per attachment
@@ -68,6 +69,43 @@ type Client struct {
 }
 
 var _ wa.Client = (*Client)(nil)
+
+type SentVoice struct {
+	Chat     string
+	Data     []byte
+	Seconds  uint32
+	Waveform []byte
+}
+
+func (c *Client) SendVoice(_ context.Context, chat string, data []byte, seconds uint32, waveform []byte) (string, error) {
+	if !c.Paired {
+		return "", wa.ErrNotPaired
+	}
+	if c.SendErr != nil {
+		return "", c.SendErr
+	}
+	c.mu.Lock()
+	c.Voices = append(c.Voices, SentVoice{Chat: chat, Data: slices.Clone(data), Seconds: seconds, Waveform: slices.Clone(waveform)})
+	id := fmt.Sprintf("VOICE%d", len(c.Voices))
+	c.mu.Unlock()
+	raw, err := proto.Marshal(&waE2E.Message{AudioMessage: &waE2E.AudioMessage{PTT: proto.Bool(true), Seconds: proto.Uint32(seconds), Mimetype: proto.String("audio/ogg; codecs=opus")}})
+	if err != nil {
+		return "", fmt.Errorf("encoding fake voice media: %w", err)
+	}
+	media, err := wa.ParseMedia(raw)
+	if err != nil {
+		return "", err
+	}
+	c.Emit(wa.Message{ID: id, Chat: chat, Sender: "me@s.whatsapp.net", FromMe: true,
+		Timestamp: c.stamp(time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)), Kind: "audio", Media: media})
+	return id, nil
+}
+
+func (c *Client) SentVoices() []SentVoice {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.Voices)
+}
 
 func (c *Client) Pair(_ context.Context, phone string) (string, error) {
 	if c.Paired {
@@ -297,6 +335,22 @@ func (c *Client) Closed() bool {
 // DocumentMedia returns valid media for a document named name, as the real
 // client would attach to a message.
 func DocumentMedia(name string) *wa.Media { return SizedDocumentMedia(name, 0) }
+
+// VoiceMedia returns a native push-to-talk attachment, without real account data.
+func VoiceMedia(seconds uint32) *wa.Media {
+	data, err := proto.Marshal(&waE2E.Message{AudioMessage: &waE2E.AudioMessage{
+		PTT: proto.Bool(true), Seconds: proto.Uint32(seconds), Mimetype: proto.String("audio/ogg; codecs=opus"),
+		DirectPath: proto.String("/fake"), MediaKey: []byte("fake-key"),
+	}})
+	if err != nil {
+		panic(err)
+	} // fixed valid test message
+	m, err := wa.ParseMedia(data)
+	if err != nil {
+		panic(err)
+	}
+	return m
+}
 
 // SizedDocumentMedia is DocumentMedia with a file size.
 func SizedDocumentMedia(name string, size uint64) *wa.Media {

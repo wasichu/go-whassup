@@ -69,6 +69,9 @@ func (p *picker) key(r rootAPI, k tea.KeyPressMsg) (bool, tea.Cmd) {
 	case key.Matches(k, keys.Down):
 		return false, p.move(r, 1)
 	case key.Matches(k, keys.Select):
+		if p.items[p.selected].Media.Voice {
+			return false, tea.Batch(p.preview.hide(), r.openVoice(p.items[p.selected]))
+		}
 		return false, r.openAttachment(p.items[p.selected])
 	case key.Matches(k, saveKey):
 		return false, r.saveAttachment(p.items[p.selected])
@@ -212,6 +215,9 @@ func (m Model) mediaOpened(msg mediaOpenedMsg) (Model, tea.Cmd) {
 }
 
 func mediaLabel(msg wa.Message) string {
+	if msg.Media.Voice {
+		return msg.Summary()
+	}
 	if msg.Media.FileName != "" {
 		return msg.Media.FileName
 	}
