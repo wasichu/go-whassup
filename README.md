@@ -39,6 +39,11 @@ Edit what you sent, or delete it for everyone.
 📎 Attachments: open, preview, or save a copy. Send files from a browser with image
 previews, or type a path with tab completion.
 
+🎙️ Voice messages: listen in the terminal, or record, preview, and send a native
+WhatsApp voice note.
+
+⌨️ A compact footer, searchable actions on **Ctrl+P**, and full keyboard help on **F1**.
+
 🖼️ Images inside the terminal (QR codes and previews) in Ghostty and kitty, tmux
 included.
 

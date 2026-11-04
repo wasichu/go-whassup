@@ -5,16 +5,19 @@ step lands or the plan changes.
 
 ## Next priorities
 
-1. **Voice messages: listening and recording/sending together.** Both are required
-   for this feature. In-app playback and the record/preview/send/discard flow are
-   implemented. Phone-recorded playback and TUI recording/sending were confirmed
-   live by the user on 2026-11-04; Linux audio-device checks remain. Keep the
-   single-binary, no-cgo goal. See `voice.md`.
-2. **Group mention autocomplete**, as a small follow-up: typing `@` suggests group
+1. **Group mention autocomplete**, as a small follow-up: typing `@` suggests group
    members, and selecting one sends a real WhatsApp mention with the participant
    ID, rather than only inserting display-name text.
+2. **Additional voice-device verification**, especially PulseAudio/PipeWire-Pulse
+   on Linux and microphone permission failures. See `voice.md`.
 
 ## Done
+
+- **v0.4.0 voice messages and keyboard organization:** in-app playback, native
+  recording/preview/send/discard, and Enter to open a selected attachment. Playback
+  of phone notes and TUI recording/sending were confirmed live on 2026-11-04.
+  Compact context hints, searchable Ctrl+P actions, and scrollable F1 help preserve
+  drafts and message selections.
 
 1. **Scaffold:** mise-pinned toolchain, Justfile, lint rules enforcing the AGENTS.md
    invariants, Trail code navigation + gopls MCP.
