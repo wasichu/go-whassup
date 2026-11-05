@@ -1,98 +1,76 @@
-# Homebrew (plan)
+# Homebrew distribution
 
-`brew install wasichu/tap/go-whassup` for macOS (and Linux) users, from our own tap
-([wasichu/homebrew-tap](https://github.com/wasichu/homebrew-tap)). Decided 2026-10-18:
-**our tap only**; homebrew-core is not planned (see below).
+Install from our own tap:
 
-**Done for v0.1.0 (2026-10-19):** the tap was scaffolded with `brew tap-new` and the
-formula below added. `brew audit --strict --online --new` and `brew test` pass, and a fresh
-`brew install wasichu/tap/go-whassup` from GitHub was verified. It builds from source:
-Homebrew installs Go as a build dependency, and the build itself takes seconds. Bottles
-come from the tap's own Actions when a formula change arrives as a pull request (see
-"Keep it current").
-
-Checked against Homebrew's docs on 2026-10-18:
-[Acceptable Formulae](https://docs.brew.sh/Acceptable-Formulae) and
-[How to Create and Maintain a Tap](https://docs.brew.sh/How-to-Create-and-Maintain-a-Tap).
-
-**v0.4.0 (2026-11-04):** the formula and bottles were published through the tap's
-`publish.yml` workflow after PR #4 validation. Bottles are available for Apple
-Silicon macOS Tahoe and Linux x86-64. The Intel macOS runner skipped the formula
-build because a dependency lacked compatible bottles; the app's Intel macOS
-binary remains available from its GitHub release.
-
-## 1. Our own tap (first)
-
-- A repo named `wasichu/homebrew-tap` (the `homebrew-` prefix lets `brew tap` use the
-  short name). `brew tap-new wasichu/tap` scaffolds it, including GitHub Actions that
-  build bottles (prebuilt binaries) for each formula change.
-- Users then run `brew install wasichu/tap/go-whassup`. No separate `brew tap` is
-  needed.
-- The formula builds from the tagged source tarball, so it works anywhere Homebrew's Go
-  does. Bottles make installs fast.
-- Test locally before pushing:
-  `brew install --build-from-source wasichu/tap/go-whassup`, then `brew test` and
-  `brew audit --strict`.
-
-The formula (`Formula/go-whassup.rb` in the tap):
-
-```ruby
-class GoWhassup < Formula
-  desc "WhatsApp client for the terminal"
-  homepage "https://github.com/wasichu/go-whassup"
-  url "https://github.com/wasichu/go-whassup/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "28cca3618560ef8bb9e11b2d707ccd4e72a1eb629286664dbde812eb9cdd3dd8"
-  license "MPL-2.0"
-  head "https://github.com/wasichu/go-whassup.git", branch: "main"
-
-  depends_on "go" => :build
-
-  def install
-    ENV["CGO_ENABLED"] = "0" # as everywhere else: pure-Go SQLite, static binary
-    ldflags = "-X github.com/wasichu/go-whassup/internal/app.Version=v#{version}" # std_go_args adds -s -w
-    system "go", "build", *std_go_args(ldflags:), "./cmd/go-whassup"
-  end
-
-  test do
-    assert_match version.to_s, shell_output("#{bin}/go-whassup -version")
-  end
-end
+```sh
+brew install wasichu/tap/go-whassup
+brew update && brew upgrade wasichu/tap/go-whassup
 ```
 
-The test uses `-version` because everything else needs either a linked account or a
-terminal (`go-whassup demo` is interactive).
+The canonical formula lives in
+[wasichu/homebrew-tap](https://github.com/wasichu/homebrew-tap/blob/main/Formula/go-whassup.rb).
+It builds the tagged source with `CGO_ENABLED=0`, stamps `-version`, and tests that
+version without a WhatsApp account. Successful tap CI builds bottles for supported
+runners. Intel macOS may fall back to a source build when Homebrew cannot provide
+compatible dependency bottles; GitHub releases also contain an Intel macOS binary.
+Homebrew-core submission is not planned.
 
-## 2. Keep it current
+## Automated release handoff
 
-- On each release tag, a workflow step in this repo opens a PR against the tap with
-  `brew bump-formula-pr`, updating the URL and sha256. The tap's own Actions then build
-  bottles for that PR.
-- Until then, the bump is one manual `brew bump-formula-pr` per release.
+The tap's `autobump.yml` workflow runs hourly, discovers versions with `brew bump`,
+and completes validation/publication for go-whassup. The activation change is
+[tap PR #6](https://github.com/wasichu/homebrew-tap/pull/6). Future changes to this
+pipeline must reach the tap's `main` branch; editing the app repository alone
+does not change the active automation.
 
-## 3. homebrew-core: not planned
+1. Publish a stable GitHub release such as `v0.4.2` in `wasichu/go-whassup`.
+   A tag alone, draft, or prerelease is not sufficient for automatic publication.
+2. The next hourly tap run opens the formula bump. Scheduled runs can be delayed;
+   `gh workflow run autobump.yml --repo wasichu/homebrew-tap` runs it on demand.
+3. The handoff accepts only a same-repository, bot-created PR on the expected
+   release branch, changing only `Formula/go-whassup.rb`. It independently hashes
+   the published source archive and permits only the stable URL/checksum update
+   and removal of the old bottle/revision information. Changes to build logic,
+   dependencies, other formulae, or workflows require review.
+4. It dispatches `tests.yml` on that exact PR commit and explicitly builds
+   go-whassup on the tap's normal matrix. This avoids relying on a bot-created
+   PR's approval-gated workflow. Bottles are uploaded as normal test artifacts.
+5. After all jobs succeed, it checks the PR head, release status, and base formula
+   again, then dispatches `publish.yml` with the expected head SHA. The existing
+   `brew pr-pull` workflow publishes bottles/provenance and updates the formula
+   on `main`. Publication is serialized.
 
-Kept for the record, in case it's ever revisited.
+This runs with the tap's own `GITHUB_TOKEN`; no new cross-repository PAT or app
+secret is required. Bot-triggered workflow limitations are documented in
+[GitHub's token guide](https://docs.github.com/en/actions/concepts/security/github_token).
+Formula/bottle publication follows
+[Homebrew's tap workflow](https://docs.brew.sh/How-to-Create-and-Maintain-a-Tap).
 
-What core requires, and where we stand:
+This policy automates distribution of our own published release. It does not
+approve dependency updates or arbitrary tap PRs. Other formulae retain the
+existing bump/review process.
 
-| Requirement | Status |
-| --- | --- |
-| Open-source license compatible with the DFSG | MPL-2.0: yes |
-| Builds from source (binary-only belongs in a cask) | yes |
-| A stable, immutable tagged release, verified by sha256 | after the first tag |
-| No self-update | none |
-| Notability | not yet; the docs give no number, so it's reviewers' judgement |
+## Validation and recovery
 
-Open question before submitting: go-whassup is an unofficial client, and using it is
-against WhatsApp's terms. The Acceptable Formulae page doesn't address that case, so
-core's maintainers might decline it. Asking in the discussion before opening a PR would
-settle it, and the tap works regardless.
+The handoff's policy tests run offline with Python's standard library. The
+already-current path is also safe to run against the live repository: it reads
+the current formula/release and exits without opening PRs or publishing.
+The first future version bump must still exercise the complete new handoff.
 
-## Order
+Failed checks stop publication. The job reuses an existing dispatch for the same
+commit instead of repeatedly rebuilding a failed release every hour. Inspect the
+failed run, fix the PR if necessary, and rerun the failed jobs before retrying
+`autobump.yml`. A changed PR head or base formula requires fresh verification.
 
-1. Make the repo public, tag `v0.1.0`, and publish a GitHub release with the
-   `just release v0.1.0` binaries.
-2. Create the tap, add the formula, and test it with `--build-from-source`, `test` and
-   `audit`.
-3. Uncomment the Homebrew row in the README's install table.
-4. Automate the bump on release.
+For a manual release or recovery, open the formula URL/checksum bump, let the
+normal PR checks build bottles, and dispatch the existing publisher:
+
+```sh
+gh workflow run publish.yml --repo wasichu/homebrew-tap \
+  -f pull_request=NUMBER -f head_sha=EXPECTED_COMMIT
+```
+
+Use the bottle publisher rather than merging a formula PR directly if bottles
+are expected. The tested head SHA protects against publishing a later untested
+commit. Inspect the formula on `main` and the tap's `go-whassup-VERSION` release
+assets afterward.

@@ -59,6 +59,13 @@ Do not put manual work on `deps/whatsmeow`: the updater force-pushes that branch
 Review upstream changes, the latest commit's status, and both platform logs before
 merging. Behavioral changes or renamed APIs need the usual code and doc updates.
 
+## Homebrew release ownership
+
+The tap's release handoff distributes published stable go-whassup releases after
+formula and bottle validation. This is separate from dependency update review:
+Renovate/whatsmeow PRs still do not merge automatically. See `homebrew.md` for
+activation, the exact-commit publishing checks, and manual recovery.
+
 ## Local maintenance and vulnerability checks
 
 - `just outdated` lists available module versions without editing module files.

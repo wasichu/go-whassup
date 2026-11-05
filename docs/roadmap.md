@@ -1,148 +1,79 @@
 # Roadmap
 
-Each step is a thin vertical slice that runs end to end. Update this file when a
-step lands or the plan changes.
+The everyday messaging feature set is implemented. Focus on reliability,
+maintenance, and friction found during normal use; there is no committed queue
+of additional messaging features.
 
-## Next priorities
+## Current focus
 
-1. **Additional group mention verification:** basic autocomplete/sending was
-   confirmed live by the user. Replies, edits, and phone notification behavior
-   remain useful follow-up checks.
-2. **Additional voice-device verification**, especially PulseAudio/PipeWire-Pulse
-   on Linux and microphone permission failures. See `voice.md`.
+- Maintain compatibility with WhatsApp and review automated dependency updates.
+- Fix issues found in normal use; no additional messaging feature is scheduled.
+- Keep release distribution routine: Homebrew discovers published stable releases
+  hourly and validates the formula/bottles before publication. See `homebrew.md`.
 
-## Done
+## Verification follow-ups
 
-- **v0.4.1 group mention autocomplete:** local member suggestions on `@`, named draft
-  tokens, Tab/Enter selection, and real mention metadata for messages, replies,
-  and edits. Offline UI/protobuf tests cover the behavior. The user confirmed
-  autocomplete/sending worked live on 2026-11-04; additional checks remain above.
+These are account/device checks, not known bugs or missing implementations.
+Automated tests run offline and cannot establish every phone or audio-device
+behavior.
 
-- **v0.4.0 voice messages and keyboard organization:** in-app playback, native
-  recording/preview/send/discard, and Enter to open a selected attachment. Playback
-  of phone notes and TUI recording/sending were confirmed live on 2026-11-04.
-  Compact context hints, searchable Ctrl+P actions, and scrollable F1 help preserve
-  drafts and message selections.
+- **Mentions:** basic group autocomplete/sending was confirmed live on 2026-11-04.
+  Replies, edits, and phone notification behavior remain useful checks.
+- **Voice:** phone-note playback and TUI recording/sending were confirmed live on
+  macOS on 2026-11-04. Check Linux PulseAudio/PipeWire-Pulse, microphone permission
+  failures, and device disconnection. See `voice.md`.
+- **Encryption:** verify enabling/disabling, unlocking, and interrupted conversion
+  with disposable data before relying on it for a real archive. Existing behavior
+  and limitations are documented in `storage.md` and `config.md`.
 
-1. **Scaffold:** mise-pinned toolchain, Justfile, lint rules enforcing the AGENTS.md
-   invariants, Trail code navigation + gopls MCP.
-2. **Headless pairing and listening:** phone-code pairing (`go-whassup login`),
-   `go-whassup listen`. Verified live on 2026-10-18.
-3. **Storage (step 2)**, verified live on 2026-10-18, including a fresh re-link with history backfill:
-   - `messages.db` with an encryption-ready codec seam;
-   - recording of live messages and history sync, with privacy-ID-stable keys;
-   - retention limits;
-   - typed TOML config (`[history]`);
-   - `go-whassup db chats` / `db messages`;
-   - `go-whassup login -relink` to unlink and pair again.
+## Optional ideas
 
-## Done: step 3, minimal TUI (verified live 2026-10-18)
+These need a concrete use case or an explicit scope decision before implementation.
+They are not promised work or prerequisites for using the app.
 
-- [x] Sending: `wa.SendText` (emitted as an event); push name announced as
-  "unavailable" on connect.
-- [x] Chat list | message pane | input; send text; works offline from the store;
-  connection state in the status line. Verified live.
-- [x] Compact context hints, a searchable Ctrl+P actions menu, and scrollable F1 help
-  (`?` also opens help from the chat list).
-- [x] Login screen: phone code, QR choice (`rsc.io/qr`, half-blocks), Re-link, esc to
-  cancel. Verified live: TUI re-link and QR scan.
-- [x] Inline QR image via Kitty graphics (Ghostty/kitty, including through tmux with
-  passthrough), text-block fallback. Verified live in Ghostty + tmux 3.8.
-- [x] Settings screen: generic over `Config.Fields()`, validated, saved atomically and
-  applied live. *(Live test pending.)*
-- **Login screen:**
-  - Phone-code pairing (the step-1 flow) by default.
-  - When already paired: a **"Re-link"** option, the same as `login -relink` via
-    `wa.Client.Logout`. Explain that it removes the device from the phone and that
-    stored messages are kept.
-  - **QR pairing as a choice on the login screen.** It needs a QR encoder
-    (`rsc.io/qr` or `skip2/go-qrcode`, both small with no dependencies of their own),
-    compiled in. Draw it with Unicode half-blocks, forced black-on-white, and show a
-    "terminal too small" fallback.
-  - `wa.Client` gains `PairQR(ctx)`, forwarding `QRChannelEventCode` items. Success and
-    failure reuse `PairSuccess` / `PairFailed` (see `pairing.md`).
-- **Settings screen** (opened with `,`):
-  - Lists `config.Config` grouped by section, validates as you edit, and saves with
-    `config.Save`.
-  - Changes apply through `Update()`.
-  - Settings that only matter at pairing time are labelled as such.
+- **Encryption usability and key management:** an in-TUI unlock screen, data-key
+  rotation, rewrapping when `key_source` changes, and optional keychain cleanup.
+  Encryption at rest already exists. Downloads while encrypted use a temporary
+  cache removed on exit; the cache policy is implemented, not an open design task.
+- **Native video/audio file sending:** ordinary files currently send as photos or
+  documents; native voice notes are implemented separately.
+- **Editing replies and attachment captions.** Ordinary text edits are implemented.
+- **macOS download quarantine** as additional download hardening.
 
-## After step 3: features (in this order)
+## Shipped
 
-1. [x] **Contact names** from the phone's address book (whatsmeow's contact store), so
-   the chat list shows real names. Also **contact search / new chat** (`/`): fuzzy-find
-   any contact and message someone you haven't chatted with yet. *(Live test pending.)*
-2. [x] **Unread counts and new-message markers**: badges, a "N new" divider, read after
-   dwell while focused, `[privacy] mark_read` = local-only/read-receipts-off/read-receipts-on. *(Live test pending.)*
-3. [x] **Edits, deletes and reactions** applied to stored messages and shown in the
-   TUI. *(Live test pending.)* Sending replies and reactions shipped in v0.2.0
-   (`ctrl+r`; reactions confirmed live in a group); who reacted shows on the `i` card
-   since v0.2.4. Editing your messages (`e`) and deleting them for everyone (`d`)
-   followed (editing replies and captions doesn't yet).
-4. [x] **Media:**
-   - download and open attachments (`o`), with an extension allowlist;
-   - send files (`a`): photos for JPEG/PNG/WebP, documents otherwise;
-   - a cache with cleanup on delete and prune;
-   - media keys sealed through the codec.
+| Area | Implemented behavior |
+| --- | --- |
+| Pairing | Phone code, QR, re-link, immediate pairing errors, session persistence |
+| Local history | SQLite storage, history sync, retention, contact names, offline browsing and CLI inspection |
+| Messaging | Text, replies, reactions/emoji search, edits, delete for everyone, unread counts, optional read receipts |
+| Groups | Names/topics, member/admin lists, communities, sender/reaction info, incoming and outgoing mentions |
+| Media | Download/open/save, file sending, file browser/completion, inline image and QR previews in compatible terminals, cache cleanup |
+| Search | Local full-text search, accent-insensitive matching, jump to message; unavailable while encryption is on |
+| Privacy | Optional encryption at rest, keychain/password-command/passphrase sources, live conversion, temporary media cache while encrypted |
+| Notifications | Terminal desktop notifications, preview controls, muted-chat handling |
+| TUI | Context hints, searchable Ctrl+P actions, scrollable F1 help, settings, fictional demo |
+| Distribution | GitHub releases, cgo-free macOS/Linux binaries on amd64/arm64, Homebrew tap, bottles, and automated stable-release handoff |
+| Maintenance | Pinned tooling, Linux/macOS CI, weekly vulnerability scans, whatsmeow updater, Renovate for other updates |
 
-   *(Live test pending.)* Follow-ups:
-   - ordinary video/audio files sent as native media (voice-note sending is
-     implemented separately; see `voice.md`);
-   - a policy for the media cache under encryption;
-   - on macOS, setting the quarantine attribute on downloads;
-   - inline image previews via Kitty graphics.
-5. [x] **Groups:** names and topics from group info, participants with admins (`i`),
-   member counts, `@mentions` shown as names (and `@you`). *(Live test pending.)*
-   v0.2.0: communities listed as a heading over their groups; self-chosen names
-   marked `~`; privacy-ID members shown as "unknown member"; a sender card (`i` while
-   picking a message). Follow-up: typing mentions when sending (autocomplete).
-6. [x] **Message search** (`s`, `go-whassup db search`): local SQLite FTS5, accent-insensitive,
-   prefix on the last word, jump-to-message. Unavailable while encryption is on (the
-   index is plaintext). *(Live test pending.)*
-7. [x] **Encryption at rest** (built 2026-10-18; *live test pending*). Follow-ups:
-   - an unlock screen inside the TUI (today the prompt runs before it);
-   - data-key rotation, and rewrapping when `key_source` changes;
-   - optionally removing the keychain entry when turning encryption off.
+Recent milestones:
 
-   Original plan, via the `store.Codec` seam:
-   - an `[encryption]` config section (on/off, key source);
-   - key sources in order: OS keyring, then a pianobar-style `password_command`, then a
-     prompt;
-   - decisions recorded in `storage.md` › "Encryption decisions":
-     - on re-encrypts existing rows;
-     - off decrypts, after a confirmation;
-     - a missing key blocks, with a confirmed reset as the escape hatch;
-     - message text is never logged while encrypted;
-     - a metadata warning wherever encryption is offered.
-8. [x] **Desktop notifications** through the terminal (OSC 777/99/9, tmux passthrough),
-   only while unfocused, never for muted chats; `[notifications]` preview levels.
-   (Read receipts shipped as `mark_read = "read-receipts-on"`, opt-in.)
-9. [x] Surface the "code rejected" pairing failure immediately (via the whatsmeow log
-   adapter, no patch; see `pairing.md`).
+- **v0.4.1:** group mention autocomplete with readable draft names and real
+  WhatsApp mention metadata, including replies and edits.
+- **v0.4.0:** voice playback and recording/preview/send/discard, Enter to open a
+  selected attachment, compact hints, Ctrl+P actions, and F1 help.
+- **v0.3.0:** editing and deleting your own messages.
+- **v0.2.x:** replies, reactions, emoji search, and sender/reaction details.
+- **v0.1.0:** initial public release and Homebrew installation.
 
-## Last, before going public
+See GitHub release notes for version details. Keep implementation explanations in
+`architecture.md`, `storage.md`, `pairing.md`, and `voice.md` rather than retaining
+completed design plans here.
 
-- [x] **LICENSE: MPL-2.0**, matching whatsmeow (decided 2026-10-18).
-- [x] **README for users:** what it is, an "unofficial; against WhatsApp's terms" warning,
-  install steps. AGENTS.md and `docs/` stay contributor-facing.
-- [x] **README recording and screenshots from the demo** (fictional data only; never
-  anonymised real ones): `just gif` re-records `docs/assets/demo.gif` and the
-  `screenshot-*.png` from `docs/assets/demo.tape` with vhs (a dev tool, not a
-  dependency). VHS can't show inline images, so a still of the previews in Ghostty would
-  be worth adding by hand. The banner is `docs/assets/banner.svg`, rendered to
-  `banner.png` at 2× with headless Chromium so its fonts look the same everywhere.
-- [x] **CI:** GitHub Actions running `just check` via the mise action, so CI uses the same
-  pinned tools (`.github/workflows/check.yml`; Linux and macOS).
-- [x] **Release binaries:** cgo-free cross-compiles for darwin/linux × amd64/arm64, with
-  the version stamped via `-ldflags -X`, from a `just release` recipe (no GoReleaser
-  unless needed). No native Windows builds (decided 2026-10-19): Windows users run the
-  Linux build in WSL, which CI covers. v0.1.0 shipped untested Windows binaries; later
-  releases don't.
-- [x] **Homebrew:** our own tap (`brew install wasichu/tap/go-whassup`, built from source
-  with bottles). The bump is manual per release for now (`brew bump-formula-pr`);
-  automating it from a release workflow is planned. homebrew-core isn't planned. Plan and draft
-  formula: `homebrew.md`.
-- [x] **Dependency maintenance:** the weekly whatsmeow workflow follows upstream
-  `main`; Renovate handles other modules, `mise.toml`, and GitHub Actions without
-  auto-merging. CI and weekly vulnerability scans cover Linux and macOS. See
-  `dependencies.md` for setup, validation, and ownership.
+## Project boundaries
+
+- One binary, `CGO_ENABLED=0`, minimal dependencies; no additional app service.
+- macOS and Linux releases; Windows users use the Linux build in WSL.
+- Our own Homebrew tap; homebrew-core submission is not planned.
+- Dependency updates require review; publishing our own tested release formula
+  is a separate automation policy.

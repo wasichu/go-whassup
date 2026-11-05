@@ -13,4 +13,4 @@ change to behavior described here updates the doc **in the same commit**.
 | [config.md](config.md) | Config file, design, and every setting |
 | [roadmap.md](roadmap.md) | Where we are and what's next |
 | [dependencies.md](dependencies.md) | Module/tool/Action updates, weekly whatsmeow PRs, and vulnerability scans |
-| [homebrew.md](homebrew.md) | Plan for `brew install` from our own tap |
+| [homebrew.md](homebrew.md) | Installation, release automation, bottle publishing, and recovery |
