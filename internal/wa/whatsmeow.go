@@ -196,8 +196,8 @@ func (w *WhatsApp) Connect(ctx context.Context) error {
 	return nil
 }
 
-func (w *WhatsApp) SendText(ctx context.Context, chat, text string) error {
-	return w.sendText(ctx, chat, &waE2E.Message{Conversation: proto.String(text)}, text, nil)
+func (w *WhatsApp) SendText(ctx context.Context, chat, text string, mentions ...string) error {
+	return w.sendText(ctx, chat, buildText(text, mentions), text, nil)
 }
 
 // sendText sends msg (text, or text replying to reply) and emits it.

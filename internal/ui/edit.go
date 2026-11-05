@@ -53,6 +53,8 @@ func (m Model) startEdit() (Model, tea.Cmd) {
 	c.setReply(nil)
 	c.setEditing(nil) // an edit already open: its text isn't what was typed
 	c.stash = c.input.Value()
+	c.stashMentions = c.draftMentions
+	c.draftMentions = nil
 	c.input.SetValue(target.Text)
 	c.input.CursorEnd()
 	c.setEditing(&target)
@@ -64,6 +66,7 @@ func (m Model) startEdit() (Model, tea.Cmd) {
 func (c *conversation) setEditing(target *wa.Message) {
 	if target == nil && c.editing != nil {
 		c.input.SetValue(c.stash)
+		c.draftMentions, c.stashMentions = c.stashMentions, nil
 		c.input.CursorEnd()
 		c.stash = ""
 	}
@@ -79,7 +82,7 @@ func editBanner() string {
 // sendEdit sends text as the edit of the message being edited, unless it's
 // unchanged. Past the window, the text stays in the box to send as a new
 // message instead.
-func (m Model) sendEdit(text string) (Model, tea.Cmd) {
+func (m Model) sendEdit(text string, mentions ...string) (Model, tea.Cmd) {
 	c := &m.conv
 	target := *c.editing
 	if editRefusal(target, time.Now()) != "" {
@@ -94,7 +97,7 @@ func (m Model) sendEdit(text string) (Model, tea.Cmd) {
 	if text == target.Text {
 		return m, nil
 	}
-	return m, editMessage(m.ctx, m.deps.Client, c.chat.JID, target, text)
+	return m, editMessage(m.ctx, m.deps.Client, c.chat.JID, target, text, mentions...)
 }
 
 // deleteRefusal says why m can't be deleted for everyone at now, or "" if
@@ -155,9 +158,9 @@ func deleteStrip() string {
 	return errorStyle.Render("Delete this message for everyone?") + faintStyle.Render("  y delete · n keep")
 }
 
-func editMessage(ctx context.Context, client wa.Client, chat string, target wa.Message, text string) tea.Cmd {
+func editMessage(ctx context.Context, client wa.Client, chat string, target wa.Message, text string, mentions ...string) tea.Cmd {
 	return func() tea.Msg {
-		return sendResultMsg{err: client.SendEdit(ctx, chat, target, text)}
+		return sendResultMsg{err: client.SendEdit(ctx, chat, target, text, mentions...)}
 	}
 }
 

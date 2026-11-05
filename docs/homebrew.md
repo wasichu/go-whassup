@@ -15,6 +15,12 @@ Checked against Homebrew's docs on 2026-10-18:
 [Acceptable Formulae](https://docs.brew.sh/Acceptable-Formulae) and
 [How to Create and Maintain a Tap](https://docs.brew.sh/How-to-Create-and-Maintain-a-Tap).
 
+**v0.4.0 (2026-11-04):** the formula and bottles were published through the tap's
+`publish.yml` workflow after PR #4 validation. Bottles are available for Apple
+Silicon macOS Tahoe and Linux x86-64. The Intel macOS runner skipped the formula
+build because a dependency lacked compatible bottles; the app's Intel macOS
+binary remains available from its GitHub release.
+
 ## 1. Our own tap (first)
 
 - A repo named `wasichu/homebrew-tap` (the `homebrew-` prefix lets `brew tap` use the

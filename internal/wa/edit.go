@@ -8,7 +8,6 @@ import (
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/types"
-	"google.golang.org/protobuf/proto"
 )
 
 // Editing and deleting your own messages. WhatsApp only allows each for a
@@ -26,9 +25,9 @@ const DeleteWindow = 48 * time.Hour
 
 // SendEdit replaces the text of target, a text message you sent. Like
 // SendReaction, it's emitted as a MessageEdited event once sent.
-func (w *WhatsApp) SendEdit(ctx context.Context, chat string, target Message, text string) error {
+func (w *WhatsApp) SendEdit(ctx context.Context, chat string, target Message, text string, mentions ...string) error {
 	resp, err := w.sendProtocol(ctx, chat, func(cli *whatsmeow.Client, jid types.JID) *waE2E.Message {
-		return cli.BuildEdit(jid, target.ID, &waE2E.Message{Conversation: proto.String(text)})
+		return cli.BuildEdit(jid, target.ID, buildText(text, mentions))
 	})
 	if err != nil {
 		return fmt.Errorf("sending edit: %w", err)

@@ -57,9 +57,10 @@ type Client interface {
 	// SendText sends a text message to chat (a chat key, e.g. from
 	// Message.Chat). Once the server acknowledges it, the sent message is
 	// emitted as a Message event with FromMe set, like any other message:
-	// that event is the only way it reaches the store and the UI. Returns
+	// that event is the only way it reaches the store and the UI.
+	// Optional mention JIDs accompany canonical @ID tokens in text. Returns
 	// ErrNotPaired before pairing, and an error while disconnected.
-	SendText(ctx context.Context, chat, text string) error
+	SendText(ctx context.Context, chat, text string, mentions ...string) error
 
 	// PhoneNumbers maps privacy IDs ("…@lid" keys) to phone-number chat keys,
 	// for those WhatsApp has told this device about since; the rest are
@@ -68,7 +69,7 @@ type Client interface {
 
 	// SendReply sends text as a reply to message to, quoting it; it comes
 	// back as a Message event (with ReplyTo) like SendText's.
-	SendReply(ctx context.Context, chat, text string, to Message) error
+	SendReply(ctx context.Context, chat, text string, to Message, mentions ...string) error
 
 	// SendReaction reacts to message to with emoji; "" removes your
 	// reaction. It comes back as a Reaction event once sent.
@@ -76,7 +77,7 @@ type Client interface {
 
 	// SendEdit replaces the text of target, a text message you sent within
 	// EditWindow. It comes back as a MessageEdited event once sent.
-	SendEdit(ctx context.Context, chat string, target Message, text string) error
+	SendEdit(ctx context.Context, chat string, target Message, text string, mentions ...string) error
 
 	// SendDelete deletes target, a message you sent within DeleteWindow,
 	// for everyone. It comes back as a MessageDeleted event once sent.

@@ -5,13 +5,18 @@ step lands or the plan changes.
 
 ## Next priorities
 
-1. **Group mention autocomplete**, as a small follow-up: typing `@` suggests group
-   members, and selecting one sends a real WhatsApp mention with the participant
-   ID, rather than only inserting display-name text.
+1. **Additional group mention verification:** basic autocomplete/sending was
+   confirmed live by the user. Replies, edits, and phone notification behavior
+   remain useful follow-up checks.
 2. **Additional voice-device verification**, especially PulseAudio/PipeWire-Pulse
    on Linux and microphone permission failures. See `voice.md`.
 
 ## Done
+
+- **v0.4.1 group mention autocomplete:** local member suggestions on `@`, named draft
+  tokens, Tab/Enter selection, and real mention metadata for messages, replies,
+  and edits. Offline UI/protobuf tests cover the behavior. The user confirmed
+  autocomplete/sending worked live on 2026-11-04; additional checks remain above.
 
 - **v0.4.0 voice messages and keyboard organization:** in-app playback, native
   recording/preview/send/discard, and Enter to open a selected attachment. Playback

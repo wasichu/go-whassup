@@ -16,8 +16,8 @@ import (
 // SendReply sends text as a reply to message to (in chat): WhatsApp shows a
 // quote of to above it. Like SendText, the sent message comes back as a
 // Message event.
-func (w *WhatsApp) SendReply(ctx context.Context, chat, text string, to Message) error {
-	return w.sendText(ctx, chat, buildReply(text, to, w.quotedAuthor(to)), text, &Reply{ID: to.ID, Sender: to.Sender})
+func (w *WhatsApp) SendReply(ctx context.Context, chat, text string, to Message, mentions ...string) error {
+	return w.sendText(ctx, chat, buildReply(text, to, w.quotedAuthor(to), mentions...), text, &Reply{ID: to.ID, Sender: to.Sender})
 }
 
 // SendReaction reacts to message to with emoji ("" removes your reaction).
@@ -61,7 +61,7 @@ func (w *WhatsApp) quotedAuthor(to Message) string {
 // buildReply is text as a reply to to, written by author: an extended text
 // message whose ContextInfo points at to and carries a copy for the quote
 // (an attachment's own message, so its thumbnail and caption show).
-func buildReply(text string, to Message, author string) *waE2E.Message {
+func buildReply(text string, to Message, author string, mentions ...string) *waE2E.Message {
 	quoted := &waE2E.Message{Conversation: proto.String(to.Text)}
 	if to.Media != nil {
 		var m waE2E.Message
@@ -72,6 +72,7 @@ func buildReply(text string, to Message, author string) *waE2E.Message {
 	return &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{
 		Text: proto.String(text),
 		ContextInfo: &waE2E.ContextInfo{
+			MentionedJID:  append([]string(nil), mentions...),
 			StanzaID:      proto.String(to.ID),
 			Participant:   proto.String(author),
 			QuotedMessage: quoted,

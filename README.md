@@ -31,7 +31,8 @@ $ go-whassup db search lunch plans
 > afford to lose.
 
 💬 Chats and groups, unread counts, edits, deletes, reactions and @-mentions. History
-is synced from your phone and searchable offline.
+is synced from your phone and searchable offline. Type `@` in a group to find and
+mention a member by name.
 
 ↪️ Reply to a message, or react with a quick 👍 ❤️ 😂 or any emoji, searched by name.
 Edit what you sent, or delete it for everyone.

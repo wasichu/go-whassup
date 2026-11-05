@@ -75,6 +75,26 @@ in WhatsApp's compose bar, so they use `ctrl+o` and `ctrl+t` (Ctrl+A is the line
 a common tmux prefix). Hints in the status line are generated from the same keymap as the
 handlers (`internal/ui/keys.go`), so they can't drift.
 
+### Group mentions
+
+Type **`@`** in a group's message box to suggest members from the locally synced
+member list. Keep typing a name or number to filter, use **↑/↓** to choose, and
+press **Tab** or **Enter** to insert the selected name. Enter selects without
+sending; press Enter again when the message is ready. **Esc** closes suggestions
+and keeps the text. Email addresses and direct chats do not open suggestions.
+
+Names stay readable in the draft. Sending converts intact selected names to
+WhatsApp's canonical `@ID` text and attaches real mention metadata. Multiple
+mentions, replies, and edits are supported. Changing or deleting an inserted
+name removes its mention association; select it again to mention that member.
+Opening actions/help or temporarily editing another message preserves draft
+mentions. Explicit `@number` tokens for known members also carry metadata, so
+editing a stored message preserves its existing mentions.
+
+Members and names arrive through the normal group/contact sync; autocomplete
+does not make per-keystroke requests. If the member list has not arrived yet,
+ordinary typing and sending continue to work.
+
 ### Search (`s`)
 
 - Searches the text of messages stored on this computer (WhatsApp's servers can't

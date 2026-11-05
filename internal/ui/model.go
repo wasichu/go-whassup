@@ -208,7 +208,7 @@ func (m Model) forward(msg tea.Msg) (Model, tea.Cmd) {
 	case m.screen == screenLogin && m.login.step == loginPhone:
 		m.login.phone, cmd = m.login.phone.Update(msg)
 	case m.screen == screenMain && m.focus == focusInput:
-		m.conv.input, cmd = m.conv.input.Update(msg)
+		cmd = m.conv.updateInput(msg)
 	}
 	return m, cmd
 }
@@ -302,6 +302,8 @@ func (m Model) messagesLoaded(msg messagesLoadedMsg) Model {
 		return m
 	}
 	m.conv.cached, m.conv.mentions, m.conv.quotes, m.conv.own = msg.cached, msg.mentions, msg.quotes, m.ownJID
+	m.conv.completion.members = msg.members
+	m.conv.refreshCompletion()
 	m.conv.setMessages(msg.msgs)
 	if h := m.conv.highlight; h != "" {
 		if _, ok := m.conv.lineOf[h]; !ok {
@@ -372,6 +374,9 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // inputKey handles keys while the message input has focus. Only it sees
 // typing, so q , ? L are just characters here.
 func (m Model) inputKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
+	if m.conv.completeKey(msg) {
+		return m, nil
+	}
 	switch {
 	case key.Matches(msg, keys.Media):
 		return m.openPicker()
@@ -397,28 +402,30 @@ func (m Model) inputKey(msg tea.KeyPressMsg) (Model, tea.Cmd) {
 	case key.Matches(msg, keys.Send):
 		return m.sendInput()
 	}
-	var cmd tea.Cmd
-	m.conv.input, cmd = m.conv.input.Update(msg)
+	cmd := m.conv.updateInput(msg)
 	return m, cmd
 }
 
 // sendInput sends what's typed: as a reply or an edit when one is being
 // written.
 func (m Model) sendInput() (Model, tea.Cmd) {
-	text := strings.TrimSpace(m.conv.input.Value())
+	text, mentions := m.conv.encodeMentions()
+	text = strings.TrimSpace(text)
 	if text == "" || m.conv.chat.JID == "" {
 		return m, nil
 	}
 	m.conv.input.Reset()
+	m.conv.draftMentions = nil
+	m.conv.refreshCompletion()
 	m.notice = notice{}
 	if m.conv.editing != nil {
-		return m.sendEdit(text)
+		return m.sendEdit(text, mentions...)
 	}
 	if to := m.conv.replyTo; to != nil {
 		m.conv.setReply(nil)
-		return m, sendReply(m.ctx, m.deps.Client, m.conv.chat.JID, text, *to)
+		return m, sendReply(m.ctx, m.deps.Client, m.conv.chat.JID, text, *to, mentions...)
 	}
-	return m, send(m.ctx, m.deps.Client, m.conv.chat.JID, text)
+	return m, send(m.ctx, m.deps.Client, m.conv.chat.JID, text, mentions...)
 }
 
 // listKey handles keys while the chat list has focus: navigation and the

@@ -32,7 +32,8 @@ type compose struct {
 	choice           int         // index into quickReactions, or moreReactions
 	replyTo          *wa.Message // the message being replied to, shown above the input
 	editing          *wa.Message // your message being edited, its text in the input
-	stash            string      // what was typed before the edit, put back after
+	stashMentions    []draftMention
+	stash            string // what was typed before the edit, put back after
 }
 
 // pickable reports whether a message can be replied or reacted to.
@@ -43,6 +44,8 @@ func (c *conversation) startPicking() bool {
 	for i := len(c.msgs) - 1; i >= 0; i-- {
 		if pickable(c.msgs[i]) {
 			c.picking, c.picked = true, c.msgs[i].ID
+			c.completion.matches = nil
+			c.resize(c.width, c.height)
 			c.showPicked()
 			return true
 		}
@@ -261,8 +264,8 @@ func react(ctx context.Context, client wa.Client, chat string, target wa.Message
 }
 
 // sendReply sends text as a reply to the message being replied to.
-func sendReply(ctx context.Context, client wa.Client, chat, text string, to wa.Message) tea.Cmd {
+func sendReply(ctx context.Context, client wa.Client, chat, text string, to wa.Message, mentions ...string) tea.Cmd {
 	return func() tea.Msg {
-		return sendResultMsg{err: client.SendReply(ctx, chat, text, to)}
+		return sendResultMsg{err: client.SendReply(ctx, chat, text, to, mentions...)}
 	}
 }

@@ -115,7 +115,7 @@ var (
 	settingsHelp     = []key.Binding{keys.Up, keys.Down, keys.Edit, settingsPrev, keys.Back}
 	mainHelpSections = []helpSection{
 		{"Chat list", []key.Binding{keys.Up, keys.Down, keys.Open, keys.Actions, keys.Find, keys.Search, keys.Info, keys.Login, keys.Settings, keys.HelpAlias, keys.Quit}},
-		{"Writing a message", []key.Binding{keys.Send, keys.Blur, keys.Actions, keys.Pick, keys.Media, keys.Attach, keys.Voice, keys.PageUp, keys.PageDown}},
+		{"Writing a message", []key.Binding{keys.Send, keys.Blur, keys.Actions, keys.Pick, keys.Media, keys.Attach, keys.Voice, key.NewBinding(key.WithKeys("@"), key.WithHelp("@", "mention a group member (Tab/Enter chooses)")), keys.PageUp, keys.PageDown}},
 		{"Selected message", pickFullHelp},
 		{"Anywhere", []key.Binding{keys.Help, keys.ForceQuit}},
 	}

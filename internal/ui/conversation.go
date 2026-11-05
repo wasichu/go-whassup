@@ -17,20 +17,22 @@ import (
 
 // conversation is the right pane: header, message history and input.
 type conversation struct {
-	chat      store.ChatSummary
-	cached    map[string]bool       // attachments already on disk, by message ID
-	mentions  map[string]string     // phone digits -> display name, for @mentions
-	quotes    map[string]wa.Message // what replies answer, by message ID
-	own       string                // the user's own JID, to highlight mentions of them
-	highlight string                // message to highlight and show (a search hit)
-	lineOf    map[string]int        // each rendered message's first line in the viewport
-	newFrom   time.Time             // messages after this get a "new" divider (set on opening)
-	msgs      []wa.Message
-	viewport  viewport.Model
-	input     textinput.Model
-	width     int
-	height    int
-	compose   // replying and reacting (compose.go)
+	chat          store.ChatSummary
+	cached        map[string]bool       // attachments already on disk, by message ID
+	mentions      map[string]string     // phone digits -> display name, for @mentions
+	quotes        map[string]wa.Message // what replies answer, by message ID
+	own           string                // the user's own JID, to highlight mentions of them
+	highlight     string                // message to highlight and show (a search hit)
+	lineOf        map[string]int        // each rendered message's first line in the viewport
+	newFrom       time.Time             // messages after this get a "new" divider (set on opening)
+	msgs          []wa.Message
+	viewport      viewport.Model
+	input         textinput.Model
+	width         int
+	height        int
+	completion    mentionCompletion
+	draftMentions []draftMention
+	compose       // replying and reacting (compose.go)
 }
 
 func newConversation() conversation {
@@ -46,7 +48,7 @@ func newConversation() conversation {
 func (c *conversation) resize(width, height int) {
 	c.width, c.height = width, height
 	c.viewport.SetWidth(width)
-	chrome := 3 // header, separator, input
+	chrome := 3 + c.completion.rows() // header, separator, input
 	if c.replyTo != nil || c.editing != nil {
 		chrome++ // the reply or edit banner
 	}
@@ -65,8 +67,10 @@ func (c *conversation) setChat(chat store.ChatSummary) {
 		c.newFrom = time.Time{}
 		c.highlight = ""
 		if c.editing != nil {
+			c.draftMentions = c.stashMentions
 			c.input.SetValue(c.stash) // never send an edit's text to another chat
 		}
+		c.completion = mentionCompletion{}
 		c.compose = compose{} // a reply, pick or edit belongs to the chat it started in
 		defer c.resize(c.width, c.height)
 		if chat.Unread > 0 {
@@ -158,6 +162,7 @@ func (c *conversation) view(width, height int, own string) string {
 	case c.confirmingDelete && ok:
 		parts = append(parts, deleteStrip())
 	default:
+		parts = append(parts, c.completion.view(width)...)
 		parts = append(parts, c.input.View())
 	}
 	return lipgloss.NewStyle().Width(width).Height(height).MaxHeight(height).Render(strings.Join(parts, "\n"))

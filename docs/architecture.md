@@ -128,6 +128,8 @@ There are two kinds of consumers:
   `GroupInfo` changes. Participants are keyed by phone number where known. Mentions of
   privacy IDs in text are rewritten to phone digits on arrival (`normalizeMentions`), so
   the UI resolves them like any contact.
+  Outbound text, replies, and edits accept explicit mention JIDs; extended text
+  carries `ContextInfo.MentionedJID`, preserving reply quote context.
 - **History sync** arrives as `wa.HistorySync{Chats, Messages, PushNames}`, parsed with
   whatsmeow's `ParseWebMessage`. Empty batches aren't emitted. App-state sync,
   receipts and presence are still only logged at debug level.
@@ -172,6 +174,12 @@ There are two kinds of consumers:
 - **Focus gates shortcuts.** Keys reach the message input only when it's focused, and
   letter shortcuts only fire from the list. F1 and Ctrl+C work everywhere; Ctrl+P
   opens actions from the main screen while writing or selecting messages.
+- **Group mention completion** reads members with the existing async message load.
+  `mentioncomplete.go` filters the local list and tracks selected names by rune
+  spans, matching the input cursor. Input and paste edits shift unaffected spans
+  and invalidate changed names. Sending converts intact spans to canonical `@ID`
+  tokens and deduplicated member JIDs; the current group membership gates recipients.
+  No store access or network work happens in `View` or on each keystroke.
 - **Colours** use the 16-colour ANSI palette, so they follow the user's terminal
   theme. The only fixed colours are the QR's black/white, because scanners need them
   and themes remap ANSI black/white.

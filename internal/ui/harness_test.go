@@ -234,6 +234,8 @@ func (h *harness) key(k string) {
 		h.send(tea.KeyPressMsg{Code: tea.KeyLeft})
 	case "right":
 		h.send(tea.KeyPressMsg{Code: tea.KeyRight})
+	case "tab":
+		h.send(tea.KeyPressMsg{Code: tea.KeyTab})
 	case "f1":
 		h.send(tea.KeyPressMsg{Code: tea.KeyF1})
 	case "pgdown":
@@ -242,7 +244,7 @@ func (h *harness) key(k string) {
 		h.send(tea.KeyPressMsg{Code: tea.KeyPgUp})
 	case "space":
 		h.send(tea.KeyPressMsg{Code: ' ', Text: " "})
-	case "ctrl+c", "ctrl+o", "ctrl+t", "ctrl+r", "ctrl+g", "ctrl+p":
+	case "ctrl+a", "ctrl+k", "ctrl+c", "ctrl+o", "ctrl+t", "ctrl+r", "ctrl+g", "ctrl+p":
 		h.send(tea.KeyPressMsg{Code: rune(k[len(k)-1]), Mod: tea.ModCtrl})
 	default:
 		for _, r := range k {

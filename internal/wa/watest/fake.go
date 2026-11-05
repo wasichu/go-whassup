@@ -20,7 +20,8 @@ import (
 
 // Client is a scriptable wa.Client. Configure the exported fields before use.
 type Client struct {
-	wa.Handlers // AddEventHandler and Emit
+	mentionCalls [][]string
+	wa.Handlers  // AddEventHandler and Emit
 
 	Own string // OwnJID while paired
 
@@ -181,7 +182,7 @@ func (c *Client) Logout(context.Context) (bool, error) {
 
 // SendText emits the sent message like the real client. Timestamps are
 // fixed so tests are deterministic.
-func (c *Client) SendText(_ context.Context, chat, text string) error {
+func (c *Client) SendText(_ context.Context, chat, text string, mentions ...string) error {
 	if !c.Paired {
 		return wa.ErrNotPaired
 	}
@@ -198,6 +199,7 @@ func (c *Client) SendText(_ context.Context, chat, text string) error {
 		Kind:      wa.KindText,
 		Text:      text,
 	}
+	c.mentionCalls = append(c.mentionCalls, slices.Clone(mentions))
 	c.Sent = append(c.Sent, m)
 	c.mu.Unlock()
 	c.Emit(m)
@@ -394,7 +396,7 @@ func (c *Client) stamp(fixed time.Time) time.Time {
 }
 
 // SendReply sends like SendText, as a reply to to.
-func (c *Client) SendReply(_ context.Context, chat, text string, to wa.Message) error {
+func (c *Client) SendReply(_ context.Context, chat, text string, to wa.Message, mentions ...string) error {
 	if !c.Paired {
 		return wa.ErrNotPaired
 	}
@@ -408,6 +410,7 @@ func (c *Client) SendReply(_ context.Context, chat, text string, to wa.Message) 
 		FromMe:    true, Kind: wa.KindText, Text: text,
 		ReplyTo: &wa.Reply{ID: to.ID, Sender: to.Sender},
 	}
+	c.mentionCalls = append(c.mentionCalls, slices.Clone(mentions))
 	c.Sent = append(c.Sent, m)
 	c.mu.Unlock()
 	c.Emit(m)
@@ -434,7 +437,7 @@ func (c *Client) SendReaction(_ context.Context, chat string, to wa.Message, emo
 }
 
 // SendEdit records and emits the edit, as WhatsApp.SendEdit does.
-func (c *Client) SendEdit(_ context.Context, chat string, target wa.Message, text string) error {
+func (c *Client) SendEdit(_ context.Context, chat string, target wa.Message, text string, mentions ...string) error {
 	if !c.Paired {
 		return wa.ErrNotPaired
 	}
@@ -444,6 +447,7 @@ func (c *Client) SendEdit(_ context.Context, chat string, target wa.Message, tex
 	e := wa.MessageEdited{Chat: chat, ID: target.ID, Kind: wa.KindText, Text: text,
 		At: c.stamp(time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC))}
 	c.mu.Lock()
+	c.mentionCalls = append(c.mentionCalls, slices.Clone(mentions))
 	c.EditsSent = append(c.EditsSent, e)
 	c.mu.Unlock()
 	c.Emit(e)
@@ -498,4 +502,15 @@ func (c *Client) PhoneNumbers(_ context.Context, lids []string) (map[string]stri
 		}
 	}
 	return out, nil
+}
+
+// MentionCalls returns independent copies of mention IDs from text/reply/edit sends.
+func (c *Client) MentionCalls() [][]string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([][]string, len(c.mentionCalls))
+	for i, ids := range c.mentionCalls {
+		out[i] = slices.Clone(ids)
+	}
+	return out
 }

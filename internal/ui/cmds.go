@@ -101,6 +101,7 @@ type (
 		cached   map[string]bool       // message IDs whose attachment is on disk
 		mentions map[string]string     // phone digits -> name, for @mentions
 		quotes   map[string]wa.Message // what replies answer, by message ID
+		members  []store.Member
 		err      error
 	}
 	connectResultMsg struct{ err error }
@@ -132,11 +133,12 @@ func loadChats(ctx context.Context, st Store) tea.Cmd {
 func loadMessages(ctx context.Context, deps Deps, chat string) tea.Cmd {
 	return func() tea.Msg {
 		msgs, err := deps.Store.Messages(ctx, chat, messagesPerChat)
+		details, derr := deps.Store.Details(ctx, chat)
 		quotes, qerr := quotedMessages(ctx, deps.Store, chat, msgs)
 		mentions, nerr := mentionNames(ctx, deps.Store, append(slices.Collect(maps.Values(quotes)), msgs...))
 		return messagesLoadedMsg{
 			chat: chat, msgs: msgs, cached: cachedFlags(deps.Media, chat, msgs), mentions: mentions,
-			quotes: quotes, err: errors.Join(err, nerr, qerr),
+			quotes: quotes, members: details.Members, err: errors.Join(err, nerr, qerr, derr),
 		}
 	}
 }
@@ -183,9 +185,9 @@ func connect(ctx context.Context, client wa.Client) tea.Cmd {
 	}
 }
 
-func send(ctx context.Context, client wa.Client, chat, text string) tea.Cmd {
+func send(ctx context.Context, client wa.Client, chat, text string, mentions ...string) tea.Cmd {
 	return func() tea.Msg {
-		return sendResultMsg{err: client.SendText(ctx, chat, text)}
+		return sendResultMsg{err: client.SendText(ctx, chat, text, mentions...)}
 	}
 }
 
