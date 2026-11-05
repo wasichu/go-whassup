@@ -40,6 +40,14 @@ does not change the active automation.
    `brew pr-pull` workflow publishes bottles/provenance and updates the formula
    on `main`. Publication is serialized.
 
+Repository setup also requires Settings → Actions → General → **Allow GitHub
+Actions to create and approve pull requests**. GitHub combines PR creation and
+review approval in this setting; the pipeline does not submit approval reviews.
+Default workflow permissions can stay read-only, with writes granted per job.
+With this setting disabled, the workflow can verify an already-current release
+but cannot create the next release PR. See
+[GitHub's repository settings guide](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository).
+
 This runs with the tap's own `GITHUB_TOKEN`; no new cross-repository PAT or app
 secret is required. Bot-triggered workflow limitations are documented in
 [GitHub's token guide](https://docs.github.com/en/actions/concepts/security/github_token).
