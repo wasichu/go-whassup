@@ -13,7 +13,7 @@ require (
 	github.com/jfreymuth/pulse v0.1.3
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/thesyncim/gopus v0.1.2
-	go.mau.fi/whatsmeow v0.0.0-20261102152715-54038813c47f
+	go.mau.fi/whatsmeow v0.0.0-20261109152745-f1b798561919
 	golang.org/x/crypto v0.58.0
 	google.golang.org/protobuf v1.36.12
 	modernc.org/sqlite v1.61.1
