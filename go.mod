@@ -9,7 +9,7 @@ require (
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/charmbracelet/x/term v0.2.2
-	github.com/ebitengine/purego v0.11.0
+	github.com/ebitengine/purego v0.11.3
 	github.com/jfreymuth/pulse v0.1.3
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/thesyncim/gopus v0.1.2
